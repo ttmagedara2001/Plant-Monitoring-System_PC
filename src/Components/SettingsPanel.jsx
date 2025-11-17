@@ -57,7 +57,7 @@ const SettingsPanel = ({ settings, setSettings, handleSaveSettings, isSaving, li
         )}
       </div>
 
-      {/* Task 2.2.1: Settings Form */}
+      
       <div className="space-y-4 flex-grow">
         <h4 className="font-semibold text-gray-600 text-sm flex items-center gap-2">
             <Settings className="w-4 h-4" /> Optimal Thresholds
