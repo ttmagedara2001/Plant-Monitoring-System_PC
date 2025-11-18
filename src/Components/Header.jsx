@@ -1,4 +1,6 @@
 import React from 'react';
+import logo from '../assets/images/logo_title.png';
+import imageIcon from '../assets/images/logo_plant.png';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../Context/AuthContext';
 import { Sprout, LogOut, ChevronDown } from 'lucide-react';
@@ -13,9 +15,9 @@ const Header = ({ deviceId, deviceList }) => {
   };
 
   return (
-    <header className="bg-white border-2 border-blue-500 rounded-lg px-6 py-3 flex flex-col sm:flex-row justify-between items-center shadow-sm mb-6">
+    <header className="bg-white border-2 rounded-lg px-6 py-3 flex flex-col sm:flex-row justify-between items-center shadow-sm mb-6">
       
-      {/* Brand/Logo */}
+      {/* Logo */}
       <div className="flex items-center gap-2 mb-4 sm:mb-0">
         <Sprout className="h-8 w-8 text-green-600" />
         <span className="text-3xl font-bold tracking-wide font-mono">
@@ -23,7 +25,7 @@ const Header = ({ deviceId, deviceList }) => {
         </span>
       </div>
 
-      {/* Task 2.1.2: Device Selector Dropdown */}
+      {/* Device Selector Dropdown */}
       <div className="flex items-center gap-2 mb-4 sm:mb-0">
         <span className="text-sm font-semibold text-gray-700">Select Device:</span>
         <select 
