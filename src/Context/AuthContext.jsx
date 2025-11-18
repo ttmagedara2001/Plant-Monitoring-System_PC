@@ -1,17 +1,17 @@
 import React, { createContext, useContext, useState } from 'react';
 
-// 1. Create the Context
+// 1. Created the Context
 const AuthContext = createContext({
   userId: 'default-user',
   logout: () => {}, 
 });
 
-// 2. Create a Custom Hook for easy access in components
+// 2. Created a Custom Hook for easy access in components
 export const useAuth = () => {
   return useContext(AuthContext);
 };
 
-// 3. Create the Provider Component
+// 3. Created the Provider Component
 export const AuthProvider = ({ children }) => {
   const [userId] = useState("AGRICOP_ADMIN_01");
 
