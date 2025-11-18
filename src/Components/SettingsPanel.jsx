@@ -35,7 +35,7 @@ const SettingsPanel = ({ settings, setSettings, handleSaveSettings, isSaving, li
     <div className="bg-white rounded-3xl p-6 shadow-md flex flex-col">
       <h3 className="text-xl font-bold text-gray-800 mb-4 text-center">Control Panel</h3>
       
-      {/* Task 2.2.2: Manual Control Toggle */}
+      {/* Manual Control Toggle */}
       <div className="bg-gray-50 p-4 rounded-xl mb-6 border border-gray-200">
         <div className="flex justify-between items-center mb-2">
             <span className="font-semibold text-sm text-gray-700">Operation Mode</span>
@@ -48,7 +48,7 @@ const SettingsPanel = ({ settings, setSettings, handleSaveSettings, isSaving, li
         </div>
         {isManualMode && (
             <button 
-                onClick={togglePump} // Task 2.2.3: Actuator Control Post Request
+                onClick={togglePump} //  Actuator Control Post Request
                 className={`w-full py-2 rounded-lg font-bold text-white transition-colors shadow-sm flex items-center justify-center gap-2 mt-3 ${pumpStatus === 'ON' ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'}`}
             >
                 <Power className="w-4 h-4" />
@@ -57,7 +57,7 @@ const SettingsPanel = ({ settings, setSettings, handleSaveSettings, isSaving, li
         )}
       </div>
 
-      {/* Task 2.2.1: Settings Form */}
+      {/* Optimal Settings Form */}
       <div className="space-y-4 flex-grow">
         <h4 className="font-semibold text-gray-600 text-sm flex items-center gap-2">
             <Settings className="w-4 h-4" /> Optimal Thresholds
