@@ -164,7 +164,7 @@ const Dashboard = () => {
         </div>
       </div>
 
-      {/* --- Main Content Grid --- */}
+      {/*  Main Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         
         {/* Historical Chart */}
@@ -192,7 +192,7 @@ const Dashboard = () => {
           </div>
         </div>
 
-        {/* Task 2.2: Settings Panel Component */}
+        {/* Settings Panel Component */}
         <SettingsPanel 
           settings={settings} 
           setSettings={setSettings} 
