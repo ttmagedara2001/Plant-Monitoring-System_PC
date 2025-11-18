@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 
 // Mock WebSocket URL - replace with your actual backend
-const WS_URL = 'wss://your-backend-api.com/ws'; 
+const WS_URL = 'wss://protonestbackend-api.com/ws'; 
 
 export const useWebSocket = (deviceId) => {
   const [liveData, setLiveData] = useState({
