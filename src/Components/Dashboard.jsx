@@ -33,7 +33,7 @@ const Dashboard = () => {
   const [deviceList] = useState(['greenhouse-1', 'greenhouse-2', 'greenhouse-3']);
   const [isLoadingChart, setIsLoadingChart] = useState(true);
   const [settings, setSettings] = useState({ moistureMin: '20', moistureMax: '60', tempMax: '30' });
-  const [alertMessage, setAlertMessage] = useState(null);
+  const [alerts, setAlerts] = useState([]);
 
   // Fetch Historical Data 
   useEffect(() => {
@@ -53,25 +53,46 @@ const Dashboard = () => {
     if (deviceId) fetchHistory();
   }, [deviceId]);
 
-  // Alert Logic
+  // Alert Logic - Support multiple alerts
   useEffect(() => {
     const currentData = liveData || {}; 
-    
-    // Check for alerts based on settings
-    // (Actual alert logic from previous steps)
     const minM = parseFloat(settings.moistureMin) || 20;
+    const maxM = parseFloat(settings.moistureMax) || 60;
     const maxT = parseFloat(settings.tempMax) || 30;
 
-    // Only check alerts if we have moisture and temperature data
-    if (currentData.moisture && currentData.temperature) {
-      if (currentData.moisture < minM) {
-        setAlertMessage(`CRITICAL: Soil Moisture (${currentData.moisture}%) is below minimum threshold (${minM}%).`);
-      } else if (currentData.temperature > maxT) {
-        setAlertMessage(`WARNING: Temperature (${currentData.temperature}°C) exceeds maximum threshold (${maxT}°C).`);
-      } else {
-        setAlertMessage(null);
-      }
+    const newAlerts = [];
+
+    // Check moisture min
+    if (currentData.moisture !== undefined && currentData.moisture < minM) {
+      newAlerts.push({
+        id: 'moisture-min',
+        type: 'CRITICAL',
+        message: `CRITICAL: Soil Moisture (${currentData.moisture}%) is below minimum threshold (${minM}%).`,
+        icon: 'AlertTriangle'
+      });
     }
+
+    // Check moisture max
+    if (currentData.moisture !== undefined && currentData.moisture > maxM) {
+      newAlerts.push({
+        id: 'moisture-max',
+        type: 'WARNING',
+        message: `WARNING: Soil Moisture (${currentData.moisture}%) exceeds maximum threshold (${maxM}%).`,
+        icon: 'AlertTriangle'
+      });
+    }
+
+    // Check temperature max
+    if (currentData.temperature !== undefined && currentData.temperature > maxT) {
+      newAlerts.push({
+        id: 'temp-max',
+        type: 'WARNING',
+        message: `WARNING: Temperature (${currentData.temperature}°C) exceeds maximum threshold (${maxT}°C).`,
+        icon: 'AlertTriangle'
+      });
+    }
+
+    setAlerts(newAlerts);
   }, [liveData, settings]);
   
   // Control Handlers passed to SettingsPanel
@@ -130,12 +151,16 @@ const Dashboard = () => {
   return (
     <div className="min-h-screen bg-[#f0f4f8] p-4 font-sans text-gray-800">
       
-      {/* Alert Banner */}
-      {alertMessage && (
-          <div className="bg-red-500 text-white rounded-lg p-3 mb-6 shadow-xl flex items-center justify-center font-bold text-lg animate-pulse">
+      {/* Alert Banners - Display all alerts */}
+      {alerts.length > 0 && (
+        <div className="space-y-3 mb-6">
+          {alerts.map(alert => (
+            <div key={alert.id} className={`${alert.type === 'CRITICAL' ? 'bg-red-500' : 'bg-yellow-500'} text-white rounded-lg p-3 shadow-xl flex items-center justify-center font-bold text-lg animate-pulse`}>
               <AlertTriangle className="w-6 h-6 mr-3" />
-              {alertMessage}
-          </div>
+              {alert.message}
+            </div>
+          ))}
+        </div>
       )}
 
       {/* Header Component */}
@@ -158,8 +183,8 @@ const Dashboard = () => {
         </div>
         
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          <StatusCard value={getVal('moisture', '%')} label="Soil Moisture" borderColor={alertMessage?.includes('Moisture') ? 'border-red-500' : 'border-green-500'} />
-          <StatusCard value={getVal('temperature', '°C')} label="Temperature" borderColor={alertMessage?.includes('Temperature') ? 'border-red-500' : 'border-green-500'} />
+          <StatusCard value={getVal('moisture', '%')} label="Soil Moisture" borderColor={alerts.some(a => a.id.includes('moisture')) ? 'border-red-500' : 'border-green-500'} />
+          <StatusCard value={getVal('temperature', '°C')} label="Temperature" borderColor={alerts.some(a => a.id === 'temp-max') ? 'border-red-500' : 'border-green-500'} />
           <StatusCard value={getVal('humidity', '%')} label="Humidity" borderColor="border-blue-400" />
           <StatusCard value={getVal('light', ' lux', 0)} label="Light" borderColor="border-gray-300" />
         </div>
