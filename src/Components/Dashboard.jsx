@@ -27,9 +27,10 @@ const Dashboard = () => {
     { time: '10:15', moisture: 31, temperature: 27 },
     { time: '10:20', moisture: 40, temperature: 26 }, 
     { time: '10:25', moisture: 42, temperature: 22 },
+    { time: '10:30', moisture: 39, temperature: 24 },
   ];
   const [chartData, setChartData] = useState(mockChartData);
-  const [deviceList] = useState(['greenhouse-1', 'greenhouse-2', 'nursery-A']);
+  const [deviceList] = useState(['greenhouse-1', 'greenhouse-2', 'greenhouse-3']);
   const [isLoadingChart, setIsLoadingChart] = useState(true);
   const [settings, setSettings] = useState({ moistureMin: '20', moistureMax: '60', tempMax: '30' });
   const [alertMessage, setAlertMessage] = useState(null);
@@ -137,17 +138,17 @@ const Dashboard = () => {
           </div>
       )}
 
-      {/*Header Component /}
+      {/* Header Component */}
       <Header deviceId={deviceId} deviceList={deviceList} />
 
-      {/* Pump Status Banner*/}
+      {/* Pump Status Banner */}
       <div className={`rounded-xl py-4 text-center mb-8 shadow-sm border transition-colors duration-500 ${pumpStatus === 'ON' ? 'bg-green-100 border-green-300' : 'bg-blue-100 border-blue-300'}`}>
         <h2 className={`text-xl font-bold ${pumpStatus === 'ON' ? 'text-green-900' : 'text-blue-900'}`}>
           Pump : {pumpStatus} ({liveData?.pumpMode || 'Optimal'})
         </h2>
       </div>
 
-      {/* Real Time Status Cards  */}
+      {/* Real Time Status Cards */}
       <div className="mb-8">
         <div className="flex items-center gap-3 mb-4">
            <h3 className="text-lg font-bold text-gray-800">Real Time Status : <span className="font-normal text-gray-600">{deviceId}</span></h3>
@@ -158,7 +159,7 @@ const Dashboard = () => {
         
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           <StatusCard value={getVal('moisture', '%')} label="Soil Moisture" borderColor={alertMessage?.includes('Moisture') ? 'border-red-500' : 'border-green-500'} />
-          <StatusCard value={getVal('temperature', '°C')} label="Temperature" borderColor={alertMessage?.includes('Temperature') ? 'border-red-500' : 'border-yellow-400'} />
+          <StatusCard value={getVal('temperature', '°C')} label="Temperature" borderColor={alertMessage?.includes('Temperature') ? 'border-red-500' : 'border-green-500'} />
           <StatusCard value={getVal('humidity', '%')} label="Humidity" borderColor="border-blue-400" />
           <StatusCard value={getVal('light', ' lux', 0)} label="Light" borderColor="border-gray-300" />
         </div>
@@ -176,7 +177,8 @@ const Dashboard = () => {
             </button>
           </div>
           <div className="h-64 w-full flex-grow">
-            {isLoadingChart ? <div className="h-full flex items-center justify-center text-gray-400"><Loader2 className="animate-spin w-8 h-8"/></div> : (
+            {isLoadingChart ? <div className="h-full flex items-center justify-center text-gray-400"><Loader2 className="animate-spin w-8 h-8"/></div> : 
+            (
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={chartData} margin={{ top: 5, right: 20, left: -20, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eee" />

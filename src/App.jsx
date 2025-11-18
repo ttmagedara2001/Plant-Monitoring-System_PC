@@ -3,10 +3,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import Dashboard from './Components/Dashboard';
 import ErrorBoundary from './Components/ErrorBoundary';
 
-/**
- * --- Main App Routing ---
- * Dashboard displays at root path for UI testing.
- */
+
 function App() {
   return (
     <ErrorBoundary>

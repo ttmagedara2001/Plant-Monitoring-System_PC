@@ -29,14 +29,11 @@ const Header = ({ deviceId, deviceList }) => {
       <div className="flex items-center gap-2 mb-4 sm:mb-0">
         <span className="text-sm font-semibold text-gray-700">Select Device:</span>
         <select 
-          value={deviceId} 
+          value={deviceId || 'greenhouse-1'} 
           onChange={handleDeviceSelect}
           className="bg-gray-100 border border-gray-300 text-gray-700 py-1 px-3 rounded focus:ring-2 focus:ring-green-500 outline-none font-medium"
         >
-          {/* Ensure the current device is always an option */}
-          <option key={deviceId} value={deviceId}>{deviceId}</option>
-          {/* Filter out current device to avoid duplication */}
-          {deviceList.filter(dev => dev !== deviceId).map(dev => 
+          {deviceList.map(dev => 
             <option key={dev} value={dev}>{dev}</option>
           )}
         </select>

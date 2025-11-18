@@ -15,18 +15,16 @@ const InputGroup = ({ label, name, value, onChange, disabled }) => (
   </div>
 );
 
-const SettingsPanel = ({ settings, setSettings, handleSaveSettings, isSaving, liveData, togglePump }) => {
+const SettingsPanel = ({ settings, setSettings, handleSaveSettings, isSaving, liveData, togglePump, pumpStatus }) => {
   const [isManualMode, setIsManualMode] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
-  
-  const pumpStatus = liveData?.pumpStatus || 'OFF';
 
   const handleSettingChange = (e) => {
     setSettings({ ...settings, [e.target.name]: e.target.value });
   };
 
   const onSave = async () => {
-    await handleSaveSettings();
+    await handleSaveSettings(settings);
     setSaveMessage('Settings Saved!');
     setTimeout(() => setSaveMessage(''), 3000);
   };
@@ -48,7 +46,7 @@ const SettingsPanel = ({ settings, setSettings, handleSaveSettings, isSaving, li
         </div>
         {isManualMode && (
             <button 
-                onClick={togglePump} //  Actuator Control Post Request
+                onClick={togglePump}
                 className={`w-full py-2 rounded-lg font-bold text-white transition-colors shadow-sm flex items-center justify-center gap-2 mt-3 ${pumpStatus === 'ON' ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'}`}
             >
                 <Power className="w-4 h-4" />
