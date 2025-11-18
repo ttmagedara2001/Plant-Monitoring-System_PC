@@ -78,7 +78,7 @@ const Dashboard = () => {
   const handleSaveSettings = async () => {
     try {
       // Logic is in SettingsPanel, this is a placeholder function call to API
-      await api.post(`/update-statedetails-${deviceId}`, settings);
+      await api.post(`/update-state-details-${deviceId}`, settings);
     } catch (error) {
       console.error('Failed to save settings:', error);
     }
