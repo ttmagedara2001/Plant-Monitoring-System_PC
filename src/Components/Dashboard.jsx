@@ -18,7 +18,7 @@ const Dashboard = () => {
   const { userId, logout } = useAuth();
   const navigate = useNavigate();
 
-  // --- 1. Data Hooks & States ---
+  // Data Hooks & States
   const { liveData, isConnected } = useWebSocket(deviceId);
   const mockChartData = [
     { time: '10:00', moisture: 40, temperature: 24 }, 
@@ -34,7 +34,7 @@ const Dashboard = () => {
   const [settings, setSettings] = useState({ moistureMin: '20', moistureMax: '60', tempMax: '30' });
   const [alertMessage, setAlertMessage] = useState(null);
 
-  // --- Task 1.2.2: Fetch Historical Data ---
+  // Fetch Historical Data 
   useEffect(() => {
     const fetchHistory = async () => {
       setIsLoadingChart(true);
@@ -52,7 +52,7 @@ const Dashboard = () => {
     if (deviceId) fetchHistory();
   }, [deviceId]);
 
-  // --- Task 3.2: Alert Logic ---
+  // Alert Logic
   useEffect(() => {
     const currentData = liveData || {}; 
     
@@ -73,7 +73,7 @@ const Dashboard = () => {
     }
   }, [liveData, settings]);
   
-  // --- Control Handlers passed to SettingsPanel ---
+  // Control Handlers passed to SettingsPanel
   const handleSaveSettings = async () => {
     try {
       // Logic is in SettingsPanel, this is a placeholder function call to API
@@ -129,7 +129,7 @@ const Dashboard = () => {
   return (
     <div className="min-h-screen bg-[#f0f4f8] p-4 font-sans text-gray-800">
       
-      {/* --- Alert Banner (Task 3.2) --- */}
+      {/* Alert Banner */}
       {alertMessage && (
           <div className="bg-red-500 text-white rounded-lg p-3 mb-6 shadow-xl flex items-center justify-center font-bold text-lg animate-pulse">
               <AlertTriangle className="w-6 h-6 mr-3" />
@@ -137,17 +137,17 @@ const Dashboard = () => {
           </div>
       )}
 
-      {/* --- Task 2.1: Header Component --- */}
+      {/*Header Component /}
       <Header deviceId={deviceId} deviceList={deviceList} />
 
-      {/* --- Task 2.3.1: Pump Status Banner --- */}
+      {/* Pump Status Banner*/}
       <div className={`rounded-xl py-4 text-center mb-8 shadow-sm border transition-colors duration-500 ${pumpStatus === 'ON' ? 'bg-green-100 border-green-300' : 'bg-blue-100 border-blue-300'}`}>
         <h2 className={`text-xl font-bold ${pumpStatus === 'ON' ? 'text-green-900' : 'text-blue-900'}`}>
           Pump : {pumpStatus} ({liveData?.pumpMode || 'Optimal'})
         </h2>
       </div>
 
-      {/* --- Real Time Status Cards --- */}
+      {/* Real Time Status Cards  */}
       <div className="mb-8">
         <div className="flex items-center gap-3 mb-4">
            <h3 className="text-lg font-bold text-gray-800">Real Time Status : <span className="font-normal text-gray-600">{deviceId}</span></h3>
@@ -164,7 +164,7 @@ const Dashboard = () => {
         </div>
       </div>
 
-      {/* --- Main Content Grid --- */}
+      {/*  Main Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         
         {/* Historical Chart */}
@@ -192,7 +192,7 @@ const Dashboard = () => {
           </div>
         </div>
 
-        {/* Task 2.2: Settings Panel Component */}
+        {/* Settings Panel Component */}
         <SettingsPanel 
           settings={settings} 
           setSettings={setSettings} 
