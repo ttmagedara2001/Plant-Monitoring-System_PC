@@ -2,7 +2,7 @@ import api from './api';
 
 /**
  * Fetch Historical Stream Data
- * Source 50: /get-stream-data/device
+ * /get-stream-data/device
  */
 export const getHistoricalData = async (deviceId, startTime, endTime) => {
   try {
@@ -28,7 +28,7 @@ export const getHistoricalData = async (deviceId, startTime, endTime) => {
 
 /**
  * Control Device (Update State)
- * Source 159: /update-state-details
+ * /update-state-details
  */
 export const updateDeviceState = async (deviceId, topic, payload) => {
   try {
