@@ -1,16 +1,167 @@
-# React + Vite
+# Plant Monitoring System - PC Dashboard
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A real-time, interactive React dashboard for monitoring plant sensor data with WebSocket integration and intelligent fallback mode.
 
-Currently, two official plugins are available:
+## 🌱 Overview
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+The Plant Monitoring System PC Dashboard displays live sensor data (moisture, temperature, humidity, light) from IoT devices monitoring plants/greenhouses. It provides real-time alerts, historical trending, and device control capabilities.
 
-## React Compiler
+**Key Features:**
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- ✅ Real-time sensor data updates via WebSocket
+- ✅ Multiple simultaneous alerts with configurable thresholds
+- ✅ Interactive charts with historical trending
+- ✅ Responsive design (desktop, tablet, mobile)
+- ✅ Device management and selection
+- ✅ Threshold configuration panel
+- ✅ CSV export for analysis
+- ✅ Graceful fallback with mock data when API unavailable
 
-## Expanding the ESLint configuration
+---
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+## 🚀 Quick Start
+
+### Prerequisites
+
+- Node.js 16+
+- npm 7+
+
+### Installation & Running
+
+```bash
+# Install dependencies
+npm install
+
+# Start development server
+npm run dev
+
+# Open browser to http://localhost:5173
+```
+
+### Build for Production
+
+```bash
+npm run build
+npm run preview  # Preview production build locally
+```
+
+---
+
+## 📊 Dashboard Features
+
+### Status Cards
+
+Real-time display of four key metrics:
+
+- **Moisture:** Soil/water level (0-100%)
+- **Temperature:** Ambient temperature (°C)
+- **Humidity:** Air humidity (0-100%)
+- **Light:** Light intensity (lux)
+
+### Alert System
+
+Displays triggered conditions:
+
+- **Moisture Min Alert:** When moisture drops below threshold
+- **Moisture Max Alert:** When moisture exceeds threshold
+- **Temperature Max Alert:** When temperature exceeds threshold
+
+### Historical Chart
+
+Recharts-based visualization with CSV export
+
+### Settings Panel
+
+Configurable thresholds for all sensors
+
+---
+
+## 🏗️ Project Structure
+
+```
+src/
+├── Components/       # UI components
+├── Hooks/           # Custom React hooks (useWebSocket)
+├── Services/        # API services
+├── Context/         # React Context
+└── assets/          # Images and assets
+```
+
+---
+
+## 🔌 Technology Stack
+
+- **React 18.2.0** - UI framework
+- **Vite 5.0+** - Build tool
+- **Recharts 2.10.3** - Charts
+- **Tailwind CSS** - Styling
+- **WebSocket API** - Real-time communication
+- **Axios** - HTTP client
+- **JWT** - Token authentication
+
+---
+
+## 📡 Backend Integration
+
+**Base URL:** `https://protonest-connect-general-app.yellowsea-5dc9141a.westeurope.azurecontainerapps.io/api/v1/user`
+
+**WebSocket URL:** `wss://protonest-connect-general-app.yellowsea-5dc9141a.westeurope.azurecontainerapps.io/ws?token={JWT_TOKEN}`
+
+See `WEBSOCKET_PAYLOADS.md` for message formats.
+
+---
+
+## 📚 Documentation
+
+| Document                         | Purpose                 |
+| -------------------------------- | ----------------------- |
+| `QUICK_START.md`                 | Getting started guide   |
+| `API_DEBUG_GUIDE.md`             | API troubleshooting     |
+| `FALLBACK_MODE_GUIDE.md`         | Mock mode explanation   |
+| `WEBSOCKET_PAYLOADS.md`          | Message format examples |
+| `WEBSOCKET_INTEGRATION_GUIDE.md` | Integration walkthrough |
+| `IMPLEMENTATION_SUMMARY.md`      | Technical details       |
+| `BUILD_AND_DEPLOYMENT.md`        | Deployment guide        |
+
+---
+
+## 🐛 Troubleshooting
+
+**Dashboard Won't Load?**  
+Check browser console for errors, ensure `npm run dev` is running.
+
+**No Data Displaying?**  
+Wait 3-5 seconds for mock data, check console for `[WS]` logs.
+
+**Chart Empty?**  
+Requires ~50 seconds of data accumulation.
+
+---
+
+## 🚀 Quick Deploy
+
+### Vercel
+
+```bash
+npm install -g vercel
+vercel
+```
+
+### Netlify
+
+```bash
+netlify deploy --prod --dir=dist
+```
+
+### Docker
+
+```bash
+docker build -t plant-monitoring:latest .
+docker run -p 80:80 plant-monitoring:latest
+```
+
+---
+
+**Status:** Ready for Development Testing  
+**Last Updated:** 2024  
+**Version:** 1.0.0-beta
