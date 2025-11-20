@@ -1,84 +1,72 @@
 import { useState, useEffect, useRef } from 'react';
 
-// Mock WebSocket URL - replace with Protonest Connect url
-const WS_URL = 'wss://protonest-connect-general-app.yellowsea-5dc9141a.westeurope.azurecontainerapps.io/ws'; 
+// Public demo PieSocket URL for quick UI testing; replace with your WS server in production
+const WS_URL = 'wss://demo.piesocket.com/v3/channel_123?api_key=VCXCEuvhGcBDP7XhiJJUDvR1e1D3eiVjgZ9VRiaV&notify_self';
 
-export const useWebSocket = (deviceId) => {
-  const [liveData, setLiveData] = useState({
-    moisture: 45,
-    temperature: 24,
-    humidity: 60,
-    light: 800,
-    pumpStatus: 'OFF',
-    pumpMode: 'Optimal'
-  });
-  const [isConnected, setIsConnected] = useState(true); // Assume connected for UI testing
+const DEFAULT_MOCK = {
+  moisture: 45,
+  temperature: 24,
+  humidity: 60,
+  light: 800,
+  pumpStatus: 'OFF',
+  pumpMode: 'Optimal'
+};
+
+export const useWebSocket = (deviceId, jwtToken) => {
+  const [liveData, setLiveData] = useState(null);
+  const [isConnected, setIsConnected] = useState(false);
   const ws = useRef(null);
-  const reconnectAttempts = useRef(0);
-  const maxReconnectAttempts = 3;
 
   useEffect(() => {
-    if (!deviceId) return;
+    // If no deviceId provided, return mock data and avoid opening sockets
+    if (!deviceId) {
+      setLiveData(DEFAULT_MOCK);
+      setIsConnected(false);
+      return;
+    }
 
-    // Try to connect to WebSocket, but don't crash if it fails
-    const connectWebSocket = () => {
-      try {
-        const socket = new WebSocket(`${WS_URL}?deviceId=${deviceId}`);
-        ws.current = socket;
+    let mounted = true;
+    let socket;
 
-        socket.onopen = () => {
-          console.log('WebSocket Connected');
-          setIsConnected(true);
-          reconnectAttempts.current = 0;
-        };
+    try {
+      socket = new WebSocket(WS_URL);
+      ws.current = socket;
 
-        socket.onmessage = (event) => {
-          try {
-            const data = JSON.parse(event.data);
-            setLiveData(prev => ({ ...prev, ...data }));
-          } catch (err) {
-            console.error('Error parsing WebSocket message:', err);
-          }
-        };
+      socket.onopen = () => {
+        if (!mounted) return;
+        setIsConnected(true);
+      };
 
-        socket.onerror = (error) => {
-          console.error('WebSocket error:', error);
-          setIsConnected(false);
-        };
+      socket.onmessage = (event) => {
+        if (!mounted) return;
+        try {
+          const parsed = JSON.parse(event.data);
+          // merge incoming fields into state (some messages may be partial)
+          setLiveData(prev => ({ ...(prev || DEFAULT_MOCK), ...parsed }));
+        } catch (err) {
+          console.error('WS parse error:', err);
+        }
+      };
 
-        socket.onclose = () => {
-          console.log('WebSocket Disconnected');
-          setIsConnected(false);
-          
-          // Attempt to reconnect with backoff
-          if (reconnectAttempts.current < maxReconnectAttempts) {
-            reconnectAttempts.current++;
-            const delay = Math.pow(2, reconnectAttempts.current) * 1000;
-            setTimeout(connectWebSocket, delay);
-          }
-        };
-      } catch (error) {
-        console.error('Failed to create WebSocket:', error);
+      socket.onerror = (err) => {
+        console.error('WebSocket error:', err);
+        if (!mounted) return;
         setIsConnected(false);
-        // Use mock data on connection failure
-        setLiveData({
-          moisture: 45,
-          temperature: 24,
-          humidity: 60,
-          light: 800,
-          pumpStatus: 'OFF',
-          pumpMode: 'Optimal'
-        });
-      }
-    };
+      };
 
-    connectWebSocket();
+      socket.onclose = () => {
+        if (!mounted) return;
+        setIsConnected(false);
+      };
+    } catch (err) {
+      console.error('Failed to create WebSocket:', err);
+      setLiveData(DEFAULT_MOCK);
+      setIsConnected(false);
+    }
 
-    // Cleanup on unmount
     return () => {
-      if (ws.current) {
-        ws.current.close();
-      }
+      mounted = false;
+      if (socket && socket.readyState === WebSocket.OPEN) socket.close();
     };
   }, [deviceId]);
 
