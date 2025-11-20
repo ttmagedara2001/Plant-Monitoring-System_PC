@@ -15,19 +15,18 @@ const InputGroup = ({ label, name, value, onChange, disabled }) => (
   </div>
 );
 
-const SettingsPanel = ({ settings, setSettings, handleSaveSettings, isSaving, liveData, togglePump, pumpStatus }) => {
+const SettingsPanel = ({ settings, setSettings, handleSaveSettings, commandInProgress, commandStatus, liveData, togglePump, pumpStatus }) => {
   const [isManualMode, setIsManualMode] = useState(false);
-  const [saveMessage, setSaveMessage] = useState('');
 
   const handleSettingChange = (e) => {
     setSettings({ ...settings, [e.target.name]: e.target.value });
   };
 
   const onSave = async () => {
-    await handleSaveSettings(settings);
-    setSaveMessage('Settings Saved!');
-    setTimeout(() => setSaveMessage(''), 3000);
+    await handleSaveSettings();
   };
+  
+  const isSaving = commandInProgress === 'settings';
   
   return (
     <div className="bg-white rounded-3xl p-6 shadow-md flex flex-col">
@@ -74,9 +73,9 @@ const SettingsPanel = ({ settings, setSettings, handleSaveSettings, isSaving, li
           {isSaving ? <Loader2 className="animate-spin w-4 h-4" /> : <Save className="w-5 h-5" />}
           {isSaving ? 'Saving...' : 'Save Settings'}
         </button>
-        {saveMessage && (
-          <p className={`text-xs mt-3 font-medium ${saveMessage.includes('Error') ? 'text-red-500' : 'text-green-600'}`}>
-            {saveMessage}
+        {commandStatus && (
+          <p className={`text-xs mt-3 font-medium ${commandStatus.type === 'error' ? 'text-red-500' : 'text-green-600'}`}>
+            {commandStatus.message}
           </p>
         )}
       </div>
