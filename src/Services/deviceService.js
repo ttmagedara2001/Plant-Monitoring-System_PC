@@ -28,11 +28,11 @@ export const getHistoricalData = async (deviceId, startTime, endTime) => {
 
 /**
  * Control Device (Update State)
- * Source 159: /update-statedetails-
+ * Source 159: /update-state-details
  */
 export const updateDeviceState = async (deviceId, topic, payload) => {
   try {
-    const response = await api.post('/update-statedetails-', {
+    const response = await api.post('/update-state-details', {
       deviceId: deviceId,
       topic: topic, // e.g., "motor/paddy"
       payload: payload // e.g., { "power": "on" }
