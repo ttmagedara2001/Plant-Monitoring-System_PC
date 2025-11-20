@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../Context/AuthContext';
 import api from '../Services/api';
-import { useWebSocket } from '../Hooks/UseWebSocket'; 
+import { useWebSocket } from '../Hooks/UseWebSocket';
+import { sendControlCommand, sendSettingsUpdate, sendSetPump } from '../Services/commands';
 import { Download, AlertTriangle, Loader2 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
@@ -18,8 +19,10 @@ const Dashboard = () => {
   const { userId, logout } = useAuth();
   const navigate = useNavigate();
 
-  // Data Hooks & States
-  const { liveData, isConnected } = useWebSocket(deviceId);
+  const [deviceList] = useState(['greenhouse-1', 'greenhouse-2', 'greenhouse-3']);
+  const [settings, setSettings] = useState({ moistureMin: '20', moistureMax: '60', tempMax: '30' });
+
+  // Mock data fallback
   const mockChartData = [
     { time: '10:00', moisture: 40, temperature: 24 }, 
     { time: '10:05', moisture: 38, temperature: 25 },
@@ -29,32 +32,34 @@ const Dashboard = () => {
     { time: '10:25', moisture: 42, temperature: 22 },
     { time: '10:30', moisture: 39, temperature: 24 },
   ];
+
+  // WebSocket data
+  const { liveData, chartData: wsChartData, alerts: wsAlerts, isConnected, lastAck, send: sendWsMessage } = useWebSocket(deviceId);
+  
   const [chartData, setChartData] = useState(mockChartData);
-  const [deviceList] = useState(['greenhouse-1', 'greenhouse-2', 'greenhouse-3']);
-  const [isLoadingChart, setIsLoadingChart] = useState(true);
-  const [settings, setSettings] = useState({ moistureMin: '20', moistureMax: '60', tempMax: '30' });
   const [alerts, setAlerts] = useState([]);
+  const [isLoadingChart, setIsLoadingChart] = useState(false);
+  const [commandInProgress, setCommandInProgress] = useState(null);
 
-  // Fetch Historical Data 
+  // Sync WebSocket chart data or use mock
   useEffect(() => {
-    const fetchHistory = async () => {
-      setIsLoadingChart(true);
-      try {
-        const response = await api.get(`/get-stream-data/${deviceId}`);
-        const data = Array.isArray(response.data) ? response.data : mockChartData;
-        setChartData(data); 
-      } catch (error) {
-        // Mock data for visualization
-        setChartData(mockChartData);
-      } finally {
-        setIsLoadingChart(false);
-      }
-    };
-    if (deviceId) fetchHistory();
-  }, [deviceId]);
+    if (wsChartData && Array.isArray(wsChartData) && wsChartData.length > 0) {
+      setChartData(wsChartData);
+    } else {
+      // Use mock data as fallback
+      setChartData(mockChartData);
+    }
+    setIsLoadingChart(false);
+  }, [wsChartData]);
 
-  // Alert Logic - Support multiple alerts
+  // Sync WebSocket alerts or compute client-side
   useEffect(() => {
+    if (wsAlerts && Array.isArray(wsAlerts) && wsAlerts.length > 0) {
+      setAlerts(wsAlerts);
+      return;
+    }
+    
+    // Client-side alert computation (fallback)
     const currentData = liveData || {}; 
     const minM = parseFloat(settings.moistureMin) || 20;
     const maxM = parseFloat(settings.moistureMax) || 60;
@@ -62,38 +67,32 @@ const Dashboard = () => {
 
     const newAlerts = [];
 
-    // Check moisture min
     if (currentData.moisture !== undefined && currentData.moisture < minM) {
       newAlerts.push({
         id: 'moisture-min',
         type: 'CRITICAL',
         message: `CRITICAL: Soil Moisture (${currentData.moisture}%) is below minimum threshold (${minM}%).`,
-        icon: 'AlertTriangle'
       });
     }
 
-    // Check moisture max
     if (currentData.moisture !== undefined && currentData.moisture > maxM) {
       newAlerts.push({
         id: 'moisture-max',
         type: 'WARNING',
         message: `WARNING: Soil Moisture (${currentData.moisture}%) exceeds maximum threshold (${maxM}%).`,
-        icon: 'AlertTriangle'
       });
     }
 
-    // Check temperature max
     if (currentData.temperature !== undefined && currentData.temperature > maxT) {
       newAlerts.push({
         id: 'temp-max',
         type: 'WARNING',
         message: `WARNING: Temperature (${currentData.temperature}°C) exceeds maximum threshold (${maxT}°C).`,
-        icon: 'AlertTriangle'
       });
     }
 
     setAlerts(newAlerts);
-  }, [liveData, settings]);
+  }, [liveData, settings, wsAlerts]);
   
   // Control Handlers passed to SettingsPanel
   const handleSaveSettings = async () => {
