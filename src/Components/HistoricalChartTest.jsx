@@ -1,3 +1,4 @@
+// Use this to display historical data charts with toggles for different metrics
 import React, { useState } from 'react';
 import { Download, Loader2, Eye, EyeOff } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
