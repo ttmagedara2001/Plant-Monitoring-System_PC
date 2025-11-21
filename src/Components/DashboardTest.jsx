@@ -428,7 +428,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../Context/AuthContext';
-import { useWebSocket } from '../Hooks/UseWebSocket';
+import { useWebSocket } from '../Hooks/UseWebSocketTest';
 import { getHistoricalData, updateDeviceState } from '../Services/deviceService';
 import { Download, AlertTriangle, Loader2 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
