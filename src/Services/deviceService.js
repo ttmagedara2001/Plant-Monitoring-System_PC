@@ -1,18 +1,23 @@
 import api from './api';
 
 /**
- * Fetch Historical Stream Data
- * /get-stream-data/device
+ * Fetch Historical Stream Data for CSV Export
+ * Task 3.3.2: Retrieve data via /get-stream-data/device API
  */
-export const getHistoricalData = async (deviceId, startTime, endTime) => {
+export const getHistoricalData = async (deviceId) => {
   try {
+    // Default to last 24 hours if not specified
+    const endTime = new Date();
+    const startTime = new Date();
+    startTime.setDate(startTime.getDate() - 1);
+
     const response = await api.get('/get-stream-data/device', {
       params: {
         deviceId: deviceId,
-        startTime: startTime.toISOString(), // Must be ISO-8601 (Source 80)
+        startTime: startTime.toISOString(),
         endTime: endTime.toISOString(),
-        pagination: 0,
-        pageSize: 100 // Adjust based on needs
+        pagination: 0, // 0 usually implies no pagination/all data in some APIs, or page 0
+        pageSize: 1000 // Fetch a large batch for export
       }
     });
 
@@ -21,26 +26,24 @@ export const getHistoricalData = async (deviceId, startTime, endTime) => {
     }
     return [];
   } catch (error) {
-    console.error("Error fetching history:", error);
-    return [];
+    console.error("Error fetching history for export:", error);
+    throw error;
   }
 };
 
 /**
- * Control Device (Update State)
- * /update-state-details
+ * Update Device State (Pump/Thresholds)
  */
-export const updateDeviceState = async (deviceId, topic, payload) => {
+export const updateDeviceState = async (deviceId, payload) => {
   try {
-    const response = await api.post('/update-state-details', {
+    // Adjust endpoint based on your specific backend route requirements
+    const response = await api.post(`/update-state-details`, {
       deviceId: deviceId,
-      topic: topic, // e.g., "motor/paddy"
-      payload: payload // e.g., { "power": "on" }
+      ...payload
     });
-    
     return response.data;
   } catch (error) {
-    console.error("Error updating state:", error);
+    console.error("Error updating device state:", error);
     throw error;
   }
 };
