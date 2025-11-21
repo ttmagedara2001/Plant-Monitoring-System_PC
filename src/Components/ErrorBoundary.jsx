@@ -42,3 +42,5 @@ class ErrorBoundary extends React.Component {
 }
 
 export default ErrorBoundary;
+
+// used for wrapping the entire app to catch errors. If an error occurs, it shows a friendly message and a reload button.
