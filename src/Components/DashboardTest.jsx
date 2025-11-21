@@ -9,7 +9,7 @@ import { AlertTriangle } from 'lucide-react';
 import Header from './Header';
 import SettingsPanel from './SettingsPanel';
 import StatusCard from './StatusCard';
-import HistoricalChart from './HistoricalChartTest'; // Using the new component
+import HistoricalChart from './HistoricalChartTest';
 
 const Dashboard = () => {
   const { deviceId: paramDeviceId } = useParams();
@@ -19,20 +19,20 @@ const Dashboard = () => {
   const { logout, jwtToken } = useAuth(); 
   const navigate = useNavigate();
 
-  // --- 1. Data Hooks & States ---
+  // 1. Data Hooks & States
   const { liveData, isConnected } = useWebSocket(deviceId);
   const [chartData, setChartData] = useState([]);
   const [deviceList] = useState(['device0000', 'device0001']); 
   const [isLoadingChart, setIsLoadingChart] = useState(true);
   const [isExporting, setIsExporting] = useState(false);
   
-  // --- Settings & Control States ---
+  // Settings & Control States
   const [settings, setSettings] = useState({ moistureMin: '20', moistureMax: '60', tempMax: '30' });
   const [alertMessage, setAlertMessage] = useState(null);
   const [commandStatus, setCommandStatus] = useState(null); 
   const [commandInProgress, setCommandInProgress] = useState(null);
 
-  // --- Task 1.2.2: Fetch Historical Data ---
+  // Fetch Historical Data
   useEffect(() => {
     const loadData = async () => {
       setIsLoadingChart(true);
@@ -69,7 +69,7 @@ const Dashboard = () => {
     if (deviceId) loadData();
   }, [deviceId]); 
 
-  // --- Task 3.2: Alert Logic ---
+  // Alert Logic
   useEffect(() => {
     const currentData = liveData || {}; 
     const minM = parseFloat(settings.moistureMin);
@@ -85,7 +85,7 @@ const Dashboard = () => {
     }
   }, [liveData, settings]);
   
-  // --- Task 3.1: Data Export Function ---
+  // Task 3.1: Data Export Function
   const handleExportCSV = async () => {
     setIsExporting(true);
     try {
@@ -114,7 +114,7 @@ const Dashboard = () => {
     }
   };
   
-  // --- Control Handlers ---
+  // Control Handlers
   const handleSaveSettings = async () => {
     setCommandInProgress('settings');
     setCommandStatus(null);
