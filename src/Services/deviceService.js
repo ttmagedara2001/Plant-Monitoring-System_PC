@@ -1,4 +1,4 @@
-import api from './api';
+import api from "./apiTest";
 
 /**
  * Fetch Historical Stream Data for CSV Export
@@ -11,14 +11,14 @@ export const getHistoricalData = async (deviceId) => {
     const startTime = new Date();
     startTime.setDate(startTime.getDate() - 1);
 
-    const response = await api.get('/get-stream-data/device', {
+    const response = await api.get("/get-stream-data/device", {
       params: {
         deviceId: deviceId,
         startTime: startTime.toISOString(),
         endTime: endTime.toISOString(),
         pagination: 0, // 0 usually implies no pagination/all data in some APIs, or page 0
-        pageSize: 1000 // Fetch a large batch for export
-      }
+        pageSize: 1000, // Fetch a large batch for export
+      },
     });
 
     if (response.data.status === "Success") {
@@ -39,7 +39,7 @@ export const updateDeviceState = async (deviceId, payload) => {
     // Adjust endpoint based on your specific backend route requirements
     const response = await api.post(`/update-state-details`, {
       deviceId: deviceId,
-      ...payload
+      ...payload,
     });
     return response.data;
   } catch (error) {
