@@ -3,7 +3,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import Dashboard from './Components/DashboardTest';
 import ErrorBoundary from './Components/ErrorBoundary';
 
-
+// Modified for WebSocket Test Hook
 function App() {
   return (
     <ErrorBoundary>
