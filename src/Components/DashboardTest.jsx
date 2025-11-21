@@ -652,47 +652,40 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../Context/AuthContext';
-import { useWebSocket } from '../Hooks/UseWebSocketTest';
-import { getHistoricalData, updateDeviceState } from '../Services/deviceService';
-import { Download, AlertTriangle, Loader2 } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { getHistoricalData, updateDeviceState } from '../Services/deviceService'; 
+import { useWebSocket } from '../Hooks/UseWebSocketTest'; 
+import { AlertTriangle } from 'lucide-react';
 
+// Import Sub-Components
 import Header from './Header';
 import SettingsPanel from './SettingsPanel';
 import StatusCard from './StatusCard';
+import HistoricalChart from './HistoricalChartTest'; // Using the new component
 
 const Dashboard = () => {
   const { deviceId: paramDeviceId } = useParams();
-  const defaultDeviceId = 'greenhouse-1';
+  const defaultDeviceId = 'device0000'; 
   const deviceId = paramDeviceId || defaultDeviceId;
   
-  const { jwtToken } = useAuth();
+  const { logout, jwtToken } = useAuth(); 
   const navigate = useNavigate();
-  
-  const [deviceList] = useState(['greenhouse-1', 'greenhouse-2', 'greenhouse-3']);
-  const [settings, setSettings] = useState({ moistureMin: '20', moistureMax: '60', tempMax: '30' });
-  
-  // WebSocket Integration
-  const { liveData, chartData: wsChartData, alerts: wsAlerts, isConnected } = useWebSocket(deviceId, jwtToken);
-  
+
+  // --- 1. Data Hooks & States ---
+  const { liveData, isConnected } = useWebSocket(deviceId);
   const [chartData, setChartData] = useState([]);
-  const [clientAlerts, setClientAlerts] = useState([]);
+  const [deviceList] = useState(['device0000', 'device0001']); 
+  const [isLoadingChart, setIsLoadingChart] = useState(true);
   const [isExporting, setIsExporting] = useState(false);
-  const [commandStatus, setCommandStatus] = useState(null);
-  const [isLoadingChart, setIsLoadingChart] = useState(false);
+  
+  // --- Settings & Control States ---
+  const [settings, setSettings] = useState({ moistureMin: '20', moistureMax: '60', tempMax: '30' });
+  const [alertMessage, setAlertMessage] = useState(null);
+  const [commandStatus, setCommandStatus] = useState(null); 
+  const [commandInProgress, setCommandInProgress] = useState(null);
 
-  // Chart Visibility State (Controls which lines are shown)
-  const [visibleSeries, setVisibleSeries] = useState({
-    moisture: true,
-    temperature: true,
-    humidity: false, // Default hidden to reduce clutter, user can toggle
-    light: false,
-    battery: false
-  });
-
-  // --- Fetch Historical Data & Parse All Metrics ---
+  // --- Task 1.2.2: Fetch Historical Data ---
   useEffect(() => {
-    const fetchHistory = async () => {
+    const loadData = async () => {
       setIsLoadingChart(true);
       try {
         const endTime = new Date();
@@ -700,10 +693,9 @@ const Dashboard = () => {
 
         const history = await getHistoricalData(deviceId, startTime, endTime);
         
-        // Map all available sensor data
+        // Map all available metrics for the new Chart component
         const formattedData = history.map(item => {
           try {
-             // Ensure we handle both nested payload or flat structure depending on API
              const p = item.payload || {};
              return { 
                time: new Date(item.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
@@ -725,197 +717,143 @@ const Dashboard = () => {
       }
     };
 
-    if (deviceId) fetchHistory();
-  }, [deviceId]);
+    if (deviceId) loadData();
+  }, [deviceId]); 
 
-  // Task 3.2.1: Check Alerts
-  const checkAlerts = useCallback((data, currentSettings) => {
-    const newAlerts = [];
-    const minM = parseFloat(currentSettings.moistureMin) || 20;
-    const maxM = parseFloat(currentSettings.moistureMax) || 60;
-    const maxT = parseFloat(currentSettings.tempMax) || 30;
-
-    if (data.moisture !== undefined && data.moisture < minM) {
-      newAlerts.push({ id: 'moisture-min', type: 'CRITICAL', message: `CRITICAL: Soil Moisture (${data.moisture}%) is below minimum (${minM}%).` });
-    }
-    if (data.moisture !== undefined && data.moisture > maxM) {
-      newAlerts.push({ id: 'moisture-max', type: 'WARNING', message: `WARNING: Soil Moisture (${data.moisture}%) exceeds maximum (${maxM}%).` });
-    }
-    if (data.temperature !== undefined && data.temperature > maxT) {
-      newAlerts.push({ id: 'temp-max', type: 'WARNING', message: `WARNING: Temperature (${data.temperature}°C) exceeds maximum (${maxT}°C).` });
-    }
-    return newAlerts;
-  }, []);
-
-  // Update alerts
+  // --- Task 3.2: Alert Logic ---
   useEffect(() => {
-    if (wsAlerts && wsAlerts.length > 0) {
-      setClientAlerts(wsAlerts);
-    } else {
-      setClientAlerts(checkAlerts(liveData, settings));
-    }
-  }, [liveData, settings, wsAlerts, checkAlerts]);
+    const currentData = liveData || {}; 
+    const minM = parseFloat(settings.moistureMin);
+    const maxT = parseFloat(settings.tempMax);
 
-  // CSV Export including all metrics
+    // Only show alerts if we have valid data and thresholds
+    if (currentData.moisture && currentData.moisture < minM) {
+      setAlertMessage(`CRITICAL: Soil Moisture (${currentData.moisture}%) is below minimum (${minM}%).`);
+    } else if (currentData.temperature && currentData.temperature > maxT) {
+      setAlertMessage(`WARNING: Temperature (${currentData.temperature}°C) exceeds maximum (${maxT}°C).`);
+    } else {
+      setAlertMessage(null);
+    }
+  }, [liveData, settings]);
+  
+  // --- Task 3.1: Data Export Function ---
   const handleExportCSV = async () => {
     setIsExporting(true);
     try {
-      if (!chartData || chartData.length === 0) {
-        alert("No data to export.");
+      if (chartData.length === 0) {
+        alert("No data available to export.");
         return;
       }
-      const csvContent = [
-        ['Time', 'Moisture', 'Temperature', 'Humidity', 'Light', 'Battery'],
-        ...chartData.map(row => [
-          row.time, row.moisture, row.temperature, row.humidity, row.light, row.battery
-        ])
-      ].map(e => e.join(",")).join("\n");
-
+      const headers = ["time", "moisture", "temperature", "humidity", "light", "battery"].join(','); 
+      const rows = chartData.map(d => 
+        `${d.time},${d.moisture},${d.temperature},${d.humidity},${d.light},${d.battery}`
+      ).join('\n');
+      
+      const csvContent = `${headers}\n${rows}`;
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
+      const link = document.createElement('a');
       link.href = url;
-      link.download = `${deviceId}_full_data.csv`;
+      link.download = `agricop_${deviceId}_report.csv`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-    } catch (error) { console.error(error); } 
-    finally { setIsExporting(false); }
+    } catch (e) {
+      console.error("Export failed", e);
+    } finally {
+      setIsExporting(false);
+    }
   };
-
+  
+  // --- Control Handlers ---
   const handleSaveSettings = async () => {
+    setCommandInProgress('settings');
+    setCommandStatus(null);
     try {
-      await updateDeviceState(deviceId, { settings });
-      setCommandStatus({ type: 'success', message: 'Settings Saved' });
-    } catch (e) { setCommandStatus({ type: 'error', message: 'Save Failed' }); }
-    setTimeout(() => setCommandStatus(null), 3000);
+      await updateDeviceState(deviceId, "settings/thresholds", settings); 
+      setCommandStatus({ type: 'success', message: 'Settings saved successfully!' });
+    } catch (error) {
+      setCommandStatus({ type: 'error', message: 'Failed to save settings.' });
+    } finally {
+      setCommandInProgress(null);
+      setTimeout(() => setCommandStatus(null), 3000);
+    }
   };
-
+  
   const togglePump = async () => {
-    const newStatus = liveData.pumpStatus === 'ON' ? 'OFF' : 'ON';
+    setCommandInProgress('pump');
+    const currentStatus = liveData?.pumpStatus === 'ON';
+    const newStatus = currentStatus ? 'OFF' : 'ON';
+    
     try {
-        await updateDeviceState(deviceId, { topic: 'pump', payload: { status: newStatus, mode: 'MANUAL' } });
-    } catch (e) { console.error(e); }
+      await updateDeviceState(deviceId, "motor/paddy", { power: newStatus.toLowerCase() }); 
+    } catch (error) {
+      console.error("Pump control failed:", error);
+    } finally {
+      setCommandInProgress(null);
+    }
   };
 
-  const getVal = (key, unit) => {
-    const val = liveData[key];
-    return (val !== undefined && val !== null && !isNaN(Number(val))) ? `${Number(val).toFixed(1)}${unit}` : '--';
-  };
-
-  const getBorderColor = (metric) => {
-    if (clientAlerts.some(a => a.id.includes(metric))) return 'border-red-500';
+  // Helpers
+  const getVal = (key, unit, decimals = 1) => liveData?.[key] ? `${Number(liveData[key]).toFixed(decimals)}${unit}` : '--';
+  const pumpStatus = liveData?.pumpStatus || 'OFF';
+  
+  const getBorderColor = (key, min, max) => {
+    const val = liveData?.[key];
+    // If value exists and is outside bounds, return red, else green
+    if (val !== undefined && (val < min || val > max)) return 'border-red-500';
     return 'border-green-500';
-  };
-
-  // Helper to toggle chart lines
-  const toggleSeries = (key) => {
-    setVisibleSeries(prev => ({ ...prev, [key]: !prev[key] }));
   };
 
   return (
     <div className="min-h-screen bg-[#f0f4f8] p-4 font-sans text-gray-800">
-      {/* Alerts */}
-      {clientAlerts.length > 0 && (
-        <div className="space-y-3 mb-6">
-          {clientAlerts.map((alert, idx) => (
-            <div key={idx} className={`${alert.type === 'CRITICAL' ? 'bg-red-500' : 'bg-yellow-500'} text-white rounded-lg p-3 shadow-xl flex items-center justify-center font-bold animate-pulse`}>
-              <AlertTriangle className="w-5 h-5 mr-2" /> {alert.message}
-            </div>
-          ))}
-        </div>
+      
+      {/* Alert Banner */}
+      {alertMessage && (
+          <div className="bg-red-500 text-white rounded-lg p-3 mb-6 shadow-xl flex items-center justify-center font-bold text-lg animate-pulse transition-all">
+              <AlertTriangle className="w-6 h-6 mr-3" />
+              {alertMessage}
+          </div>
       )}
 
       <Header deviceId={deviceId} deviceList={deviceList} />
 
-      {/* Pump Status */}
-      <div className={`rounded-xl py-4 text-center mb-8 border transition-colors duration-500 ${liveData.pumpStatus === 'ON' ? 'bg-green-100 border-green-300 text-green-900' : 'bg-blue-100 border-blue-300 text-blue-900'}`}>
-        <h2 className="text-xl font-bold">Pump: {liveData.pumpStatus} ({liveData.pumpMode})</h2>
+      {/* Pump Status Banner */}
+      <div className={`rounded-xl py-4 text-center mb-8 border transition-colors duration-500 shadow-sm ${pumpStatus === 'ON' ? 'bg-green-100 border-green-300 text-green-900' : 'bg-blue-100 border-blue-300 text-blue-900'}`}>
+        <h2 className="text-xl font-bold">
+          Pump : {pumpStatus} ({liveData?.pumpMode || 'Optimal'})
+        </h2>
       </div>
 
-      {/* Real-Time Cards - Added Battery Card */}
+      {/* Real-Time Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
-        <StatusCard value={getVal('moisture', '%')} label="Soil Moisture" borderColor={getBorderColor('moisture')} />
-        <StatusCard value={getVal('temperature', '°C')} label="Temperature" borderColor={getBorderColor('temp')} />
-        <StatusCard value={getVal('humidity', '%')} label="Humidity" borderColor="border-blue-400" />
-        <StatusCard value={getVal('light', ' lux')} label="Light" borderColor="border-yellow-500" />
-        <StatusCard value={getVal('battery', '%')} label="Battery" borderColor="border-purple-500" />
+        <StatusCard value={getVal('moisture', '%')} label="Soil Moisture" borderColor={getBorderColor('moisture', parseFloat(settings.moistureMin), parseFloat(settings.moistureMax))} />
+        <StatusCard value={getVal('temperature', '°C')} label="Temperature" borderColor={getBorderColor('temperature', 0, parseFloat(settings.tempMax))} />
+        <StatusCard value={getVal('humidity', '%')} label="Humidity" borderColor={'border-blue-400'} />
+        <StatusCard value={getVal('light', ' lux', 0)} label="Light" borderColor={'border-yellow-500'} />
+        <StatusCard value={getVal('battery', '%')} label="Battery" borderColor={'border-purple-500'} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         
-        {/* Historical Chart Section */}
-        <div className="lg:col-span-2 bg-white rounded-3xl p-6 shadow-md flex flex-col">
-          <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
-            <h3 className="text-xl font-bold">Historical Data</h3>
-            
-            {/* Legend / Toggles */}
-            <div className="flex flex-wrap justify-center gap-2">
-                {[
-                  { k: 'moisture', color: 'bg-green-400', label: 'Moist' },
-                  { k: 'temperature', color: 'bg-red-400', label: 'Temp' },
-                  { k: 'humidity', color: 'bg-blue-400', label: 'Hum' },
-                  { k: 'light', color: 'bg-yellow-400', label: 'Light' },
-                  { k: 'battery', color: 'bg-purple-400', label: 'Bat' }
-                ].map((item) => (
-                    <button 
-                        key={item.k}
-                        onClick={() => toggleSeries(item.k)}
-                        className={`px-2 py-1 rounded text-xs font-bold text-white transition-all ${visibleSeries[item.k] ? item.color : 'bg-gray-300'}`}
-                    >
-                        {item.label}
-                    </button>
-                ))}
-            </div>
-
-            <button 
-                onClick={handleExportCSV} 
-                disabled={isExporting}
-                className="bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs font-medium px-3 py-2 rounded-lg flex items-center gap-2 transition">
-              <Download className="w-4 h-4" /> CSV
-            </button>
-          </div>
-          
-          <div className="h-80 w-full flex-grow">
-            {isLoadingChart ? (
-               <div className="h-full flex items-center justify-center text-gray-400"><Loader2 className="animate-spin w-8 h-8" /></div>
-            ) : (
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eee" />
-                <XAxis dataKey="time" tick={{ fontSize: 10 }} />
-                
-                {/* Left Axis for Percentages/Temp */}
-                <YAxis yAxisId="left" tick={{ fontSize: 10 }} />
-                
-                {/* Right Axis for Light (High values) */}
-                <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10 }} />
-                
-                <Tooltip />
-                
-                {visibleSeries.moisture && <Line yAxisId="left" type="monotone" dataKey="moisture" name="Moisture" stroke="#4ade80" strokeWidth={2} dot={false} />}
-                {visibleSeries.temperature && <Line yAxisId="left" type="monotone" dataKey="temperature" name="Temp" stroke="#ef4444" strokeWidth={2} dot={false} />}
-                {visibleSeries.humidity && <Line yAxisId="left" type="monotone" dataKey="humidity" name="Humidity" stroke="#3b82f6" strokeWidth={2} dot={false} />}
-                {visibleSeries.battery && <Line yAxisId="left" type="monotone" dataKey="battery" name="Battery" stroke="#a855f7" strokeWidth={2} dot={false} />}
-                
-                {/* Light uses the Right Axis */}
-                {visibleSeries.light && <Line yAxisId="right" type="monotone" dataKey="light" name="Light" stroke="#eab308" strokeWidth={2} dot={false} />}
-                
-              </LineChart>
-            </ResponsiveContainer>
-            )}
-          </div>
-        </div>
+        {/* New Historical Chart Component */}
+        <HistoricalChart 
+            chartData={chartData}
+            isLoading={isLoadingChart}
+            onExportCSV={handleExportCSV}
+            isExporting={isExporting}
+        />
 
         {/* Settings Panel */}
         <SettingsPanel 
           settings={settings} 
           setSettings={setSettings} 
           handleSaveSettings={handleSaveSettings} 
+          commandInProgress={commandInProgress}
           commandStatus={commandStatus}
-          liveData={liveData}
-          togglePump={togglePump}
-          pumpStatus={liveData.pumpStatus}
+          liveData={liveData} 
+          togglePump={togglePump} 
+          pumpStatus={pumpStatus}
         />
       </div>
     </div>
