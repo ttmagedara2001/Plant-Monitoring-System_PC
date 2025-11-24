@@ -1,8 +1,17 @@
 import axios from "axios";
 
-// Remote API prefix is used for authentication
-const REMOTE_API_PREFIX =
-  "https://protonest-connect-general-app.yellowsea-5dc9141a.westeurope.azurecontainerapps.io/api/v1/user";
+// Environment-based API URL selection
+const getApiUrl = () => {
+  const isDev = import.meta.env.DEV;
+  const useLocal = import.meta.env.VITE_USE_LOCAL_API === "true";
+
+  if (isDev && useLocal) {
+    return "http://localhost:8091/api/v1/user";
+  }
+  return "https://protonest-connect-general-app.yellowsea-5dc9141a.westeurope.azurecontainerapps.io/api/v1/user";
+};
+
+const API_URL = getApiUrl();
 
 // Authentication and get JWT + refresh token
 export const login = async (email, password) => {
@@ -20,10 +29,10 @@ export const login = async (email, password) => {
       throw new Error("Invalid email format");
     }
 
-    console.log("🔄 Making secure authentication request...");
+    console.log("🔄 Making secure authentication request to:", API_URL);
 
     const response = await axios.post(
-      `${REMOTE_API_PREFIX}/get-token`,
+      `${API_URL}/get-token`,
       {
         email: cleanEmail,
         password: cleanPassword,
@@ -65,20 +74,17 @@ export const login = async (email, password) => {
       try {
         console.log("🔄 Attempting fallback authentication method...");
 
-        const fallbackResponse = await axios.get(
-          `${REMOTE_API_PREFIX}/get-token`,
-          {
-            params: {
-              email: email.trim(),
-              password: password.trim(),
-            },
-            headers: {
-              Accept: "application/json",
-              "Cache-Control": "no-cache",
-            },
-            timeout: 10000,
-          }
-        );
+        const fallbackResponse = await axios.get(`${API_URL}/get-token`, {
+          params: {
+            email: email.trim(),
+            password: password.trim(),
+          },
+          headers: {
+            Accept: "application/json",
+            "Cache-Control": "no-cache",
+          },
+          timeout: 10000,
+        });
 
         if (fallbackResponse.data.status === "Success") {
           const jwtToken =
@@ -113,7 +119,7 @@ export const login = async (email, password) => {
         method: error.config?.method,
       });
     } else if (error.request) {
-      console.error("❌ Network Error:", error.message); 
+      console.error("❌ Network Error:", error.message);
     } else {
       console.error("❌ Request Error:", error.message);
     }

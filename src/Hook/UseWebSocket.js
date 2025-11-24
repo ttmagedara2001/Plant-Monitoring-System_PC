@@ -2,13 +2,14 @@ import { useState, useEffect, useRef } from "react";
 
 // Use the correct WebSocket URL
 const WS_BASE_URL =
-  "wss://protonest-connect-general-app.yellowsea-5dc9141a.westeurope.azurecontainerapps.io";
+  "wss://protonest-connect-general-app.yellowsea-5dc9141a.westeurope.azurecontainerapps.io/ws";
 
 const DEFAULT_MOCK = {
   moisture: 0,
   temperature: 0,
   humidity: 0,
   light: 0,
+  battery: 0,
   pumpStatus: "OFF",
   pumpMode: "Optimal",
 };
@@ -19,6 +20,7 @@ export const useWebSocket = (deviceId, jwtToken) => {
   const [alerts, setAlerts] = useState([]);
   const [isConnected, setIsConnected] = useState(false);
   const ws = useRef(null);
+  const reconnectTimeoutRef = useRef(null);
 
   useEffect(() => {
     // Enhanced validation before connecting
@@ -28,25 +30,24 @@ export const useWebSocket = (deviceId, jwtToken) => {
     }
 
     // Skip connection for test tokens
-    if (jwtToken.includes("your-real-jwt-here")) {
-      console.log("[WS] Test token detected - please replace with real JWT");
+    if (jwtToken.includes("MOCK_TOKEN_FOR_TESTING")) {
+      console.log("[WS] Mock token detected - skipping real connection");
       return;
     }
 
-    let socket;
     let isComponentMounted = true;
 
     const connectWebSocket = async () => {
       try {
         // Close existing connection
-        if (ws.current) {
+        if (ws.current && ws.current.readyState !== WebSocket.CLOSED) {
           ws.current.close();
         }
 
         const url = `${WS_BASE_URL}?token=${encodeURIComponent(jwtToken)}`;
         console.log("[WS] Connecting to:", WS_BASE_URL);
 
-        socket = new WebSocket(url);
+        const socket = new WebSocket(url);
         ws.current = socket;
 
         socket.onopen = () => {
@@ -57,6 +58,12 @@ export const useWebSocket = (deviceId, jwtToken) => {
 
           console.log("[WS] Connected successfully");
           setIsConnected(true);
+
+          // Clear any pending reconnect attempts
+          if (reconnectTimeoutRef.current) {
+            clearTimeout(reconnectTimeoutRef.current);
+            reconnectTimeoutRef.current = null;
+          }
 
           // Subscribe to device topics
           const subscriptions = [
@@ -165,11 +172,13 @@ export const useWebSocket = (deviceId, jwtToken) => {
             setIsConnected(false);
             console.log(`[WS] Connection closed - Code: ${event.code}`);
 
-            // Attempt reconnect for abnormal closures
-            if (event.code !== 1000) {
+            // Attempt reconnect for abnormal closures only if component is still mounted
+            if (event.code !== 1000 && isComponentMounted) {
               console.log("[WS] Attempting reconnection in 5 seconds...");
-              setTimeout(() => {
-                if (isComponentMounted) connectWebSocket();
+              reconnectTimeoutRef.current = setTimeout(() => {
+                if (isComponentMounted) {
+                  connectWebSocket();
+                }
               }, 5000);
             }
           }
@@ -193,8 +202,16 @@ export const useWebSocket = (deviceId, jwtToken) => {
 
     return () => {
       isComponentMounted = false;
-      if (socket && socket.readyState === WebSocket.OPEN) {
-        socket.close(1000, "Component unmounting");
+
+      // Clear reconnect timeout
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+      }
+
+      // Close WebSocket connection
+      if (ws.current && ws.current.readyState !== WebSocket.CLOSED) {
+        ws.current.close(1000, "Component unmounting");
       }
     };
   }, [deviceId, jwtToken]);

@@ -32,13 +32,12 @@ export const getHistoricalData = async (deviceId) => {
 };
 
 /*
-  Update Device State (Pump/Thresholds)
+  Update Device State (Pump/Thresholds) - Fixed to match API documentation
  */
-export const updateDeviceState = async (deviceId, endpoint, payload) => {
+export const updateDeviceState = async (deviceId, payload) => {
   try {
     const response = await api.post(`/update-state-details`, {
       deviceId: deviceId,
-      endpoint: endpoint,
       ...payload,
     });
     return response.data;

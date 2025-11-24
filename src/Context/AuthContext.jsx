@@ -2,8 +2,9 @@ import React, { createContext, useContext, useState } from 'react';
 
 // 1. Created the Context
 const AuthContext = createContext({
-  userId: 'default-user',
+  userId: '',
   jwtToken: '',
+  setAuth: () => {},
   logout: () => {}, 
 });
 
@@ -14,20 +15,26 @@ export const useAuth = () => {
 
 // 3. Created the Provider Component
 export const AuthProvider = ({ children }) => {
-  const [userId] = useState("AGRICOP_ADMIN_01");
-  const [jwtToken] = useState("MOCK_TOKEN_FOR_TESTING");
+  // Initialize from localStorage
+  const [userId, setUserId] = useState(localStorage.getItem('userId') || '');
+  const [jwtToken, setJwtToken] = useState(localStorage.getItem('jwtToken') || '');
+
+  const setAuth = ({ userId, jwtToken }) => {
+    setUserId(userId);
+    setJwtToken(jwtToken);
+    localStorage.setItem('jwtToken', jwtToken);
+    localStorage.setItem('userId', userId);
+    console.log('✅ Auth state updated:', { userId, hasToken: !!jwtToken });
+  };
 
   const logout = () => {
-    console.log('Logout called');
-    // Clear authentication and redirect
+    setUserId('');
+    setJwtToken('');
+    localStorage.clear();
     window.location.href = '/';
   };
 
-  const value = {
-    userId,
-    jwtToken,
-    logout,
-  };
+  const value = { userId, jwtToken, setAuth, logout };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
