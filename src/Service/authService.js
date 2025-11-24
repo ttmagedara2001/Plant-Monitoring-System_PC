@@ -31,53 +31,53 @@ export const login = async (email, password) => {
 
     console.log("🔄 Making secure authentication request to:", API_URL);
 
-    const response = await axios.post(
-      `${API_URL}/get-token`,
-      {
-        email: cleanEmail,
-        password: cleanPassword,
-      },
-      {
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-          "Cache-Control": "no-cache",
+    // First, try POST method (standard for authentication)
+    try {
+      const response = await axios.post(
+        `${API_URL}/get-token`,
+        {
+          email: cleanEmail,
+          password: cleanPassword,
         },
-        timeout: 10000, // 10s timeout
-      }
-    );
-
-    console.log("📡 API Response:", response.data);
-
-    if (response.data.status === "Success") {
-      const jwtToken = response.data.data?.jwtToken || response.data.jwtToken;
-      const refreshToken =
-        response.data.data?.refreshToken || response.data.refreshToken;
-
-      if (!jwtToken) {
-        throw new Error("No JWT token in response");
-      }
-
-      console.log("✅ Login successful. JWT token received securely.");
-      return { jwtToken, refreshToken, userId: cleanEmail };
-    } else {
-      throw new Error(
-        `Authentication failed: ${response.data.message || "Unknown error"}`
+        {
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+            "Cache-Control": "no-cache",
+          },
+          timeout: 10000, // 10s timeout
+        }
       );
-    }
-  } catch (error) {
-    // Enhanced error logging with fallback attempt
-    if (error.response?.status === 405) {
-      console.warn("⚠️ POST method not allowed, trying fallback method...");
 
-      // Fallback to GET only if POST is not supported (less secure but sometimes necessary)
-      try {
-        console.log("🔄 Attempting fallback authentication method...");
+      console.log("📡 API Response (POST):", response.data);
 
-        const fallbackResponse = await axios.get(`${API_URL}/get-token`, {
+      if (response.data.status === "Success") {
+        const jwtToken = response.data.data?.jwtToken || response.data.jwtToken;
+        const refreshToken =
+          response.data.data?.refreshToken || response.data.refreshToken;
+
+        if (!jwtToken) {
+          throw new Error("No JWT token in response");
+        }
+
+        console.log(
+          "✅ Login successful with POST method. JWT token received securely."
+        );
+        return { jwtToken, refreshToken, userId: cleanEmail };
+      } else {
+        throw new Error(
+          `Authentication failed: ${response.data.message || "Unknown error"}`
+        );
+      }
+    } catch (postError) {
+      // If POST fails with 405, try GET method as fallback
+      if (postError.response?.status === 405) {
+        console.warn("⚠️ POST method not allowed (405), trying GET method...");
+
+        const getResponse = await axios.get(`${API_URL}/get-token`, {
           params: {
-            email: email.trim(),
-            password: password.trim(),
+            email: cleanEmail,
+            password: cleanPassword,
           },
           headers: {
             Accept: "application/json",
@@ -86,42 +86,52 @@ export const login = async (email, password) => {
           timeout: 10000,
         });
 
-        if (fallbackResponse.data.status === "Success") {
+        console.log("📡 API Response (GET fallback):", getResponse.data);
+
+        if (getResponse.data.status === "Success") {
           const jwtToken =
-            fallbackResponse.data.data?.jwtToken ||
-            fallbackResponse.data.jwtToken;
+            getResponse.data.data?.jwtToken || getResponse.data.jwtToken;
           const refreshToken =
-            fallbackResponse.data.data?.refreshToken ||
-            fallbackResponse.data.refreshToken;
+            getResponse.data.data?.refreshToken ||
+            getResponse.data.refreshToken;
 
           if (!jwtToken) {
-            throw new Error("No JWT token in fallback response");
+            throw new Error("No JWT token in GET response");
           }
 
-          console.log("✅ Fallback login successful (less secure method).");
-          return { jwtToken, refreshToken, userId: email.trim() };
+          console.log("✅ Fallback GET login successful (less secure method).");
+          return { jwtToken, refreshToken, userId: cleanEmail };
+        } else {
+          throw new Error(
+            `GET Authentication failed: ${
+              getResponse.data.message || "Unknown error"
+            }`
+          );
         }
-      } catch (fallbackError) {
-        console.error(
-          "❌ Fallback method also failed:",
-          fallbackError.response?.data || fallbackError.message
-        );
-        throw fallbackError;
+      } else {
+        // Re-throw the original error if it's not a 405
+        throw postError;
       }
     }
-
-    // Enhanced error logging for main request
+  } catch (error) {
+    // Enhanced error logging
     if (error.response) {
       console.error("❌ Server Error:", {
         status: error.response.status,
+        statusText: error.response.statusText,
         data: error.response.data,
         url: error.config?.url,
         method: error.config?.method,
+        allowHeader: error.response.headers?.allow || "Not specified",
       });
     } else if (error.request) {
-      console.error("❌ Network Error:", error.message);
+      console.error("❌ Network Error:", {
+        message: error.message,
+        code: error.code,
+        timeout: error.timeout,
+      });
     } else {
-      console.error("❌ Request Error:", error.message);
+      console.error("❌ Request Setup Error:", error.message);
     }
     throw error;
   }
