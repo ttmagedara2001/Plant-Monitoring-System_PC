@@ -13,47 +13,97 @@ const getApiUrl = () => {
 
 const BASE_URL = getApiUrl();
 
+console.log("🔧 API Base URL:", BASE_URL);
+
 const api = axios.create({
   baseURL: BASE_URL,
   headers: {
     "Content-Type": "application/json",
   },
+  timeout: 15000, // 15 second timeout
 });
 
 // Request Interceptor: Adds X-Token header if available
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem("jwtToken");
-    if (token) {
+    if (token && token !== "MOCK_TOKEN_FOR_TESTING") {
       config.headers["X-Token"] = token;
     }
+
+    console.log("📤 API Request:", {
+      method: config.method?.toUpperCase(),
+      url: config.url,
+      baseURL: config.baseURL,
+      hasToken: !!token && token !== "MOCK_TOKEN_FOR_TESTING",
+    });
+
     return config;
   },
-  (error) => Promise.reject(error)
+  (error) => {
+    console.error("❌ Request interceptor error:", error);
+    return Promise.reject(error);
+  }
 );
 
-// Response Interceptor: Handles Token Refresh
+// Response Interceptor: Handles Token Refresh and 405 errors
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    console.log("📥 API Response:", {
+      status: response.status,
+      url: response.config.url,
+      method: response.config.method?.toUpperCase(),
+    });
+    return response;
+  },
   async (error) => {
     const originalRequest = error.config;
 
+    // Log all API errors for debugging
+    if (error.response) {
+      console.error("❌ API Error Response:", {
+        status: error.response.status,
+        statusText: error.response.statusText,
+        url: originalRequest?.url,
+        method: originalRequest?.method?.toUpperCase(),
+        data: error.response.data,
+        allowHeader: error.response.headers?.allow,
+      });
+    }
+
+    // Handle 405 Method Not Allowed
+    if (error.response?.status === 405) {
+      console.error("🚫 Method Not Allowed (405):", {
+        attempted: originalRequest?.method?.toUpperCase(),
+        endpoint: originalRequest?.url,
+        allowed: error.response.headers?.allow || "Not specified",
+      });
+
+      // Don't retry 405 errors - they need code changes
+      return Promise.reject(error);
+    }
+
+    // Handle token refresh for 400/401 errors
     if (
-      error.response?.status === 400 &&
-      error.response?.data?.data === "Invalid token" &&
+      (error.response?.status === 400 || error.response?.status === 401) &&
+      (error.response?.data?.data === "Invalid token" ||
+        error.response?.data?.message?.includes("token")) &&
       !originalRequest._retry
     ) {
       originalRequest._retry = true;
 
       try {
         const refreshToken = localStorage.getItem("refreshToken");
-        if (!refreshToken) throw new Error("No refresh token");
+        if (!refreshToken) throw new Error("No refresh token available");
+
+        console.log("🔄 Attempting token refresh...");
 
         const response = await axios.post(
           `${BASE_URL}/get-new-token`,
           {},
           {
             headers: { "X-Refresh-Token": refreshToken },
+            timeout: 10000,
           }
         );
 
@@ -61,13 +111,17 @@ api.interceptors.response.use(
           const { jwtToken } = response.data.data;
           localStorage.setItem("jwtToken", jwtToken);
           originalRequest.headers["X-Token"] = jwtToken;
+
+          console.log("✅ Token refreshed successfully");
           return api(originalRequest);
         }
       } catch (refreshError) {
-        console.error("Session expired:", refreshError);
+        console.error("❌ Token refresh failed:", refreshError.message);
         localStorage.clear();
+        window.location.href = "/";
       }
     }
+
     return Promise.reject(error);
   }
 );
