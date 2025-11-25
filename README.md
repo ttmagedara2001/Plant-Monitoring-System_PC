@@ -8,7 +8,7 @@ The Plant Monitoring System PC Dashboard displays live sensor data (moisture, te
 
 **Key Features:**
 
-- ✅ Real-time sensor data updates via        WebSocket
+- ✅ Real-time sensor data updates via WebSocket
 - ✅ Multiple simultaneous alerts with configurable thresholds
 - ✅ Interactive charts with historical trending
 - ✅ Responsive design (desktop, tablet, mobile)
