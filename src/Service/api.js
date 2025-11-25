@@ -8,7 +8,7 @@ const getApiUrl = () => {
   if (isDev && useLocal) {
     return "http://localhost:8091/api/v1/user";
   }
-  return "https://protonest-connect-general-app.yellowsea-5dc9141a.westeurope.azurecontainerapps.io/api/v1/user";
+  return "https://api.protonestconnect.co/api/v1/user";
 };
 
 const BASE_URL = getApiUrl();
@@ -46,7 +46,7 @@ api.interceptors.request.use(
   }
 );
 
-// Response Interceptor: Handles Token Refresh and 405 errors
+// Response Interceptor: Handles Token Refresh and various errors
 api.interceptors.response.use(
   (response) => {
     console.log("📥 API Response:", {
@@ -69,6 +69,22 @@ api.interceptors.response.use(
         data: error.response.data,
         allowHeader: error.response.headers?.allow,
       });
+
+      // Enhanced logging for 400 errors
+      if (error.response.status === 400) {
+        console.error("🔍 400 Bad Request Details:", {
+          endpoint: originalRequest?.url,
+          method: originalRequest?.method?.toUpperCase(),
+          sentPayload: originalRequest?.data,
+          serverResponse: error.response.data,
+          possibleIssues: [
+            "Wrong field names in payload",
+            "Missing required parameters",
+            "Invalid data types",
+            "Malformed request body",
+          ],
+        });
+      }
     }
 
     // Handle 405 Method Not Allowed
@@ -83,9 +99,10 @@ api.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    // Handle token refresh for 400/401 errors
+    // Handle token refresh for 400/401 errors (but not for auth endpoints)
     if (
       (error.response?.status === 400 || error.response?.status === 401) &&
+      !originalRequest?.url?.includes("/get-token") && // Don't try refresh on login endpoints
       (error.response?.data?.data === "Invalid token" ||
         error.response?.data?.message?.includes("token")) &&
       !originalRequest._retry
