@@ -16,7 +16,7 @@ export const connectWebSocket = (jwt) => {
   console.log("JWT Token used for WebSocket:", jwt);
 
   // WebSocket URL with encoded token
-  const wsUrl = `wss://protonest-connect-general-app.yellowsea-5dc9141a.westeurope.azurecontainerapps.io/ws?token=${encodeURIComponent(
+  const wsUrl = `wss://api.protonestconnect.co/ws?token=${encodeURIComponent(
     jwt
   )}`;
 
