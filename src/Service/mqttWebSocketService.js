@@ -26,10 +26,13 @@ class MQTTWebSocketService {
 
       console.log("🔄 Attempting MQTT connection via WebSocket...");
 
-      // Updated connection URLs for mqtts://mqtt.protonest.co
+      // Fixed connection URLs - WebSocket only supports ws:// and wss:// protocols
       const connectionUrls = [
-        "wss://mqtt.protonest.co:8883/mqtt", // Standard MQTT over WebSocket with SSL
-        
+        "wss://mqtt.protonest.co:8883/mqtt", // MQTT over WebSocket with SSL
+        "wss://mqtt.protonest.co:9001/mqtt", // Alternative WebSocket port
+        "wss://mqtt.protonest.co:8083", // Without /mqtt path
+        "wss://mqtt.protonest.co:9001", // Alternative port without path
+        "ws://mqtt.protonest.co:8883/mqtt", // Non-secure fallback (if SSL fails)
       ];
 
       this.tryConnectionUrls(connectionUrls, 0, resolve, reject);
@@ -48,7 +51,9 @@ class MQTTWebSocketService {
     }
 
     const url = urls[index];
-    console.log(`🌐 Attempting MQTT connection ${index + 1}/${urls.length}: ${url}`);
+    console.log(
+      `🌐 Attempting MQTT connection ${index + 1}/${urls.length}: ${url}`
+    );
 
     try {
       const ws = new WebSocket(url, ["mqtt"]);
@@ -87,7 +92,7 @@ class MQTTWebSocketService {
 
       ws.onclose = (event) => {
         clearTimeout(connectionTimeout);
-        
+
         if (index < 2) {
           console.log(`🔴 WebSocket closed for ${url}. Code: ${event.code}`);
         }
@@ -129,7 +134,7 @@ class MQTTWebSocketService {
     console.log("   • protonest/device200300/stream/light");
     console.log("   • protonest/device200300/stream/battery");
     console.log("🎲 For now, generating realistic simulation data...");
-    
+
     this.isConnected = true;
     this.simulationMode = true;
     this.connectionCallbacks.forEach((callback) => callback());
@@ -138,7 +143,9 @@ class MQTTWebSocketService {
   // Handle reconnection after unexpected disconnect
   handleReconnection() {
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-      console.warn("🔄 Max reconnection attempts reached. Using simulation mode.");
+      console.warn(
+        "🔄 Max reconnection attempts reached. Using simulation mode."
+      );
       this.startSimulationMode();
       return;
     }
@@ -146,7 +153,9 @@ class MQTTWebSocketService {
     this.reconnectAttempts++;
     const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 10000);
 
-    console.log(`🔄 Reconnecting in ${delay / 1000}s (attempt ${this.reconnectAttempts})`);
+    console.log(
+      `🔄 Reconnecting in ${delay / 1000}s (attempt ${this.reconnectAttempts})`
+    );
 
     setTimeout(() => {
       this.connect(false);
@@ -234,7 +243,7 @@ class MQTTWebSocketService {
   //   }
 
   //   console.log(`🎲 Starting realistic sensor simulation for device: ${deviceId}`);
-    
+
   //   // More realistic initial values based on typical agricultural sensors
   //   let sensorState = {
   //     moisture: 45 + Math.random() * 20, // 45-65% (good range)
@@ -250,18 +259,18 @@ class MQTTWebSocketService {
 
   //   this.mockDataInterval = setInterval(() => {
   //     timeOfDay += 0.1; // Increment time slowly
-      
+
   //     // Daily cycle influences (more realistic)
   //     const dayFactor = Math.sin((timeOfDay / 24) * 2 * Math.PI); // Day/night cycle
   //     const noiseFactor = (Math.random() - 0.5) * 2; // Random variation
-      
+
   //     // Natural sensor evolution with daily patterns
   //     sensorState.temperature += dayFactor * 0.5 + noiseFactor * 0.3;
   //     sensorState.humidity -= dayFactor * 2 + noiseFactor * 1;
   //     sensorState.light += dayFactor * 100 + noiseFactor * 50;
   //     sensorState.moisture -= Math.random() * 0.2; // Gradual evaporation
   //     sensorState.battery -= Math.random() * 0.05; // Slow discharge
-      
+
   //     // Keep realistic bounds
   //     sensorState.moisture = Math.max(15, Math.min(85, sensorState.moisture));
   //     sensorState.temperature = Math.max(18, Math.min(35, sensorState.temperature));
@@ -298,7 +307,7 @@ class MQTTWebSocketService {
   //     // Send random sensor update
   //     const sensors = ['moisture', 'temp', 'humidity', 'light', 'battery'];
   //     const randomSensor = sensors[Math.floor(Math.random() * sensors.length)];
-      
+
   //     let value = sensorState[randomSensor === 'temp' ? 'temperature' : randomSensor];
   //     value = Math.round(value * 10) / 10; // Round to 1 decimal
 
@@ -332,37 +341,51 @@ class MQTTWebSocketService {
             if (messageType === "stream") {
               // Parse payload - it could be JSON object like {"temp":"30"} or plain value
               let sensorValue;
-              
+
               try {
                 // Try parsing as JSON first (for your MQTTX format)
                 const payloadObj = JSON.parse(message.payload);
-                
+
                 // Extract value based on sensor type
-                if (sensorType === 'temp' && payloadObj.temp !== undefined) {
+                if (sensorType === "temp" && payloadObj.temp !== undefined) {
                   sensorValue = parseFloat(payloadObj.temp);
-                } else if (sensorType === 'moisture' && payloadObj.moisture !== undefined) {
+                } else if (
+                  sensorType === "moisture" &&
+                  payloadObj.moisture !== undefined
+                ) {
                   sensorValue = parseFloat(payloadObj.moisture);
-                } else if (sensorType === 'humidity' && payloadObj.humidity !== undefined) {
+                } else if (
+                  sensorType === "humidity" &&
+                  payloadObj.humidity !== undefined
+                ) {
                   sensorValue = parseFloat(payloadObj.humidity);
-                } else if (sensorType === 'light' && payloadObj.light !== undefined) {
+                } else if (
+                  sensorType === "light" &&
+                  payloadObj.light !== undefined
+                ) {
                   sensorValue = parseFloat(payloadObj.light);
-                } else if (sensorType === 'battery' && payloadObj.battery !== undefined) {
+                } else if (
+                  sensorType === "battery" &&
+                  payloadObj.battery !== undefined
+                ) {
                   sensorValue = parseFloat(payloadObj.battery);
                 } else {
                   // Fallback: try to get value directly from the object
                   sensorValue = parseFloat(Object.values(payloadObj)[0]);
                 }
-                
-                console.log(`📊 Parsed JSON payload for ${sensorType}:`, { 
-                  original: message.payload, 
-                  parsed: payloadObj, 
-                  extractedValue: sensorValue 
+
+                console.log(`📊 Parsed JSON payload for ${sensorType}:`, {
+                  original: message.payload,
+                  parsed: payloadObj,
+                  extractedValue: sensorValue,
                 });
-                
               } catch (parseError) {
                 // Fallback to plain value parsing (original format)
                 sensorValue = parseFloat(message.payload);
-                console.log(`📊 Parsed plain payload for ${sensorType}:`, sensorValue);
+                console.log(
+                  `📊 Parsed plain payload for ${sensorType}:`,
+                  sensorValue
+                );
               }
 
               // Only proceed if we got a valid number
@@ -376,20 +399,25 @@ class MQTTWebSocketService {
                 });
                 console.log(`✅ Processed ${sensorType} data: ${sensorValue}`);
               } else {
-                console.warn(`⚠️ Invalid sensor value for ${sensorType}:`, message.payload);
+                console.warn(
+                  `⚠️ Invalid sensor value for ${sensorType}:`,
+                  message.payload
+                );
               }
-              
             } else if (messageType === "state" && sensorType === "motor") {
               // Handle pump control messages
               let pumpValue;
-              
+
               try {
                 const payloadObj = JSON.parse(message.payload);
-                pumpValue = payloadObj.status || payloadObj.state || Object.values(payloadObj)[0];
+                pumpValue =
+                  payloadObj.status ||
+                  payloadObj.state ||
+                  Object.values(payloadObj)[0];
               } catch {
                 pumpValue = message.payload;
               }
-              
+
               handler({
                 deviceId,
                 sensorType: "pumpStatus",
@@ -427,7 +455,8 @@ class MQTTWebSocketService {
       return false;
     }
 
-    const messageStr = typeof message === "string" ? message : JSON.stringify(message);
+    const messageStr =
+      typeof message === "string" ? message : JSON.stringify(message);
 
     if (this.simulationMode) {
       console.log(`🎲 Simulated publish to ${topic}:`, messageStr);
@@ -475,7 +504,11 @@ class MQTTWebSocketService {
     const topicsToRemove = [];
     this.subscriptions.forEach((value, topic) => {
       if (value === deviceId) {
-        if (!this.simulationMode && this.ws && this.ws.readyState === WebSocket.OPEN) {
+        if (
+          !this.simulationMode &&
+          this.ws &&
+          this.ws.readyState === WebSocket.OPEN
+        ) {
           const unsubscribePacket = {
             type: "unsubscribe",
             topic: topic,
@@ -530,7 +563,11 @@ class MQTTWebSocketService {
       isConnected: this.isConnected,
       subscriptionCount: this.subscriptions.size,
       activeDevices: Array.from(new Set(this.subscriptions.values())),
-      mode: this.simulationMode ? "simulation" : this.ws ? "websocket" : "disconnected",
+      mode: this.simulationMode
+        ? "simulation"
+        : this.ws
+        ? "websocket"
+        : "disconnected",
       reconnectAttempts: this.reconnectAttempts,
     };
   }
