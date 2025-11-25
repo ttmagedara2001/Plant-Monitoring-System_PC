@@ -45,10 +45,10 @@ const HistoricalChart = ({ chartData, isLoading, onExportCSV, isExporting }) => 
 
       {/* Toggles Toolbar */}
       <div className="flex flex-wrap gap-2 mb-6 justify-center md:justify-start p-3 bg-gray-50 rounded-xl border border-gray-100">
-        <button onClick={() => toggleSeries('moisture')} className={getButtonClass(visibleSeries.moisture, 'bg-green-500')}>
+        <button onClick={() => toggleSeries('moisture')} className={getButtonClass(visibleSeries.moisture, 'bg-cyan-500')}>
           {visibleSeries.moisture ? <Eye className="w-3 h-3"/> : <EyeOff className="w-3 h-3"/>} Moisture
         </button>
-        <button onClick={() => toggleSeries('temperature')} className={getButtonClass(visibleSeries.temperature, 'bg-red-500')}>
+        <button onClick={() => toggleSeries('temperature')} className={getButtonClass(visibleSeries.temperature, 'bg-green-500')}>
           {visibleSeries.temperature ? <Eye className="w-3 h-3"/> : <EyeOff className="w-3 h-3"/>} Temp
         </button>
         <button onClick={() => toggleSeries('humidity')} className={getButtonClass(visibleSeries.humidity, 'bg-blue-500')}>
@@ -110,10 +110,10 @@ const HistoricalChart = ({ chartData, isLoading, onExportCSV, isExporting }) => 
             />
             
             {visibleSeries.moisture && (
-                <Line yAxisId="left" type="monotone" dataKey="moisture" name="Moisture (%)" stroke="#22c55e" strokeWidth={3} dot={false} activeDot={{ r: 6 }} />
+                <Line yAxisId="left" type="monotone" dataKey="moisture" name="Moisture (%)" stroke="#06b6d4" strokeWidth={3} dot={false} activeDot={{ r: 6 }} />
             )}
             {visibleSeries.temperature && (
-                <Line yAxisId="left" type="monotone" dataKey="temperature" name="Temp (°C)" stroke="#ef4444" strokeWidth={3} dot={false} activeDot={{ r: 6 }} />
+                <Line yAxisId="left" type="monotone" dataKey="temperature" name="Temp (°C)" stroke="#22c55e" strokeWidth={3} dot={false} activeDot={{ r: 6 }} />
             )}
             {visibleSeries.humidity && (
                 <Line yAxisId="left" type="monotone" dataKey="humidity" name="Humidity (%)" stroke="#3b82f6" strokeWidth={3} dot={false} activeDot={{ r: 6 }} />

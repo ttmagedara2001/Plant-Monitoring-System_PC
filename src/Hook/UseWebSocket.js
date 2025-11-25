@@ -1,8 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 
 // Use the correct WebSocket URL
-const WS_BASE_URL =
-  "wss://protonest-connect-general-app.yellowsea-5dc9141a.westeurope.azurecontainerapps.io/ws";
+const WS_BASE_URL = "wss://api.protonestconnect.co/ws";
 
 const DEFAULT_MOCK = {
   moisture: 0,
