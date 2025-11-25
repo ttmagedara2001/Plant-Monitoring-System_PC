@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { useAuth } from '../Context/AuthContext';
 import { getHistoricalData, updateDeviceState } from '../Service/deviceService'; 
-import { useWebSocket } from '../Hook/UseWebSocket'; 
+import { useMqttWebSocket } from '../Hook/UseMqttWebSocket'; 
 import { AlertTriangle } from 'lucide-react';
 
 // Import Sub-Components
@@ -13,14 +13,14 @@ import HistoricalChart from './HistoricalChartTest';
 
 const Dashboard = () => {
   const { deviceId: paramDeviceId } = useParams();
-  const defaultDeviceId = 'device0000'; 
+  const defaultDeviceId = 'device200300'; // Updated to match your MQTT device ID
   const deviceId = paramDeviceId || defaultDeviceId;
   
   const { jwtToken } = useAuth(); 
 
-  // Data Hooks & States
-  const { liveData, isConnected, chartData } = useWebSocket(deviceId, jwtToken);
-  const [deviceList] = useState(['device0000', 'device0001', 'device0002']); 
+  // Data Hooks & States - Updated to include pump control
+  const { liveData, chartData, connectionStatus, controlPump } = useMqttWebSocket(deviceId, jwtToken);
+  const [deviceList] = useState(['device200300', 'device0000', 'device0001', 'device0002']); 
   const [isLoadingChart, setIsLoadingChart] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   
@@ -103,11 +103,30 @@ const Dashboard = () => {
     const newStatus = currentStatus ? 'OFF' : 'ON';
     
     try {
-      await updateDeviceState(deviceId, { pumpStatus: newStatus }); 
+      // Try MQTT control first if connected
+      if (connectionStatus.mqtt) {
+        const success = controlPump(deviceId, newStatus);
+        if (success) {
+          console.log(`✅ Pump control sent via MQTT: ${newStatus}`);
+          // Note: MQTT service will handle the pump status feedback
+          // Don't manually update liveData here - wait for MQTT response
+        } else {
+          throw new Error('MQTT pump control failed');
+        }
+      } else {
+        // Fallback to API control
+        await updateDeviceState(deviceId, { pumpStatus: newStatus }); 
+        // For API control, we can update the state locally since there's no MQTT feedback
+        console.log(`✅ Pump control sent via API: ${newStatus}`);
+        // Note: We don't have access to setLiveData here, that's in the hook
+        setCommandStatus({ type: 'success', message: `Pump turned ${newStatus}` });
+      }
     } catch (error) {
       console.error("Pump control failed:", error);
+      setCommandStatus({ type: 'error', message: 'Failed to control pump.' });
     } finally {
       setCommandInProgress(null);
+      setTimeout(() => setCommandStatus(null), 3000);
     }
   };
 
@@ -130,7 +149,7 @@ const Dashboard = () => {
     
     // Return original colors when not critical
     switch (key) {
-      case 'moisture': return 'border-teal-500';
+      case 'moisture': return 'border-cyan-500'; // Changed from teal-500 to cyan-500
       case 'temperature': return 'border-green-500';
       case 'humidity': return 'border-blue-400';
       case 'light': return 'border-yellow-500';
@@ -142,13 +161,34 @@ const Dashboard = () => {
   return (
     <div className="min-h-screen bg-[#f0f4f8] p-4 font-sans text-gray-800">
       
-      {/* Connection Status */}
+      {/* Enhanced Connection Status */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-4">
+        <div className={`text-center py-2 rounded-lg text-sm font-medium ${
+          connectionStatus.websocket 
+            ? 'bg-green-100 text-green-800 border border-green-300' 
+            : 'bg-gray-100 text-gray-600 border border-gray-300'
+        }`}>
+          WebSocket API: {connectionStatus.websocket ? '🟢 Connected' : '⚪ Disconnected'}
+        </div>
+        
+        <div className={`text-center py-2 rounded-lg text-sm font-medium ${
+          connectionStatus.mqtt 
+            ? 'bg-blue-100 text-blue-800 border border-blue-300' 
+            : 'bg-gray-100 text-gray-600 border border-gray-300'
+        }`}>
+          MQTT Data: {connectionStatus.mqtt ? '🟢 Ready for Real Data' : '⚪ Inactive'}
+        </div>
+      </div>
+
+      {/* Overall Connection Status */}
       <div className={`text-center py-2 mb-4 rounded-lg text-sm font-medium ${
-        isConnected 
+        connectionStatus.type !== 'none'
           ? 'bg-green-100 text-green-800 border border-green-300' 
-          : 'bg-red-100 text-red-800 border border-red-300'
+          : 'bg-yellow-100 text-yellow-800 border border-yellow-300'
       }`}>
-        WebSocket: {isConnected ? '🟢 Connected' : '🔴 Disconnected'}
+        System Status: {connectionStatus.type !== 'none' 
+          ? `🟢 Operational (${connectionStatus.type === 'mqtt' ? 'Awaiting MQTT Data' : connectionStatus.type})` 
+          : '🟡 Limited Functionality'}
       </div>
 
       {/* Alert Banner */}

@@ -6,47 +6,82 @@ import { BrowserRouter } from 'react-router-dom';
 import { AuthProvider, useAuth } from './Context/AuthContext.jsx';
 import { login } from "./Service/authService";
 
-// Hardcoded credentials for auto login
-const email = "ratnaabinayan@gmail.com";
-const password = "123456789";
+// ✅ UPDATED: Real Protonest credentials
+// These are the actual credentials from the Protonest dashboard
+const email = "ratnaabinayansn@gmail.com";
+const password = "6M3@pwYvBGRVJLN"; // This is the secretKey from Protonest dashboard
 
 const AutoLogin = ({ children }) => {
   const { setAuth } = useAuth();
+  const [loginAttempted, setLoginAttempted] = React.useState(false);
+  const [isLoading, setIsLoading] = React.useState(true);
 
   React.useEffect(() => {
-    (async () => {
+    if (loginAttempted) return;
+    
+    setLoginAttempted(true);
+    
+    const performLogin = async () => {
       try {
-        console.log("🔑 Attempting auto login with hardcoded credentials...");
+        // Remove the placeholder check since we now have real credentials
+        console.log("🔑 Attempting auto login with real credentials...");
+        console.log("📧 Email:", email);
+        console.log("🔐 SecretKey length:", password.length);
+        
         const authData = await login(email, password);
         
         console.log("✅ Auto login successful. Ready for connection.");
         setAuth({ userId: authData.userId || email, jwtToken: authData.jwtToken });
         
-        // Store tokens in localStorage for persistence
         if (authData.refreshToken) {
           localStorage.setItem('refreshToken', authData.refreshToken);
         }
         
       } catch (error) {
         console.warn("⚠️ Auto login failed. Using mock data for development.");
-        console.error("Auto login error details:", error);
-        // Set mock values for development fallback
+        console.error("Auto login error details:", error.message);
+        
+        // Provide helpful error message
+        if (error.message.includes("Invalid credentials")) {
+          console.error("🔧 Credentials may be incorrect or expired. Please verify from Protonest dashboard");
+        }
+        
         setAuth({ userId: email, jwtToken: "MOCK_TOKEN_FOR_TESTING" });
+      } finally {
+        setIsLoading(false);
       }
-    })();
-  }, [setAuth]);
+    };
+
+    performLogin();
+  }, [setAuth, loginAttempted]);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Authenticating with Protonest API...</p>
+          <p className="text-blue-600 text-sm mt-2">✅ Using real credentials</p>
+        </div>
+      </div>
+    );
+  }
 
   return children;
 };
 
 ReactDOM.createRoot(document.getElementById('root')).render(
-  <React.StrictMode>
-    <AuthProvider>
-      <AutoLogin>
-        <BrowserRouter>
-          <App />
-        </BrowserRouter>
-      </AutoLogin>
-    </AuthProvider>
-  </React.StrictMode>,
+  // Remove StrictMode to prevent double mounting in development
+  <AuthProvider>
+    <AutoLogin>
+      <BrowserRouter
+        future={{
+          v7_startTransition: true,
+          v7_relativeSplatPath: true
+        }}
+      >
+        <App />
+      </BrowserRouter>
+    </AutoLogin>
+  </AuthProvider>
 );
