@@ -1,5 +1,8 @@
 // Browser-compatible MQTT service with fallback to simulation for development
 
+// ProtoNest WebSocket URL
+const WS_BASE_URL = "wss://api.protonestconnect.co/ws";
+
 class MQTTWebSocketService {
   constructor() {
     this.ws = null;
@@ -13,10 +16,11 @@ class MQTTWebSocketService {
     this.maxReconnectAttempts = 3;
     this.simulationMode = false;
     this.mockDataInterval = null;
+    this.jwtToken = null;
   }
 
   // Connect to MQTT via WebSocket with comprehensive fallback
-  connect(forceSimulation = false) {
+  connect(forceSimulation = false, jwtToken = null) {
     return new Promise((resolve, reject) => {
       if (forceSimulation) {
         this.startSimulationMode();
@@ -24,18 +28,74 @@ class MQTTWebSocketService {
         return;
       }
 
-      console.log("🔄 Attempting MQTT connection via WebSocket...");
+      if (!jwtToken) {
+        console.warn("⚠️ No JWT token provided, switching to simulation mode");
+        this.startSimulationMode();
+        resolve();
+        return;
+      }
 
-      // Fixed connection URLs - WebSocket only supports ws:// and wss:// protocols
-      const connectionUrls = [
-        "wss://mqtt.protonest.co:8883/mqtt", // MQTT over WebSocket with SSL
-        "wss://mqtt.protonest.co:9001/mqtt", // Alternative WebSocket port
-        "wss://mqtt.protonest.co:8083", // Without /mqtt path
-        "wss://mqtt.protonest.co:9001", // Alternative port without path
-        "ws://mqtt.protonest.co:8883/mqtt", // Non-secure fallback (if SSL fails)
-      ];
+      this.jwtToken = jwtToken;
+      console.log("🔄 Connecting to ProtoNest WebSocket...");
 
-      this.tryConnectionUrls(connectionUrls, 0, resolve, reject);
+      try {
+        // Connect to ProtoNest WebSocket with JWT token
+        const url = `${WS_BASE_URL}?token=${encodeURIComponent(jwtToken)}`;
+        console.log(`🌐 Connecting to: ${WS_BASE_URL}`);
+
+        const ws = new WebSocket(url);
+        const connectionTimeout = setTimeout(() => {
+          console.log(`⏰ Connection timeout (10s)`);
+          ws.close();
+          console.log("🎲 Falling back to simulation mode...");
+          this.startSimulationMode();
+          resolve();
+        }, 10000);
+
+        ws.onopen = () => {
+          clearTimeout(connectionTimeout);
+          console.log(`✅ WebSocket Connected successfully to ProtoNest`);
+          this.ws = ws;
+          this.isConnected = true;
+          this.simulationMode = false;
+          this.reconnectAttempts = 0;
+          this.connectionCallbacks.forEach((callback) => callback());
+          resolve();
+        };
+
+        ws.onerror = (error) => {
+          clearTimeout(connectionTimeout);
+          console.error(`❌ WebSocket connection failed:`, error);
+          console.log("🎲 Falling back to simulation mode...");
+          this.startSimulationMode();
+          resolve();
+        };
+
+        ws.onclose = (event) => {
+          clearTimeout(connectionTimeout);
+          console.log(`🔴 WebSocket closed. Code: ${event.code}`);
+
+          if (this.isConnected) {
+            // This was an unexpected close of a working connection
+            this.isConnected = false;
+            this.disconnectionCallbacks.forEach((callback) => callback());
+            this.handleReconnection();
+          } else {
+            // Initial connection failed
+            console.log("🎲 Switching to simulation mode...");
+            this.startSimulationMode();
+            resolve();
+          }
+        };
+
+        ws.onmessage = (event) => {
+          this.handleMQTTMessage(event.data);
+        };
+      } catch (error) {
+        console.error(`❌ Failed to create WebSocket:`, error);
+        this.startSimulationMode();
+        resolve();
+      }
     });
   }
 
@@ -158,76 +218,49 @@ class MQTTWebSocketService {
     );
 
     setTimeout(() => {
-      this.connect(false);
+      this.connect(false, this.jwtToken);
     }, delay);
   }
 
-  // Send MQTT CONNECT packet
-  sendMQTTConnect() {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
-
-    const connectPacket = {
-      type: "connect",
-      clientId: `plant_dashboard_${Math.random().toString(16).substr(2, 8)}`,
-      keepAlive: 60,
-      clean: true,
-    };
-
-    try {
-      this.ws.send(JSON.stringify(connectPacket));
-      console.log("📤 Sent MQTT CONNECT packet");
-    } catch (error) {
-      console.error("❌ Failed to send CONNECT packet:", error);
-    }
-  }
-
-  // Subscribe to device topics
+  // Subscribe to device topics via WebSocket
   subscribeToDevice(deviceId, onDataReceived) {
     if (!this.isConnected) {
-      console.warn("⚠️ MQTT not connected, cannot subscribe");
+      console.warn("⚠️ WebSocket not connected, cannot subscribe");
       return false;
     }
 
     this.deviceId = deviceId;
-    const topics = [
-      `protonest/${deviceId}/stream/temp`,
-      `protonest/${deviceId}/stream/humidity`,
-      `protonest/${deviceId}/stream/battery`,
-      `protonest/${deviceId}/stream/light`,
-      `protonest/${deviceId}/stream/moisture`,
-      `protonest/${deviceId}/state/motor/paddy`,
-    ];
 
-    console.log(`🔄 Subscribing to MQTT topics for device: ${deviceId}`);
+    console.log(`🔄 Subscribing to device topics for: ${deviceId}`);
 
     // Store message handler for this device
     this.messageHandlers.set(deviceId, onDataReceived);
 
     if (this.simulationMode) {
-      // Simulate subscription in simulation mode
-      topics.forEach((topic) => {
-        console.log(`🎲 Simulated subscription to: ${topic}`);
-        this.subscriptions.set(topic, deviceId);
-      });
-      // MOCK DATA GENERATION DISABLED - Waiting for real MQTT data only
-      // this.startMockDataGeneration(deviceId, onDataReceived);
-      console.log("📡 Ready to receive real MQTT data - no simulation running");
-    } else {
-      // Real WebSocket subscription
-      topics.forEach((topic) => {
-        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-          const subscribePacket = {
-            type: "subscribe",
-            topic: topic,
-            qos: 1,
-          };
-          try {
-            this.ws.send(JSON.stringify(subscribePacket));
-            console.log(`✅ Subscribed to: ${topic}`);
-            this.subscriptions.set(topic, deviceId);
-          } catch (error) {
-            console.error(`❌ Failed to subscribe to ${topic}:`, error);
-          }
+      console.log("🎲 Simulation mode - ready to receive MQTT data");
+    } else if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      // Subscribe to device topics via WebSocket
+      const subscriptions = [
+        { action: "subscribe", topic: `/topic/stream/${deviceId}` },
+        { action: "subscribe", topic: `/topic/state/${deviceId}` },
+        { action: "subscribe", topic: `protonest/${deviceId}/stream/temp` },
+        { action: "subscribe", topic: `protonest/${deviceId}/stream/humidity` },
+        { action: "subscribe", topic: `protonest/${deviceId}/stream/battery` },
+        { action: "subscribe", topic: `protonest/${deviceId}/stream/light` },
+        { action: "subscribe", topic: `protonest/${deviceId}/stream/moisture` },
+        {
+          action: "subscribe",
+          topic: `protonest/${deviceId}/state/motor/paddy`,
+        },
+      ];
+
+      subscriptions.forEach((sub) => {
+        try {
+          this.ws.send(JSON.stringify(sub));
+          console.log(`✅ Subscribed to: ${sub.topic}`);
+          this.subscriptions.set(sub.topic, deviceId);
+        } catch (error) {
+          console.error(`❌ Failed to subscribe to ${sub.topic}:`, error);
         }
       });
     }
@@ -405,19 +438,38 @@ class MQTTWebSocketService {
                 );
               }
             } else if (messageType === "state" && sensorType === "motor") {
-              // Handle pump control messages
+              // Handle pump control messages - topic: protonest/device200300/state/motor/paddy
+              // Expected payload format: {"power": "on"} or {"power": "off"}
+              // Optional: {"power": "on", "mode": "manual"}
               let pumpValue;
+              let pumpMode;
 
               try {
                 const payloadObj = JSON.parse(message.payload);
-                pumpValue =
-                  payloadObj.status ||
-                  payloadObj.state ||
-                  Object.values(payloadObj)[0];
+                // Extract power status and convert to ON/OFF
+                if (payloadObj.power !== undefined) {
+                  pumpValue = payloadObj.power.toUpperCase(); // "on" -> "ON", "off" -> "OFF"
+                } else {
+                  // Fallback to other possible field names
+                  pumpValue = (
+                    payloadObj.status ||
+                    payloadObj.state ||
+                    Object.values(payloadObj)[0]
+                  ).toUpperCase();
+                }
+
+                // Extract pump mode if present
+                if (payloadObj.mode !== undefined) {
+                  pumpMode =
+                    payloadObj.mode.charAt(0).toUpperCase() +
+                    payloadObj.mode.slice(1).toLowerCase();
+                }
               } catch {
-                pumpValue = message.payload;
+                // If not JSON, treat as plain value
+                pumpValue = message.payload.toString().toUpperCase();
               }
 
+              // Send pump status update
               handler({
                 deviceId,
                 sensorType: "pumpStatus",
@@ -425,7 +477,23 @@ class MQTTWebSocketService {
                 timestamp: new Date().toISOString(),
                 topic: message.topic,
               });
-              console.log(`✅ Processed pump status: ${pumpValue}`);
+              console.log(
+                `💧 Processed pump status from ${message.topic}: ${pumpValue}`
+              );
+
+              // Send pump mode update if present
+              if (pumpMode) {
+                handler({
+                  deviceId,
+                  sensorType: "pumpMode",
+                  value: pumpMode,
+                  timestamp: new Date().toISOString(),
+                  topic: message.topic,
+                });
+                console.log(
+                  `⚙️ Processed pump mode from ${message.topic}: ${pumpMode}`
+                );
+              }
             }
           } else {
             console.warn(`⚠️ No handler found for device: ${deviceId}`);
@@ -445,13 +513,16 @@ class MQTTWebSocketService {
   // Publish pump control command
   publishPumpControl(deviceId, status) {
     const topic = `protonest/${deviceId}/state/motor/paddy`;
-    return this.publish(topic, status, { qos: 1 });
+    // Convert ON/OFF to lowercase for payload: {"power": "on"} or {"power": "off"}
+    const payload = { power: status.toLowerCase() };
+    console.log(`💧 Publishing pump control to ${topic}:`, payload);
+    return this.publish(topic, payload, { qos: 1 });
   }
 
   // Publish message
   publish(topic, message, options = { qos: 1 }) {
     if (!this.isConnected) {
-      console.warn("⚠️ MQTT not connected, cannot publish");
+      console.warn("⚠️ WebSocket not connected, cannot publish");
       return false;
     }
 
@@ -460,28 +531,50 @@ class MQTTWebSocketService {
 
     if (this.simulationMode) {
       console.log(`🎲 Simulated publish to ${topic}:`, messageStr);
-      // PUMP SIMULATION DISABLED - Only real MQTT feedback will update pump status
-      // setTimeout(() => {
-      //   const handler = this.messageHandlers.get(this.deviceId);
-      //   if (handler && topic.includes("/state/motor/paddy")) {
-      //     handler({
-      //       deviceId: this.deviceId,
-      //       sensorType: "pumpStatus",
-      //       value: messageStr,
-      //       timestamp: new Date().toISOString(),
-      //       topic: topic,
-      //     });
-      //   }
-      // }, 100);
+      // Simulate MQTT feedback for pump control
+      setTimeout(() => {
+        const handler = this.messageHandlers.get(this.deviceId);
+        if (handler && topic.includes("/state/motor/paddy")) {
+          // Parse the published payload to extract the power status
+          try {
+            const payloadObj =
+              typeof message === "object" ? message : JSON.parse(messageStr);
+            const powerStatus = payloadObj.power
+              ? payloadObj.power.toUpperCase()
+              : messageStr.toUpperCase();
+
+            console.log(`🎲 Simulating pump feedback: ${powerStatus}`);
+
+            handler({
+              deviceId: this.deviceId,
+              sensorType: "pumpStatus",
+              value: powerStatus,
+              timestamp: new Date().toISOString(),
+              topic: topic,
+            });
+
+            // Also simulate pump mode feedback
+            handler({
+              deviceId: this.deviceId,
+              sensorType: "pumpMode",
+              value: "Manual",
+              timestamp: new Date().toISOString(),
+              topic: topic,
+            });
+          } catch (e) {
+            console.error("Failed to simulate pump feedback:", e);
+          }
+        }
+      }, 100);
     } else if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      const publishPacket = {
-        type: "publish",
+      // Publish via WebSocket - format for ProtoNest backend
+      const publishMessage = {
+        action: "publish",
         topic: topic,
         payload: messageStr,
-        qos: options.qos || 1,
       };
       try {
-        this.ws.send(JSON.stringify(publishPacket));
+        this.ws.send(JSON.stringify(publishMessage));
         console.log(`📤 Published to ${topic}:`, messageStr);
       } catch (error) {
         console.error(`❌ Failed to publish to ${topic}:`, error);
@@ -509,12 +602,12 @@ class MQTTWebSocketService {
           this.ws &&
           this.ws.readyState === WebSocket.OPEN
         ) {
-          const unsubscribePacket = {
-            type: "unsubscribe",
+          const unsubscribeMessage = {
+            action: "unsubscribe",
             topic: topic,
           };
           try {
-            this.ws.send(JSON.stringify(unsubscribePacket));
+            this.ws.send(JSON.stringify(unsubscribeMessage));
           } catch (error) {
             console.error(`❌ Failed to unsubscribe from ${topic}:`, error);
           }
