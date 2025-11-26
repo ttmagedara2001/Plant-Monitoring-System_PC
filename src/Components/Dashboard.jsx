@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { useAuth } from '../Context/AuthContext';
-import { getHistoricalData, updateDeviceState } from '../Service/deviceService'; 
+import { getAllStreamData, updateDeviceState } from '../Service/deviceService'; 
 import { useMqttWebSocket } from '../Hook/UseMqttWebSocket'; 
 import { AlertTriangle } from 'lucide-react';
 
@@ -19,10 +19,12 @@ const Dashboard = () => {
   const { jwtToken } = useAuth(); 
 
   // Data Hooks & States - Updated to include pump control
-  const { liveData, chartData, connectionStatus, controlPump } = useMqttWebSocket(deviceId, jwtToken);
+  const { liveData, chartData: mqttChartData, connectionStatus, controlPump } = useMqttWebSocket(deviceId, jwtToken);
   const [deviceList] = useState(['device200300', 'device0000', 'device0001', 'device0002']); 
+  const [historicalData, setHistoricalData] = useState([]);
   const [isLoadingChart, setIsLoadingChart] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [dataFetchError, setDataFetchError] = useState(null);
   
   // Settings & Control States
   const [settings, setSettings] = useState({ 
@@ -33,6 +35,34 @@ const Dashboard = () => {
   const [alertMessage, setAlertMessage] = useState(null);
   const [commandStatus, setCommandStatus] = useState(null); 
   const [commandInProgress, setCommandInProgress] = useState(null);
+
+  // Fetch historical data when device changes
+  useEffect(() => {
+    const fetchHistoricalData = async () => {
+      if (!deviceId || !jwtToken) {
+        console.warn("⚠️ Cannot fetch historical data: missing deviceId or token");
+        return;
+      }
+
+      setIsLoadingChart(true);
+      setDataFetchError(null);
+
+      try {
+        console.log(`📊 Fetching historical data for device: ${deviceId}`);
+        const data = await getAllStreamData(deviceId);
+        setHistoricalData(data);
+        console.log(`✅ Historical data loaded: ${data.length} records`);
+      } catch (error) {
+        console.error("❌ Failed to fetch historical data:", error);
+        setDataFetchError("Failed to load historical data. Please try again.");
+        setHistoricalData([]);
+      } finally {
+        setIsLoadingChart(false);
+      }
+    };
+
+    fetchHistoricalData();
+  }, [deviceId, jwtToken]);
 
   useEffect(() => {
     console.log("Dashboard mounted. DeviceId:", deviceId, "JWT available:", !!jwtToken);
@@ -57,13 +87,16 @@ const Dashboard = () => {
   const handleExportCSV = async () => {
     setIsExporting(true);
     try {
-      if (chartData.length === 0) {
+      // Use historicalData if available, fallback to MQTT chart data
+      const dataToExport = historicalData.length > 0 ? historicalData : mqttChartData;
+      
+      if (dataToExport.length === 0) {
         alert("No data available to export.");
         return;
       }
       const headers = ["time", "moisture", "temperature", "humidity", "light", "battery"].join(','); 
-      const rows = chartData.map(d => 
-        `${d.time},${d.moisture},${d.temperature},${d.humidity},${d.light},${d.battery}`
+      const rows = dataToExport.map(d => 
+        `${d.time},${d.moisture ?? ''},${d.temperature ?? ''},${d.humidity ?? ''},${d.light ?? ''},${d.battery ?? ''}`
       ).join('\n');
       
       const csvContent = `${headers}\n${rows}`;
@@ -102,14 +135,18 @@ const Dashboard = () => {
     const currentStatus = liveData?.pumpStatus === 'ON';
     const newStatus = currentStatus ? 'OFF' : 'ON';
     
+    console.log(`🔄 Toggling pump from ${liveData?.pumpStatus} to ${newStatus}`);
+    
     try {
       // Try MQTT control first if connected
       if (connectionStatus.mqtt) {
         const success = controlPump(deviceId, newStatus);
         if (success) {
           console.log(`✅ Pump control sent via MQTT: ${newStatus}`);
+          console.log(`📡 Waiting for MQTT feedback to update button state...`);
           // Note: MQTT service will handle the pump status feedback
           // Don't manually update liveData here - wait for MQTT response
+          setCommandStatus({ type: 'success', message: `Pump command sent: ${newStatus}` });
         } else {
           throw new Error('MQTT pump control failed');
         }
@@ -243,10 +280,12 @@ const Dashboard = () => {
         
         {/* Historical Chart Component */}
         <HistoricalChart 
-            chartData={chartData}
+            chartData={historicalData.length > 0 ? historicalData : mqttChartData}
             isLoading={isLoadingChart}
             onExportCSV={handleExportCSV}
             isExporting={isExporting}
+            dataSource={historicalData.length > 0 ? 'API' : connectionStatus.mqtt ? 'MQTT' : 'None'}
+            error={dataFetchError}
         />
 
         {/* Settings Panel */}
