@@ -54,13 +54,18 @@ export const useMqttWebSocket = (deviceId, jwtToken) => {
           updated.pumpStatus = data.value; // 'ON' or 'OFF'
           console.log(`[MQTT] Pump status updated to: ${data.value}`);
           break;
+        case "pumpMode":
+          updated.pumpMode = data.value; // 'Optimal', 'Manual', etc.
+          console.log(`[MQTT] Pump mode updated to: ${data.value}`);
+          break;
       }
 
+      console.log(`[MQTT] Updated liveData:`, updated);
       return updated;
     });
 
-    // Add to chart data for sensor readings (not for pump status)
-    if (data.sensorType !== "pumpStatus") {
+    // Add to chart data for sensor readings (not for pump status or pump mode)
+    if (data.sensorType !== "pumpStatus" && data.sensorType !== "pumpMode") {
       setChartData((prev) => {
         const currentTime = new Date(data.timestamp);
         const timeStr = currentTime.toLocaleTimeString([], {
@@ -119,11 +124,11 @@ export const useMqttWebSocket = (deviceId, jwtToken) => {
 
     const initMqtt = async () => {
       try {
-        console.log("[MQTT] 🔄 Initializing connection to mqtts://mqtt.protonest.co");
+        console.log("[MQTT] 🔄 Initializing connection to ProtoNest WebSocket");
         console.log("[MQTT] 📡 Attempting WebSocket connection...");
 
-        // Use real MQTT connection (simulationMode = false)
-        await mqttWebSocketService.connect(false);
+        // Use real MQTT connection with JWT token
+        await mqttWebSocketService.connect(false, jwtToken);
 
         if (isMounted) {
           setIsMqttConnected(true);
@@ -133,10 +138,10 @@ export const useMqttWebSocket = (deviceId, jwtToken) => {
           console.log(`[MQTT] ✅ Service ready in ${status.mode} mode`);
 
           if (status.mode === "simulation") {
-            console.log("[MQTT] 💡 To connect to real MQTT:");
-            console.log("[MQTT]    • Ensure mqtt.protonest.co supports WebSocket");
-            console.log("[MQTT]    • Check if broker is running on WSS port");
-            console.log("[MQTT]    • For now, using realistic sensor simulation");
+            console.log("[MQTT] 💡 Running in simulation mode");
+            console.log(
+              "[MQTT]    • Publish to MQTT topics via MQTTX to see live data"
+            );
           }
         }
       } catch (error) {
@@ -169,7 +174,7 @@ export const useMqttWebSocket = (deviceId, jwtToken) => {
       isMounted = false;
       mqttWebSocketService.disconnect();
     };
-  }, []);
+  }, [jwtToken]);
 
   // Subscribe to MQTT topics when device changes
   useEffect(() => {
