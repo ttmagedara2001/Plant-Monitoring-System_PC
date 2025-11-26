@@ -1,9 +1,9 @@
 // Use this to display historical data charts with toggles for different metrics
 import React, { useState } from 'react';
-import { Download, Loader2, Eye, EyeOff } from 'lucide-react';
+import { Download, Loader2, Eye, EyeOff, Database, Wifi, AlertCircle } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
-const HistoricalChart = ({ chartData, isLoading, onExportCSV, isExporting }) => {
+const HistoricalChart = ({ chartData, isLoading, onExportCSV, isExporting, dataSource = 'None', error = null }) => {
   // Local state to manage which lines are visible
   const [visibleSeries, setVisibleSeries] = useState({
     moisture: true,
@@ -32,6 +32,16 @@ const HistoricalChart = ({ chartData, isLoading, onExportCSV, isExporting }) => 
         <div className="flex items-center gap-3">
           <h3 className="text-xl font-bold text-gray-800">Historical Trends</h3>
           <span className="text-xs bg-gray-100 text-gray-500 px-2 py-1 rounded-full">Last 24h</span>
+          {dataSource !== 'None' && (
+            <span className={`text-xs px-2 py-1 rounded-full flex items-center gap-1 ${
+              dataSource === 'API' 
+                ? 'bg-blue-100 text-blue-700 border border-blue-200' 
+                : 'bg-green-100 text-green-700 border border-green-200'
+            }`}>
+              {dataSource === 'API' ? <Database className="w-3 h-3" /> : <Wifi className="w-3 h-3" />}
+              {dataSource}
+            </span>
+          )}
         </div>
         
         <button 
@@ -42,6 +52,14 @@ const HistoricalChart = ({ chartData, isLoading, onExportCSV, isExporting }) => 
           <span>Export CSV</span>
         </button>
       </div>
+
+      {/* Error Banner */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 mb-4 flex items-center gap-2 text-sm">
+          <AlertCircle className="w-4 h-4 flex-shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
 
       {/* Toggles Toolbar */}
       <div className="flex flex-wrap gap-2 mb-6 justify-center md:justify-start p-3 bg-gray-50 rounded-xl border border-gray-100">
