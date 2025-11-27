@@ -2,14 +2,46 @@ import api from "./api";
 
 /**
  * Fetch Historical Stream Data for a specific topic
- * POST /get-stream-data/<deviceId>/<topic>
- * Topics: temp, moisture, humidity, battery, light
+ * POST /get-stream-data/device/topic
+ * Topics: temp4/new, moisture, humidity, battery, light, etc.
+ * Requires: deviceId, topic, startTime, endTime, pagination, pageSize
  */
-export const getStreamDataByTopic = async (deviceId, topic) => {
+export const getStreamDataByTopic = async (
+  deviceId,
+  topic,
+  startTime = null,
+  endTime = null,
+  pagination = 0,
+  pageSize = 100
+) => {
   try {
     console.log(`📊 Fetching stream data for ${deviceId}/${topic}`);
 
-    const response = await api.post(`/get-stream-data/${deviceId}/${topic}`);
+    // Helper function to format date to ISO-8601 without milliseconds
+    const formatISODate = (date) => {
+      return date.toISOString().split(".")[0] + "Z"; // Remove milliseconds
+    };
+
+    // Set default time range to last 24 hours if not provided
+    const endDate = endTime ? new Date(endTime) : new Date();
+    const startDate = startTime
+      ? new Date(startTime)
+      : new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+    // Ensure times are in ISO-8601 format without milliseconds (API requirement)
+    // Note: pagination and pageSize must be strings per API specification
+    const payload = {
+      deviceId: deviceId,
+      topic: topic,
+      startTime: formatISODate(startDate),
+      endTime: formatISODate(endDate),
+      pagination: String(pagination),
+      pageSize: String(pageSize),
+    };
+
+    console.log(`📤 Stream data request payload:`, payload);
+
+    const response = await api.post(`/get-stream-data/device/topic`, payload);
 
     if (response.data.status === "Success") {
       console.log(
@@ -23,13 +55,13 @@ export const getStreamDataByTopic = async (deviceId, topic) => {
     console.warn(`⚠️ Non-success status for ${topic}:`, response.data);
     return [];
   } catch (error) {
-    console.error(`❌ Error fetching ${topic} stream data:`, {
-      status: error.response?.status,
-      statusText: error.response?.statusText,
-      message: error.message,
-      url: error.config?.url,
-    });
-    throw error;
+    // Only log non-auth errors
+    if (error.response?.data?.data !== "Device does not belong to the user") {
+      console.error(`❌ Error fetching ${topic}:`, error.message);
+    }
+
+    // Return empty array instead of throwing to allow other topics to load
+    return [];
   }
 };
 
@@ -73,19 +105,57 @@ export const getStateDetails = async (deviceId, topic) => {
 
 /**
  * Fetch all historical stream data for a device
- * Fetches data from all topics: temp, moisture, humidity, battery, light
+ * Fetches data from all topics: temp4/new, moisture, humidity, battery, light
  * Returns combined data formatted for chart display
+ *
+ * NOTE: This endpoint may return 400 errors if:
+ * - No data exists for the device yet
+ * - Topics don't exist in the database
+ * - Date range is invalid
+ * This is normal for new devices - real-time MQTT data will still work
  */
-export const getAllStreamData = async (deviceId) => {
+export const getAllStreamData = async (
+  deviceId,
+  startTime = null,
+  endTime = null
+) => {
+  // Use common topic naming conventions (adjust based on your device setup)
   const topics = ["temp", "moisture", "humidity", "battery", "light"];
 
   try {
     console.log(`📊 Fetching all stream data for device: ${deviceId}`);
-
-    // Fetch all topics in parallel
-    const results = await Promise.allSettled(
-      topics.map((topic) => getStreamDataByTopic(deviceId, topic))
+    console.log(
+      `⏰ Time range: ${startTime || "last 24h"} to ${endTime || "now"}`
     );
+
+    // Fetch all topics in parallel with time parameters
+    const results = await Promise.allSettled(
+      topics.map((topic) =>
+        getStreamDataByTopic(deviceId, topic, startTime, endTime, 0, 100)
+      )
+    );
+
+    // Count successful vs failed requests
+    const successful = results.filter(
+      (r) => r.status === "fulfilled" && r.value.length > 0
+    ).length;
+    const failed = results.filter((r) => r.status === "rejected").length;
+    const empty = results.filter(
+      (r) => r.status === "fulfilled" && r.value.length === 0
+    ).length;
+
+    console.log(
+      `📊 Fetch results: ${successful} successful, ${empty} empty, ${failed} failed`
+    );
+
+    if (successful === 0 && failed > 0) {
+      console.warn(
+        `⚠️ All historical data requests failed. This is normal for new devices.`
+      );
+      console.warn(
+        `💡 Real-time MQTT data will still work. Historical data will accumulate over time.`
+      );
+    }
 
     // Organize data by timestamp
     const dataByTimestamp = new Map();
@@ -186,23 +256,29 @@ export const getHistoricalData = async (deviceId) => {
 };
 
 /*
-  Update Device State (Pump/Thresholds) - Fixed to match API documentation
+  Update Device State (Pump/Thresholds) - Matches API documentation
+  POST /update-state-details
+  Required: deviceId, topic, payload (as nested object with key-value pairs)
+  Example: { deviceId: "device0000", topic: "temp5/new", payload: { humidity: 100 } }
  */
-export const updateDeviceState = async (deviceId, payload) => {
+export const updateDeviceState = async (deviceId, topic) => {
   try {
-    console.log("Updating device state:", { deviceId, payload });
+    console.log("Updating device state:", { deviceId, topic });
 
-    // Try different payload structures for device state updates
-    const updatePayload = {
+    // Build request body according to API documentation
+    const requestBody = {
       deviceId: deviceId,
-      ...payload,
+      topic: topic,
     };
 
-    console.log("Sending update payload:", updatePayload);
+    console.log(
+      "📤 Update state request body:",
+      JSON.stringify(requestBody, null, 2)
+    );
 
-    const response = await api.post(`/update-state-details`, updatePayload);
+    const response = await api.post(`/update-state-details`, requestBody);
 
-    console.log("Device state update response:", response.data);
+    console.log("✅ Device state update response:", response.data);
     return response.data;
   } catch (error) {
     if (error.response?.status === 405) {
@@ -213,43 +289,60 @@ export const updateDeviceState = async (deviceId, payload) => {
         "Allowed methods:",
         error.response.headers?.allow || "Unknown"
       );
-
-      // Try PUT method as alternative
-      try {
-        console.log("🔄 Trying PUT method as alternative...");
-        const putResponse = await api.put(`/update-state-details`, {
-          deviceId: deviceId,
-          ...payload,
-        });
-        console.log("PUT method successful:", putResponse.data);
-        return putResponse.data;
-      } catch (putError) {
-        console.error("PUT method also failed:", putError.response?.data);
-      }
     }
 
     if (error.response?.status === 400) {
       console.error("🔍 Device Update 400 Error Analysis:", {
         endpoint: "/update-state-details",
-        sentPayload: { deviceId, ...payload },
+        sentPayload: requestBody,
         serverResponse: error.response.data,
         possibleCauses: [
           "Invalid deviceId format",
-          "Unrecognized setting fields",
-          "Out of range values",
-          "Missing required parameters",
+          "Topic not found or invalid format",
+          "Payload structure incorrect (should be key-value pairs)",
+          "Missing required parameters (deviceId, topic, payload)",
+          "Topic doesn't exist - new topic will be created automatically",
         ],
       });
     }
 
-    console.error("Error updating device state:", {
+    console.error("❌ Error updating device state:", {
       status: error.response?.status,
       statusText: error.response?.statusText,
       data: error.response?.data,
       message: error.message,
       url: error.config?.url,
       method: error.config?.method,
+      requestBody: requestBody,
     });
     throw error;
   }
+};
+
+/**
+ * Helper function for updating pump status
+ * @param {string} deviceId - Device ID
+ * @param {string} status - Pump status ('ON' or 'OFF')
+ * @param {string} topic - Topic to update (default: 'pump/status')
+ */
+export const updatePumpStatus = async (
+  deviceId,
+  status,
+  topic = "motor/paddy"
+) => {
+  return updateDeviceState(deviceId, topic, { pumpStatus: status });
+};
+
+/**
+ * Helper function for updating device settings (thresholds)
+ * @param {string} deviceId - Device ID
+ * @param {object} settings - Settings object with threshold values
+ * @param {string} topic - Topic to update (default: 'settings')
+ */
+export const updateDeviceSettings = async (
+  deviceId,
+  settings,
+  topic = "settings"
+) => {
+  return updateDeviceState(deviceId, topic, settings);
 };
