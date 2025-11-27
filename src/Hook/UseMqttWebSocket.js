@@ -16,7 +16,6 @@ const DEFAULT_MOCK = {
 
 export const useMqttWebSocket = (deviceId, jwtToken) => {
   const [liveData, setLiveData] = useState(DEFAULT_MOCK);
-  const [chartData, setChartData] = useState([]);
   const [alerts, setAlerts] = useState([]);
   const [isWebSocketConnected, setIsWebSocketConnected] = useState(false);
   const [isMqttConnected, setIsMqttConnected] = useState(false);
@@ -26,9 +25,9 @@ export const useMqttWebSocket = (deviceId, jwtToken) => {
   const reconnectTimeoutRef = useRef(null);
   const mqttConnectedRef = useRef(false);
 
-  // MQTT Data Handler
+  // MQTT Data Handler - Real-time display only
   const handleMqttData = (data) => {
-    console.log(`[MQTT] Received ${data.sensorType} data:`, data.value);
+    console.log(`[MQTT] 📡 Real-time ${data.sensorType}:`, data.value);
 
     setLiveData((prev) => {
       const updated = { ...prev };
@@ -52,70 +51,16 @@ export const useMqttWebSocket = (deviceId, jwtToken) => {
           break;
         case "pumpStatus":
           updated.pumpStatus = data.value; // 'ON' or 'OFF'
-          console.log(`[MQTT] Pump status updated to: ${data.value}`);
+          console.log(`[MQTT] 🚨 Pump status updated to: ${data.value}`);
           break;
         case "pumpMode":
           updated.pumpMode = data.value; // 'Optimal', 'Manual', etc.
-          console.log(`[MQTT] Pump mode updated to: ${data.value}`);
+          console.log(`[MQTT] ⚙️ Pump mode updated to: ${data.value}`);
           break;
       }
 
-      console.log(`[MQTT] Updated liveData:`, updated);
       return updated;
     });
-
-    // Add to chart data for sensor readings (not for pump status or pump mode)
-    if (data.sensorType !== "pumpStatus" && data.sensorType !== "pumpMode") {
-      setChartData((prev) => {
-        const currentTime = new Date(data.timestamp);
-        const timeStr = currentTime.toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
-          second: "2-digit",
-        });
-
-        // Find if we have a recent entry (within last 30 seconds)
-        const recentIndex = prev.findIndex((point) => {
-          const pointTime = new Date(point.timestamp);
-          return currentTime - pointTime < 30000; // 30 seconds
-        });
-
-        if (recentIndex >= 0) {
-          // Update existing point
-          const updated = [...prev];
-          updated[recentIndex] = {
-            ...updated[recentIndex],
-            time: timeStr,
-            timestamp: data.timestamp,
-            [data.sensorType === "temp" ? "temperature" : data.sensorType]:
-              parseFloat(data.value),
-          };
-          return updated;
-        } else {
-          // Create new point
-          const newPoint = {
-            time: timeStr,
-            timestamp: data.timestamp,
-            moisture: prev[prev.length - 1]?.moisture || 0,
-            temperature: prev[prev.length - 1]?.temperature || 0,
-            humidity: prev[prev.length - 1]?.humidity || 0,
-            light: prev[prev.length - 1]?.light || 0,
-            battery: prev[prev.length - 1]?.battery || 0,
-            [data.sensorType === "temp" ? "temperature" : data.sensorType]:
-              parseFloat(data.value),
-          };
-
-          const updated = [...prev, newPoint];
-          return updated.slice(-50); // Keep only last 50 points
-        }
-      });
-    }
-  };
-
-  // Pump control function
-  const controlPump = (deviceId, status) => {
-    console.log(`[MQTT] Controlling pump for ${deviceId}: ${status}`);
-    return mqttWebSocketService.publishPumpControl(deviceId, status);
   };
 
   // Initialize MQTT Connection
@@ -283,32 +228,7 @@ export const useMqttWebSocket = (deviceId, jwtToken) => {
                 cleanData.pumpMode = payload.data.pumpMode;
 
               setLiveData((prev) => ({ ...prev, ...cleanData }));
-              console.log("[WS] Updated live data");
-            } else if (
-              payload.messageType === "history_batch" ||
-              payload.type === "historical_data"
-            ) {
-              if (Array.isArray(payload.data)) {
-                const formattedHistory = payload.data.map((item) => ({
-                  time: item.timestamp
-                    ? new Date(item.timestamp).toLocaleTimeString([], {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })
-                    : new Date().toLocaleTimeString([], {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      }),
-                  timestamp: item.timestamp || new Date().toISOString(),
-                  moisture: Number(item.moisture) || 0,
-                  temperature: Number(item.temperature) || 0,
-                  humidity: Number(item.humidity) || 0,
-                  light: Number(item.light) || 0,
-                  battery: Number(item.battery) || 0,
-                }));
-                setChartData(formattedHistory);
-                console.log("[WS] Updated historical data");
-              }
+              console.log("[WS] ✅ Real-time data updated");
             } else if (
               payload.messageType === "alerts" ||
               payload.type === "alerts"
@@ -381,7 +301,6 @@ export const useMqttWebSocket = (deviceId, jwtToken) => {
 
   return {
     liveData,
-    chartData,
     alerts,
     isConnected: isWebSocketConnected || isMqttConnected,
     connectionStatus: {
@@ -389,7 +308,5 @@ export const useMqttWebSocket = (deviceId, jwtToken) => {
       mqtt: isMqttConnected,
       type: connectionType,
     },
-    // Export pump control function
-    controlPump,
   };
 };
