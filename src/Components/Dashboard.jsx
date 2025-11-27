@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { useAuth } from '../Context/AuthContext';
-import { getAllStreamData, updateDeviceSettings, updatePumpStatus } from '../Service/deviceService'; 
+import { getAllStreamData, updatePumpStatus } from '../Service/deviceService'; 
 import { useMqttWebSocket } from '../Hook/UseMqttWebSocket'; 
 import { AlertTriangle } from 'lucide-react';
 
@@ -14,14 +14,14 @@ import HistoricalChart from './HistoricalChartTest';
 const Dashboard = () => {
   const { deviceId: paramDeviceId } = useParams();
   // TODO: Change this to your actual device ID that belongs to your user account
-  // Check your ProtoNest dashboard for your device list
+  // Check your Protonest dashboard for your device list
   const defaultDeviceId = 'device200300'; // Change this to your device ID
   const deviceId = paramDeviceId || defaultDeviceId;
   
   const { jwtToken } = useAuth(); 
 
   // Data Hooks & States
-  // WebSocket for real-time data only (not for chart display)
+  // WebSocket is used for real-time data only
   const { liveData, connectionStatus } = useMqttWebSocket(deviceId, jwtToken);
   const [deviceList] = useState(['device200300', 'device0000', 'device0001', 'device0002']); 
   
@@ -31,11 +31,15 @@ const Dashboard = () => {
   const [isExporting, setIsExporting] = useState(false);
   const [dataFetchError, setDataFetchError] = useState(null);
   
-  // Settings & Control States
-  const [settings, setSettings] = useState({ 
-    moistureMin: '20', 
-    moistureMax: '60', 
-    tempMax: '30' 
+  // Settings & Control States (Frontend only - no backend API)
+  const [settings, setSettings] = useState(() => {
+    // Load settings from localStorage or use defaults
+    const saved = localStorage.getItem(`settings_${deviceId}`);
+    return saved ? JSON.parse(saved) : { 
+      moistureMin: '20', 
+      moistureMax: '60', 
+      tempMax: '30' 
+    };
   });
   const [alertMessage, setAlertMessage] = useState(null);
   const [commandStatus, setCommandStatus] = useState(null); 
@@ -85,6 +89,18 @@ const Dashboard = () => {
 
     return () => clearInterval(refreshInterval);
   }, [deviceId, jwtToken]);
+
+  // Load settings when device changes
+  useEffect(() => {
+    const saved = localStorage.getItem(`settings_${deviceId}`);
+    if (saved) {
+      setSettings(JSON.parse(saved));
+      console.log('📥 Settings loaded from localStorage for device:', deviceId);
+    } else {
+      // Reset to defaults if no saved settings for this device
+      setSettings({ moistureMin: '20', moistureMax: '60', tempMax: '30' });
+    }
+  }, [deviceId]);
 
   useEffect(() => {
     console.log("Dashboard mounted. DeviceId:", deviceId, "JWT available:", !!jwtToken);
@@ -136,13 +152,14 @@ const Dashboard = () => {
   };
   
   // Control Handlers
-  const handleSaveSettings = async () => {
+  const handleSaveSettings = () => {
     setCommandInProgress('settings');
     setCommandStatus(null);
     try {
-      // Use the settings topic for threshold updates
-      await updateDeviceSettings(deviceId, settings, 'settings/thresholds');
-      setCommandStatus({ type: 'success', message: 'Settings saved successfully!' });
+      // Save settings to localStorage (frontend only - no backend API available)
+      localStorage.setItem(`settings_${deviceId}`, JSON.stringify(settings));
+      console.log('💾 Settings saved to localStorage:', settings);
+      setCommandStatus({ type: 'success', message: 'Settings saved locally!' });
     } catch (error) {
       console.error('Failed to save settings:', error);
       setCommandStatus({ type: 'error', message: 'Failed to save settings.' });
@@ -161,7 +178,7 @@ const Dashboard = () => {
     
     try {
       // Use HTTP API for state changes
-      await updatePumpStatus(deviceId, newStatus, 'pump/control');
+      await updatePumpStatus(deviceId, newStatus, 'motor/paddy');
       console.log(`✅ [HTTP API] Pump control sent: ${newStatus}`);
       console.log(`📡 [WebSocket] Waiting for real-time feedback...`);
       // WebSocket will receive the updated pump status in real-time
