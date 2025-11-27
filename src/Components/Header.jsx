@@ -29,7 +29,7 @@ const Header = ({ deviceId, deviceList }) => {
       <div className="flex items-center gap-2 mb-4 sm:mb-0">
         <span className="text-sm font-semibold text-gray-700">Select Device:</span>
         <select 
-          value={deviceId || 'greenhouse-1'} 
+          value={deviceId} 
           onChange={handleDeviceSelect}
           className="bg-gray-100 border border-gray-300 text-gray-700 py-1 px-3 rounded focus:ring-2 focus:ring-green-500 outline-none font-medium"
         >
