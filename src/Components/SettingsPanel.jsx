@@ -268,7 +268,7 @@ const SettingsPanel = ({
             <div>
               <div className="font-medium text-gray-700">Current Status</div>
               <div className="text-sm text-gray-500">
-                Status: <span className={`font-bold ml-1 ${pumpStatus === 'ON' ? 'text-green-600' : 'text-blue-600'}`}>
+                Status: <span className={`font-bold ml-1 ${pumpStatus === 'ON' ? 'text-green-600' : 'text-gray-600'}`}>
                   {pumpStatus}
                 </span>
               </div>
@@ -277,16 +277,19 @@ const SettingsPanel = ({
             <button
               onClick={togglePump}
               disabled={commandInProgress === 'pump'}
-              className={`px-6 py-3 rounded-lg font-bold flex items-center gap-2 transition min-w-[120px] justify-center ${
+              className={`px-6 py-3 rounded-lg font-bold flex items-center gap-2 transition-all duration-300 min-w-[140px] justify-center ${
                 pumpStatus === 'ON' 
-                  ? 'bg-red-500 hover:bg-red-600 text-white' 
-                  : 'bg-green-500 hover:bg-green-600 text-white'
-              } disabled:opacity-50`}
+                  ? 'bg-red-600 hover:bg-red-700 text-white shadow-lg shadow-red-200' 
+                  : 'bg-green-600 hover:bg-green-700 text-white shadow-lg shadow-green-200'
+              } disabled:opacity-50 disabled:cursor-not-allowed`}
             >
               {commandInProgress === 'pump' ? (
-                <><Loader2 className="w-4 h-4 animate-spin" /> Wait...</>
+                <><Loader2 className="w-4 h-4 animate-spin" /> Processing...</>
               ) : (
-                <><Power className="w-4 h-4" /> {pumpStatus === 'ON' ? 'Turn OFF' : 'Turn ON'}</>
+                <>
+                  <Power className="w-5 h-5" /> 
+                  {pumpStatus === 'ON' ? 'Turn OFF' : 'Turn ON'}
+                </>
               )}
             </button>
           </div>
