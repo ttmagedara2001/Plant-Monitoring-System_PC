@@ -72,18 +72,37 @@ api.interceptors.response.use(
 
       // Enhanced logging for 400 errors
       if (error.response.status === 400) {
-        console.error("🔍 400 Bad Request Details:", {
-          endpoint: originalRequest?.url,
-          method: originalRequest?.method?.toUpperCase(),
-          sentPayload: originalRequest?.data,
-          serverResponse: error.response.data,
-          possibleIssues: [
-            "Wrong field names in payload",
-            "Missing required parameters",
-            "Invalid data types",
-            "Malformed request body",
-          ],
-        });
+        const errorData =
+          error.response.data?.data || error.response.data?.message;
+
+        // Special handling for device ownership errors - show once
+        if (errorData === "Device does not belong to the user") {
+          if (!window.__deviceAuthErrorShown) {
+            console.error("\n🚫 DEVICE AUTHORIZATION ERROR");
+            console.error(
+              "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            );
+            console.error("❌ Device does not belong to your account");
+            console.error("\n💡 TO FIX THIS:");
+            console.error("   1. Go to: https://api.protonestconnect.co");
+            console.error("   2. Find your device ID in your dashboard");
+            console.error("   3. Update 'defaultDeviceId' in Dashboard.jsx\n");
+            console.error(
+              "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            );
+            window.__deviceAuthErrorShown = true;
+          }
+          // Silent return for subsequent auth errors
+          return Promise.reject(error);
+        }
+
+        // Only log non-auth 400 errors in detail
+        if (errorData !== "Device does not belong to the user") {
+          console.error("🔍 400 Error:", {
+            endpoint: originalRequest?.url,
+            message: errorData,
+          });
+        }
       }
     }
 
