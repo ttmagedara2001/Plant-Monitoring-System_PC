@@ -69,8 +69,13 @@ export const useMqttWebSocket = (deviceId, jwtToken) => {
 
     const initMqtt = async () => {
       try {
-        console.log("[MQTT] 🔄 Initializing connection to ProtoNest WebSocket");
-        console.log("[MQTT] 📡 Attempting WebSocket connection...");
+        console.log("[MQTT] 🔄 Initializing MQTT WebSocket Service");
+        console.log(
+          "[MQTT] 📡 This will connect to: wss://api.protonestconnect.co/ws"
+        );
+        console.log(
+          "[MQTT] 📝 Your MQTTX should publish to: mqtt.protonest.co:8883"
+        );
 
         // Use real MQTT connection with JWT token
         await mqttWebSocketService.connect(false, jwtToken);
@@ -176,7 +181,8 @@ export const useMqttWebSocket = (deviceId, jwtToken) => {
             return;
           }
 
-          console.log("[WS] Connected successfully");
+          console.log("[WS] ✅ Connected successfully to ProtoNest WebSocket");
+          console.log("[WS] 🔌 Connection URL:", WS_BASE_URL);
           setIsWebSocketConnected(true);
 
           if (reconnectTimeoutRef.current) {
@@ -187,14 +193,48 @@ export const useMqttWebSocket = (deviceId, jwtToken) => {
           const subscriptions = [
             { action: "subscribe", topic: `/topic/state/${deviceId}` },
             { action: "subscribe", topic: `/topic/stream/${deviceId}` },
+            { action: "subscribe", topic: `protonest/${deviceId}/stream/temp` },
+            {
+              action: "subscribe",
+              topic: `protonest/${deviceId}/stream/moisture`,
+            },
+            {
+              action: "subscribe",
+              topic: `protonest/${deviceId}/stream/humidity`,
+            },
+            {
+              action: "subscribe",
+              topic: `protonest/${deviceId}/stream/light`,
+            },
+            {
+              action: "subscribe",
+              topic: `protonest/${deviceId}/stream/battery`,
+            },
+            {
+              action: "subscribe",
+              topic: `protonest/${deviceId}/state/motor/paddy`,
+            },
           ];
 
+          console.log(
+            `[WS] 📡 Subscribing to ${subscriptions.length} topics for device: ${deviceId}`
+          );
           subscriptions.forEach((sub) => {
             if (socket.readyState === WebSocket.OPEN) {
               socket.send(JSON.stringify(sub));
-              console.log("[WS] Subscribed to:", sub.topic);
+              console.log("[WS] ✅ Subscribed to:", sub.topic);
             }
           });
+
+          console.log(
+            "[WS] 🎯 WebSocket is now ready to receive MQTT messages"
+          );
+          console.log("[WS] 📝 Publish to these topics in MQTTX:");
+          console.log(`     • protonest/${deviceId}/stream/temp`);
+          console.log(`     • protonest/${deviceId}/stream/moisture`);
+          console.log(`     • protonest/${deviceId}/stream/humidity`);
+          console.log(`     • protonest/${deviceId}/stream/light`);
+          console.log(`     • protonest/${deviceId}/stream/battery`);
         };
 
         socket.onmessage = (event) => {
@@ -202,7 +242,8 @@ export const useMqttWebSocket = (deviceId, jwtToken) => {
 
           try {
             const payload = JSON.parse(event.data);
-            console.log("[WS] Received data:", payload);
+            console.log("[WS] 📥 RAW MESSAGE:", event.data);
+            console.log("[WS] 📦 PARSED PAYLOAD:", payload);
 
             // Handle WebSocket data (existing logic)
             if (

@@ -36,6 +36,7 @@ api.interceptors.request.use(
       url: config.url,
       baseURL: config.baseURL,
       hasToken: !!token && token !== "MOCK_TOKEN_FOR_TESTING",
+      payload: config.data ? JSON.parse(config.data) : undefined,
     });
 
     return config;
@@ -59,16 +60,31 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
-    // Log all API errors for debugging
+    // Log API errors for debugging (suppress repetitive 400 errors)
     if (error.response) {
-      console.error("❌ API Error Response:", {
-        status: error.response.status,
-        statusText: error.response.statusText,
-        url: originalRequest?.url,
-        method: originalRequest?.method?.toUpperCase(),
-        data: error.response.data,
-        allowHeader: error.response.headers?.allow,
-      });
+      // Only log detailed errors for non-400 or first-time 400 errors
+      const is400Error = error.response.status === 400;
+      const errorData =
+        error.response.data?.data || error.response.data?.message;
+
+      if (
+        !is400Error ||
+        (!window.__api400ErrorLogged &&
+          errorData !== "Device does not belong to the user")
+      ) {
+        console.error("❌ API Error Response:", {
+          status: error.response.status,
+          statusText: error.response.statusText,
+          url: originalRequest?.url,
+          method: originalRequest?.method?.toUpperCase(),
+          data: error.response.data,
+          allowHeader: error.response.headers?.allow,
+        });
+
+        if (is400Error) {
+          window.__api400ErrorLogged = true;
+        }
+      }
 
       // Enhanced logging for 400 errors
       if (error.response.status === 400) {

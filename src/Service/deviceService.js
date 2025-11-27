@@ -15,8 +15,6 @@ export const getStreamDataByTopic = async (
   pageSize = 100
 ) => {
   try {
-    console.log(`📊 Fetching stream data for ${deviceId}/${topic}`);
-
     // Helper function to format date to ISO-8601 without milliseconds
     const formatISODate = (date) => {
       return date.toISOString().split(".")[0] + "Z"; // Remove milliseconds
@@ -39,27 +37,20 @@ export const getStreamDataByTopic = async (
       pageSize: String(pageSize),
     };
 
-    console.log(`📤 Stream data request payload:`, payload);
-
     const response = await api.post(`/get-stream-data/device/topic`, payload);
 
     if (response.data.status === "Success") {
-      console.log(
-        `✅ Successfully fetched ${topic} data:`,
-        response.data.data?.length || 0,
-        "records"
-      );
+      const dataLength = response.data.data?.length || 0;
+      if (dataLength > 0) {
+        console.log(`✅ ${topic}: ${dataLength} records`);
+      }
       return response.data.data || [];
     }
 
-    console.warn(`⚠️ Non-success status for ${topic}:`, response.data);
     return [];
   } catch (error) {
-    // Only log non-auth errors
-    if (error.response?.data?.data !== "Device does not belong to the user") {
-      console.error(`❌ Error fetching ${topic}:`, error.message);
-    }
-
+    // Silently handle common errors (device auth, no data found, etc.)
+    // These are already logged by api.js interceptor
     // Return empty array instead of throwing to allow other topics to load
     return [];
   }
@@ -123,11 +114,6 @@ export const getAllStreamData = async (
   const topics = ["temp", "moisture", "humidity", "battery", "light"];
 
   try {
-    console.log(`📊 Fetching all stream data for device: ${deviceId}`);
-    console.log(
-      `⏰ Time range: ${startTime || "last 24h"} to ${endTime || "now"}`
-    );
-
     // Fetch all topics in parallel with time parameters
     const results = await Promise.allSettled(
       topics.map((topic) =>
@@ -144,17 +130,14 @@ export const getAllStreamData = async (
       (r) => r.status === "fulfilled" && r.value.length === 0
     ).length;
 
-    console.log(
-      `📊 Fetch results: ${successful} successful, ${empty} empty, ${failed} failed`
-    );
-
-    if (successful === 0 && failed > 0) {
+    // Only log summary if there's actual data or if it's the first fetch
+    if (successful > 0) {
+      console.log(`📊 Loaded ${successful} topics with historical data`);
+    } else if (!window.__historicalDataWarningShown) {
       console.warn(
-        `⚠️ All historical data requests failed. This is normal for new devices.`
+        `ℹ️ No historical data available yet. Real-time data will still work.`
       );
-      console.warn(
-        `💡 Real-time MQTT data will still work. Historical data will accumulate over time.`
-      );
+      window.__historicalDataWarningShown = true;
     }
 
     // Organize data by timestamp
@@ -211,7 +194,9 @@ export const getAllStreamData = async (
       (a, b) => new Date(a.timestamp) - new Date(b.timestamp)
     );
 
-    console.log(`✅ Combined stream data: ${chartData.length} data points`);
+    if (chartData.length > 0) {
+      console.log(`✅ Historical data: ${chartData.length} data points`);
+    }
     return chartData;
   } catch (error) {
     console.error("❌ Error fetching all stream data:", error);
@@ -333,16 +318,5 @@ export const updatePumpStatus = async (
   return updateDeviceState(deviceId, topic, { pumpStatus: status });
 };
 
-/**
- * Helper function for updating device settings (thresholds)
- * @param {string} deviceId - Device ID
- * @param {object} settings - Settings object with threshold values
- * @param {string} topic - Topic to update (default: 'settings')
- */
-export const updateDeviceSettings = async (
-  deviceId,
-  settings,
-  topic = "settings"
-) => {
-  return updateDeviceState(deviceId, topic, settings);
-};
+// Note: Device settings (thresholds) are managed in frontend localStorage only
+// No backend API available for settings, so no updateDeviceSettings() function needed

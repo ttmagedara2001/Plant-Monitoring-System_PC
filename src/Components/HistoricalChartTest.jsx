@@ -8,9 +8,9 @@ const HistoricalChart = ({ chartData, isLoading, onExportCSV, isExporting, dataS
   const [visibleSeries, setVisibleSeries] = useState({
     moisture: true,
     temperature: true,
-    humidity: false,
-    light: false,
-    battery: false
+    humidity: true,
+    light: true,
+    battery: true
   });
 
   const toggleSeries = (key) => {
