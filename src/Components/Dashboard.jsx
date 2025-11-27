@@ -15,7 +15,7 @@ const Dashboard = () => {
   const { deviceId: paramDeviceId } = useParams();
   // TODO: Change this to your actual device ID that belongs to your user account
   // Check your Protonest dashboard for your device list
-  const defaultDeviceId = 'device200300'; // Change this to your device ID
+  const defaultDeviceId = 'device0011233'; // Change this to your device ID
   const deviceId = paramDeviceId || defaultDeviceId;
   
   const { jwtToken } = useAuth(); 
@@ -23,7 +23,7 @@ const Dashboard = () => {
   // Data Hooks & States
   // WebSocket is used for real-time data only
   const { liveData, connectionStatus } = useMqttWebSocket(deviceId, jwtToken);
-  const [deviceList] = useState(['device200300', 'device0000', 'device0001', 'device0002']); 
+  const [deviceList] = useState(['device0011233', 'device0000', 'device0001', 'device0002']); 
   
   // HTTP API for historical data visualization
   const [historicalData, setHistoricalData] = useState([]);
@@ -178,7 +178,7 @@ const Dashboard = () => {
     
     try {
       // Use HTTP API for state changes
-      await updatePumpStatus(deviceId, newStatus, 'motor/paddy');
+      await updatePumpStatus(deviceId, newStatus, 'pump');
       console.log(`✅ [HTTP API] Pump control sent: ${newStatus}`);
       console.log(`📡 [WebSocket] Waiting for real-time feedback...`);
       // WebSocket will receive the updated pump status in real-time
