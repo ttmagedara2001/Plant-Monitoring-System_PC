@@ -310,11 +310,7 @@ export const updateDeviceState = async (deviceId, topic) => {
  * @param {string} status - Pump status ('ON' or 'OFF')
  * @param {string} topic - Topic to update (default: 'pump/status')
  */
-export const updatePumpStatus = async (
-  deviceId,
-  status,
-  topic = "motor/paddy"
-) => {
+export const updatePumpStatus = async (deviceId, status, topic = "pump") => {
   return updateDeviceState(deviceId, topic, { pumpStatus: status });
 };
 
