@@ -4,6 +4,9 @@ import { mqttWebSocketService } from "../Service/mqttWebSocketService";
 // WebSocket configuration
 const WS_BASE_URL = "wss://api.protonestconnect.co/ws";
 
+// Use WebSocket-based MQTT (the bridge needs to be configured on ProtoNest side)
+const USE_DIRECT_MQTT = false;
+
 const DEFAULT_MOCK = {
   moisture: 0,
   temperature: 0,
@@ -69,6 +72,7 @@ export const useMqttWebSocket = (deviceId, jwtToken) => {
 
     const initMqtt = async () => {
       try {
+        // Use WebSocket-based MQTT
         console.log("[MQTT] 🔄 Initializing MQTT WebSocket Service");
         console.log(
           "[MQTT] 📡 This will connect to: wss://api.protonestconnect.co/ws"
@@ -77,7 +81,6 @@ export const useMqttWebSocket = (deviceId, jwtToken) => {
           "[MQTT] 📝 Your MQTTX should publish to: mqtt.protonest.co:8883"
         );
 
-        // Use real MQTT connection with JWT token
         await mqttWebSocketService.connect(false, jwtToken);
 
         if (isMounted) {
@@ -191,8 +194,9 @@ export const useMqttWebSocket = (deviceId, jwtToken) => {
           }
 
           const subscriptions = [
-            { action: "subscribe", topic: `/topic/state/${deviceId}` },
-            { action: "subscribe", topic: `/topic/stream/${deviceId}` },
+            // Try wildcard subscription to catch all device topics
+            { action: "subscribe", topic: `protonest/${deviceId}/#` },
+            // Also subscribe to specific topics
             { action: "subscribe", topic: `protonest/${deviceId}/stream/temp` },
             {
               action: "subscribe",
@@ -217,7 +221,7 @@ export const useMqttWebSocket = (deviceId, jwtToken) => {
           ];
 
           console.log(
-            `[WS] 📡 Subscribing to ${subscriptions.length} topics for device: ${deviceId}`
+            `[WS] 📡 Subscribing to ${subscriptions.length} MQTT topics for device: ${deviceId}`
           );
           subscriptions.forEach((sub) => {
             if (socket.readyState === WebSocket.OPEN) {
@@ -240,9 +244,11 @@ export const useMqttWebSocket = (deviceId, jwtToken) => {
         socket.onmessage = (event) => {
           if (!isComponentMounted) return;
 
+          // Log ALL WebSocket messages (including non-JSON)
+          console.log("[WS] 📥 RAW MESSAGE RECEIVED:", event.data);
+
           try {
             const payload = JSON.parse(event.data);
-            console.log("[WS] 📥 RAW MESSAGE:", event.data);
             console.log("[WS] 📦 PARSED PAYLOAD:", payload);
 
             // Handle WebSocket data (existing logic)

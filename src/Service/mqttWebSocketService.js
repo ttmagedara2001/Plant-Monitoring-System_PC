@@ -94,6 +94,7 @@ class MQTTWebSocketService {
         };
 
         ws.onmessage = (event) => {
+          console.log("[MQTT-WS] 📨 Raw WebSocket data received:", event.data);
           this.handleMQTTMessage(event.data);
         };
       } catch (error) {
@@ -244,10 +245,11 @@ class MQTTWebSocketService {
     if (this.simulationMode) {
       console.log("🎲 Simulation mode - ready to receive MQTT data");
     } else if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      // Subscribe to device topics via WebSocket
+      // Subscribe to MQTT device topics via WebSocket
       const subscriptions = [
-        { action: "subscribe", topic: `/topic/stream/${deviceId}` },
-        { action: "subscribe", topic: `/topic/state/${deviceId}` },
+        // Try wildcard subscription first
+        { action: "subscribe", topic: `protonest/${deviceId}/#` },
+        // Also subscribe to specific topics as backup
         { action: "subscribe", topic: `protonest/${deviceId}/stream/temp` },
         { action: "subscribe", topic: `protonest/${deviceId}/stream/humidity` },
         { action: "subscribe", topic: `protonest/${deviceId}/stream/battery` },
