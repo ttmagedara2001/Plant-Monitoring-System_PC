@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { useAuth } from '../Context/AuthContext';
-import { getAllStreamData, updateDeviceState } from '../Service/deviceService'; 
+import { getAllStreamData, updateDeviceSettings, updatePumpStatus } from '../Service/deviceService'; 
 import { useMqttWebSocket } from '../Hook/UseMqttWebSocket'; 
 import { AlertTriangle } from 'lucide-react';
 
@@ -13,14 +13,19 @@ import HistoricalChart from './HistoricalChartTest';
 
 const Dashboard = () => {
   const { deviceId: paramDeviceId } = useParams();
-  const defaultDeviceId = 'device200300'; // Updated to match your MQTT device ID
+  // TODO: Change this to your actual device ID that belongs to your user account
+  // Check your ProtoNest dashboard for your device list
+  const defaultDeviceId = 'device200300'; // Change this to your device ID
   const deviceId = paramDeviceId || defaultDeviceId;
   
   const { jwtToken } = useAuth(); 
 
-  // Data Hooks & States - Updated to include pump control
-  const { liveData, chartData: mqttChartData, connectionStatus, controlPump } = useMqttWebSocket(deviceId, jwtToken);
+  // Data Hooks & States
+  // WebSocket for real-time data only (not for chart display)
+  const { liveData, connectionStatus } = useMqttWebSocket(deviceId, jwtToken);
   const [deviceList] = useState(['device200300', 'device0000', 'device0001', 'device0002']); 
+  
+  // HTTP API for historical data visualization
   const [historicalData, setHistoricalData] = useState([]);
   const [isLoadingChart, setIsLoadingChart] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
@@ -36,7 +41,7 @@ const Dashboard = () => {
   const [commandStatus, setCommandStatus] = useState(null); 
   const [commandInProgress, setCommandInProgress] = useState(null);
 
-  // Fetch historical data when device changes
+  // Fetch historical data from HTTP API when device changes
   useEffect(() => {
     const fetchHistoricalData = async () => {
       if (!deviceId || !jwtToken) {
@@ -48,13 +53,21 @@ const Dashboard = () => {
       setDataFetchError(null);
 
       try {
-        console.log(`📊 Fetching historical data for device: ${deviceId}`);
+        console.log(`📊 [HTTP API] Fetching historical data for device: ${deviceId}`);
         const data = await getAllStreamData(deviceId);
         setHistoricalData(data);
-        console.log(`✅ Historical data loaded: ${data.length} records`);
+        console.log(`✅ [HTTP API] Historical data loaded: ${data.length} records`);
       } catch (error) {
-        console.error("❌ Failed to fetch historical data:", error);
-        setDataFetchError("Failed to load historical data. Please try again.");
+        console.error("❌ [HTTP API] Failed to fetch historical data:", error);
+        
+        // Check if it's a device ownership error
+        if (error.response?.data?.data === "Device does not belong to the user") {
+          setDataFetchError(
+            `⚠️ Device "${deviceId}" not found in your account. Please update the device ID in Dashboard.jsx or add this device to your ProtoNest account. Real-time data will still work.`
+          );
+        } else {
+          setDataFetchError("Failed to load historical data. Real-time WebSocket data will still work.");
+        }
         setHistoricalData([]);
       } finally {
         setIsLoadingChart(false);
@@ -62,6 +75,15 @@ const Dashboard = () => {
     };
 
     fetchHistoricalData();
+    
+    // Refresh historical data every 30 seconds to show newly saved real-time data
+    const refreshInterval = setInterval(() => {
+      if (deviceId && jwtToken) {
+        fetchHistoricalData();
+      }
+    }, 30000); // 30 seconds
+
+    return () => clearInterval(refreshInterval);
   }, [deviceId, jwtToken]);
 
   useEffect(() => {
@@ -83,17 +105,15 @@ const Dashboard = () => {
     }
   }, [liveData, settings]);
   
-  // Data Export Function
+  // Data Export Function - Export from HTTP API historical data only
   const handleExportCSV = async () => {
     setIsExporting(true);
     try {
-      // Use historicalData if available, fallback to MQTT chart data
-      const dataToExport = historicalData.length > 0 ? historicalData : mqttChartData;
-      
-      if (dataToExport.length === 0) {
-        alert("No data available to export.");
+      if (historicalData.length === 0) {
+        alert("No historical data available to export. Please wait for data to accumulate.");
         return;
       }
+      const dataToExport = historicalData;
       const headers = ["time", "moisture", "temperature", "humidity", "light", "battery"].join(','); 
       const rows = dataToExport.map(d => 
         `${d.time},${d.moisture ?? ''},${d.temperature ?? ''},${d.humidity ?? ''},${d.light ?? ''},${d.battery ?? ''}`
@@ -120,9 +140,11 @@ const Dashboard = () => {
     setCommandInProgress('settings');
     setCommandStatus(null);
     try {
-      await updateDeviceState(deviceId, settings); 
+      // Use the settings topic for threshold updates
+      await updateDeviceSettings(deviceId, settings, 'settings/thresholds');
       setCommandStatus({ type: 'success', message: 'Settings saved successfully!' });
     } catch (error) {
+      console.error('Failed to save settings:', error);
       setCommandStatus({ type: 'error', message: 'Failed to save settings.' });
     } finally {
       setCommandInProgress(null);
@@ -135,31 +157,17 @@ const Dashboard = () => {
     const currentStatus = liveData?.pumpStatus === 'ON';
     const newStatus = currentStatus ? 'OFF' : 'ON';
     
-    console.log(`🔄 Toggling pump from ${liveData?.pumpStatus} to ${newStatus}`);
+    console.log(`🔄 [HTTP API] Toggling pump from ${liveData?.pumpStatus} to ${newStatus}`);
     
     try {
-      // Try MQTT control first if connected
-      if (connectionStatus.mqtt) {
-        const success = controlPump(deviceId, newStatus);
-        if (success) {
-          console.log(`✅ Pump control sent via MQTT: ${newStatus}`);
-          console.log(`📡 Waiting for MQTT feedback to update button state...`);
-          // Note: MQTT service will handle the pump status feedback
-          // Don't manually update liveData here - wait for MQTT response
-          setCommandStatus({ type: 'success', message: `Pump command sent: ${newStatus}` });
-        } else {
-          throw new Error('MQTT pump control failed');
-        }
-      } else {
-        // Fallback to API control
-        await updateDeviceState(deviceId, { pumpStatus: newStatus }); 
-        // For API control, we can update the state locally since there's no MQTT feedback
-        console.log(`✅ Pump control sent via API: ${newStatus}`);
-        // Note: We don't have access to setLiveData here, that's in the hook
-        setCommandStatus({ type: 'success', message: `Pump turned ${newStatus}` });
-      }
+      // Use HTTP API for state changes
+      await updatePumpStatus(deviceId, newStatus, 'pump/control');
+      console.log(`✅ [HTTP API] Pump control sent: ${newStatus}`);
+      console.log(`📡 [WebSocket] Waiting for real-time feedback...`);
+      // WebSocket will receive the updated pump status in real-time
+      setCommandStatus({ type: 'success', message: `Pump command sent: ${newStatus}` });
     } catch (error) {
-      console.error("Pump control failed:", error);
+      console.error("❌ [HTTP API] Pump control failed:", error);
       setCommandStatus({ type: 'error', message: 'Failed to control pump.' });
     } finally {
       setCommandInProgress(null);
@@ -198,14 +206,14 @@ const Dashboard = () => {
   return (
     <div className="min-h-screen bg-[#f0f4f8] p-4 font-sans text-gray-800">
       
-      {/* Enhanced Connection Status */}
+      {/* Connection Status */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-4">
         <div className={`text-center py-2 rounded-lg text-sm font-medium ${
           connectionStatus.websocket 
             ? 'bg-green-100 text-green-800 border border-green-300' 
             : 'bg-gray-100 text-gray-600 border border-gray-300'
         }`}>
-          WebSocket API: {connectionStatus.websocket ? '🟢 Connected' : '⚪ Disconnected'}
+          WebSocket (Real-Time): {connectionStatus.websocket ? '🟢 Connected' : '⚪ Disconnected'}
         </div>
         
         <div className={`text-center py-2 rounded-lg text-sm font-medium ${
@@ -213,7 +221,7 @@ const Dashboard = () => {
             ? 'bg-blue-100 text-blue-800 border border-blue-300' 
             : 'bg-gray-100 text-gray-600 border border-gray-300'
         }`}>
-          MQTT Data: {connectionStatus.mqtt ? '🟢 Ready for Real Data' : '⚪ Inactive'}
+          MQTT Stream: {connectionStatus.mqtt ? '🟢 Receiving Data' : '⚪ Waiting for Data'}
         </div>
       </div>
 
@@ -224,8 +232,8 @@ const Dashboard = () => {
           : 'bg-yellow-100 text-yellow-800 border border-yellow-300'
       }`}>
         System Status: {connectionStatus.type !== 'none' 
-          ? `🟢 Operational (${connectionStatus.type === 'mqtt' ? 'Awaiting MQTT Data' : connectionStatus.type})` 
-          : '🟡 Limited Functionality'}
+          ? `🟢 Online • Real-Time: ${connectionStatus.mqtt ? 'Active' : 'Standby'} • Historical: HTTP API` 
+          : '🟡 Limited - Real-time data only'}
       </div>
 
       {/* Alert Banner */}
@@ -278,13 +286,13 @@ const Dashboard = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         
-        {/* Historical Chart Component */}
+        {/* Historical Chart Component - HTTP API Data Only */}
         <HistoricalChart 
-            chartData={historicalData.length > 0 ? historicalData : mqttChartData}
+            chartData={historicalData}
             isLoading={isLoadingChart}
             onExportCSV={handleExportCSV}
             isExporting={isExporting}
-            dataSource={historicalData.length > 0 ? 'API' : connectionStatus.mqtt ? 'MQTT' : 'None'}
+            dataSource="HTTP API"
             error={dataFetchError}
         />
 
