@@ -37,25 +37,25 @@ class MQTTWebSocketService {
       }
 
       this.jwtToken = jwtToken;
-      console.log("🔄 Connecting to ProtoNest WebSocket...");
+      console.log("🔄 Connecting to Protonest WebSocket...");
 
       try {
-        // Connect to ProtoNest WebSocket with JWT token
+        // Connect to Protonest WebSocket with JWT token
         const url = `${WS_BASE_URL}?token=${encodeURIComponent(jwtToken)}`;
         console.log(`🌐 Connecting to: ${WS_BASE_URL}`);
 
         const ws = new WebSocket(url);
         const connectionTimeout = setTimeout(() => {
-          console.log(`⏰ Connection timeout (10s)`);
+          console.log(`⏰ Connection timeout (100s)`);
           ws.close();
           console.log("🎲 Falling back to simulation mode...");
           this.startSimulationMode();
           resolve();
-        }, 10000);
+        }, 100000);
 
         ws.onopen = () => {
           clearTimeout(connectionTimeout);
-          console.log(`✅ WebSocket Connected successfully to ProtoNest`);
+          console.log(`✅ WebSocket Connected successfully to Protonest`);
           this.ws = ws;
           this.isConnected = true;
           this.simulationMode = false;
@@ -257,7 +257,7 @@ class MQTTWebSocketService {
         { action: "subscribe", topic: `protonest/${deviceId}/stream/moisture` },
         {
           action: "subscribe",
-          topic: `protonest/${deviceId}/state/motor/paddy`,
+          topic: `protonest/${deviceId}/state/pump`,
         },
       ];
 
@@ -274,95 +274,6 @@ class MQTTWebSocketService {
 
     return true;
   }
-
-  // MOCK DATA GENERATION - COMMENTED OUT
-  // Generate realistic mock sensor data with better variation
-  // startMockDataGeneration(deviceId, onDataReceived) {
-  //   if (this.mockDataInterval) {
-  //     clearInterval(this.mockDataInterval);
-  //   }
-
-  //   console.log(`🎲 Starting realistic sensor simulation for device: ${deviceId}`);
-
-  //   // More realistic initial values based on typical agricultural sensors
-  //   let sensorState = {
-  //     moisture: 45 + Math.random() * 20, // 45-65% (good range)
-  //     temperature: 22 + Math.random() * 8, // 22-30°C (optimal range)
-  //     humidity: 55 + Math.random() * 25, // 55-80% (typical range)
-  //     light: 400 + Math.random() * 600, // 400-1000 lux (variable daylight)
-  //     battery: 75 + Math.random() * 20, // 75-95% (good battery health)
-  //     pumpStatus: 'OFF'
-  //   };
-
-  //   // Simulate daily cycles and realistic sensor patterns
-  //   let timeOfDay = 0; // Simulated hour counter
-
-  //   this.mockDataInterval = setInterval(() => {
-  //     timeOfDay += 0.1; // Increment time slowly
-
-  //     // Daily cycle influences (more realistic)
-  //     const dayFactor = Math.sin((timeOfDay / 24) * 2 * Math.PI); // Day/night cycle
-  //     const noiseFactor = (Math.random() - 0.5) * 2; // Random variation
-
-  //     // Natural sensor evolution with daily patterns
-  //     sensorState.temperature += dayFactor * 0.5 + noiseFactor * 0.3;
-  //     sensorState.humidity -= dayFactor * 2 + noiseFactor * 1;
-  //     sensorState.light += dayFactor * 100 + noiseFactor * 50;
-  //     sensorState.moisture -= Math.random() * 0.2; // Gradual evaporation
-  //     sensorState.battery -= Math.random() * 0.05; // Slow discharge
-
-  //     // Keep realistic bounds
-  //     sensorState.moisture = Math.max(15, Math.min(85, sensorState.moisture));
-  //     sensorState.temperature = Math.max(18, Math.min(35, sensorState.temperature));
-  //     sensorState.humidity = Math.max(30, Math.min(90, sensorState.humidity));
-  //     sensorState.light = Math.max(100, Math.min(1200, sensorState.light));
-  //     sensorState.battery = Math.max(20, Math.min(100, sensorState.battery));
-
-  //     // Smart irrigation simulation
-  //     if (sensorState.moisture < 25 && Math.random() < 0.3) {
-  //       sensorState.pumpStatus = 'ON';
-  //       console.log("💧 Auto irrigation activated (low moisture)");
-  //     } else if (sensorState.moisture > 65 && sensorState.pumpStatus === 'ON') {
-  //       sensorState.pumpStatus = 'OFF';
-  //       console.log("💧 Auto irrigation stopped (sufficient moisture)");
-  //     }
-
-  //     // Solar recharge simulation
-  //     if (sensorState.battery < 30 && sensorState.light > 800) {
-  //       sensorState.battery += Math.random() * 2;
-  //       console.log("🔋 Solar charging active");
-  //     }
-
-  //     // Update pump status if changed
-  //     if (Math.random() < 0.1) { // 10% chance to send pump status
-  //       onDataReceived({
-  //         deviceId,
-  //         sensorType: 'pumpStatus',
-  //         value: sensorState.pumpStatus,
-  //         timestamp: new Date().toISOString(),
-  //         topic: `protonest/${deviceId}/state/motor/paddy`
-  //       });
-  //     }
-
-  //     // Send random sensor update
-  //     const sensors = ['moisture', 'temp', 'humidity', 'light', 'battery'];
-  //     const randomSensor = sensors[Math.floor(Math.random() * sensors.length)];
-
-  //     let value = sensorState[randomSensor === 'temp' ? 'temperature' : randomSensor];
-  //     value = Math.round(value * 10) / 10; // Round to 1 decimal
-
-  //     onDataReceived({
-  //       deviceId,
-  //       sensorType: randomSensor,
-  //       value,
-  //       timestamp: new Date().toISOString(),
-  //       topic: `protonest/${deviceId}/stream/${randomSensor}`
-  //     });
-
-  //   }, 3000 + Math.random() * 4000); // 3-7 second intervals (more realistic)
-  // }
-
-  // Start keepalive ping to prevent WebSocket timeout
   startKeepAlive() {
     // Clear any existing interval
     if (this.keepAliveInterval) {
@@ -410,6 +321,7 @@ class MQTTWebSocketService {
 
       if (message.topic && message.payload !== undefined) {
         const topicParts = message.topic.split("/");
+        // ["protonest", "device200300", "stream","temp"] - correct
 
         if (topicParts.length >= 4 && topicParts[0] === "protonest") {
           const deviceId = topicParts[1];
@@ -484,8 +396,8 @@ class MQTTWebSocketService {
                   message.payload
                 );
               }
-            } else if (messageType === "state" && sensorType === "motor") {
-              // Handle pump control messages - topic: protonest/device200300/state/motor/paddy
+            } else if (messageType === "state" && sensorType === "pump") {
+              // Handle pump control messages - topic: protonest/device200300/state/pump
               // Expected payload format: {"power": "on"} or {"power": "off"}
               // Optional: {"power": "on", "mode": "manual"}
               let pumpValue;
@@ -559,7 +471,7 @@ class MQTTWebSocketService {
 
   // Publish pump control command
   publishPumpControl(deviceId, status) {
-    const topic = `protonest/${deviceId}/state/motor/paddy`;
+    const topic = `protonest/${deviceId}/state/pump`;
     // Convert ON/OFF to lowercase for payload: {"power": "on"} or {"power": "off"}
     const payload = { power: status.toLowerCase() };
     console.log(`💧 Publishing pump control to ${topic}:`, payload);
@@ -581,7 +493,7 @@ class MQTTWebSocketService {
       // Simulate MQTT feedback for pump control
       setTimeout(() => {
         const handler = this.messageHandlers.get(this.deviceId);
-        if (handler && topic.includes("/state/motor/paddy")) {
+        if (handler && topic.includes("/state/pump")) {
           // Parse the published payload to extract the power status
           try {
             const payloadObj =
