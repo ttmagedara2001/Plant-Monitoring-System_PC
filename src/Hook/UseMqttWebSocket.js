@@ -216,7 +216,7 @@ export const useMqttWebSocket = (deviceId, jwtToken) => {
             },
             {
               action: "subscribe",
-              topic: `protonest/${deviceId}/state/motor/paddy`,
+              topic: `protonest/${deviceId}/state/pump`,
             },
           ];
 
@@ -239,6 +239,9 @@ export const useMqttWebSocket = (deviceId, jwtToken) => {
           console.log(`     • protonest/${deviceId}/stream/humidity`);
           console.log(`     • protonest/${deviceId}/stream/light`);
           console.log(`     • protonest/${deviceId}/stream/battery`);
+          console.log(
+            `     • protonest/${deviceId}/state/pump (for pump control)`
+          );
         };
 
         socket.onmessage = (event) => {
