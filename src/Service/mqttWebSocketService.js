@@ -17,6 +17,7 @@ class MQTTWebSocketService {
     this.simulationMode = false;
     this.mockDataInterval = null;
     this.jwtToken = null;
+    this.keepAliveInterval = null;
   }
 
   // Connect to MQTT via WebSocket with comprehensive fallback
@@ -59,6 +60,10 @@ class MQTTWebSocketService {
           this.isConnected = true;
           this.simulationMode = false;
           this.reconnectAttempts = 0;
+
+          // Start keepalive ping every 30 seconds to prevent timeout
+          this.startKeepAlive();
+
           this.connectionCallbacks.forEach((callback) => callback());
           resolve();
         };
@@ -355,10 +360,50 @@ class MQTTWebSocketService {
   //   }, 3000 + Math.random() * 4000); // 3-7 second intervals (more realistic)
   // }
 
+  // Start keepalive ping to prevent WebSocket timeout
+  startKeepAlive() {
+    // Clear any existing interval
+    if (this.keepAliveInterval) {
+      clearInterval(this.keepAliveInterval);
+    }
+
+    // Send ping every 30 seconds
+    this.keepAliveInterval = setInterval(() => {
+      if (
+        this.ws &&
+        this.ws.readyState === WebSocket.OPEN &&
+        !this.simulationMode
+      ) {
+        try {
+          // Send a ping message - format depends on server requirements
+          this.ws.send(JSON.stringify({ action: "ping" }));
+          console.log("🏓 Sent keepalive ping");
+        } catch (error) {
+          console.error("❌ Failed to send keepalive:", error);
+        }
+      }
+    }, 30000); // 30 seconds
+  }
+
+  // Stop keepalive ping
+  stopKeepAlive() {
+    if (this.keepAliveInterval) {
+      clearInterval(this.keepAliveInterval);
+      this.keepAliveInterval = null;
+    }
+  }
+
   // Handle incoming MQTT messages
   handleMQTTMessage(data) {
     try {
       const message = typeof data === "string" ? JSON.parse(data) : data;
+
+      // Log message type for debugging
+      if (message.type === "pong" || message.action === "pong") {
+        console.log("🏓 Received keepalive pong");
+        return; // Don't process pong messages further
+      }
+
       console.log("📥 MQTT Message received:", message);
 
       if (message.topic && message.payload !== undefined) {
@@ -638,6 +683,9 @@ class MQTTWebSocketService {
       clearInterval(this.mockDataInterval);
       this.mockDataInterval = null;
     }
+
+    // Stop keepalive ping
+    this.stopKeepAlive();
 
     if (this.ws) {
       this.ws.close(1000, "Client disconnect");
