@@ -271,18 +271,24 @@ const Dashboard = () => {
     const currentStatus = liveData?.pumpStatus === 'ON';
     const newStatus = currentStatus ? 'OFF' : 'ON';
     
-    console.log(`🔄 [HTTP API] Toggling pump from ${liveData?.pumpStatus} to ${newStatus}`);
+    console.log(`🔄 [WebSocket] Toggling pump from ${liveData?.pumpStatus} to ${newStatus}`);
     
     try {
-      // Use HTTP API for state changes
-      await updatePumpStatus(deviceId, newStatus, 'pump');
-      console.log(`✅ [HTTP API] Pump control sent: ${newStatus}`);
-      console.log(`📡 [WebSocket] Waiting for real-time feedback...`);
-      // WebSocket will receive the updated pump status in real-time
-      setCommandStatus({ type: 'success', message: `Pump command sent: ${newStatus}` });
+      // Use WebSocket to send pump command directly to device via MQTT
+      const success = webSocketClient.sendPumpCommand(deviceId, newStatus, 'manual');
+      
+      if (success) {
+        console.log(`✅ [WebSocket] Pump command sent: ${newStatus}`);
+        console.log(`📡 [WebSocket] Waiting for device confirmation...`);
+        setCommandStatus({ type: 'success', message: `Pump command sent: ${newStatus}` });
+      } else {
+        throw new Error('WebSocket not connected');
+      }
+      // Device will respond with actual pump status via WebSocket
+      // The status will update automatically when we receive the confirmation
     } catch (error) {
-      console.error("❌ [HTTP API] Pump control failed:", error);
-      setCommandStatus({ type: 'error', message: 'Failed to control pump.' });
+      console.error("❌ [WebSocket] Pump control failed:", error);
+      setCommandStatus({ type: 'error', message: 'Failed to send pump command. Check WebSocket connection.' });
     } finally {
       setCommandInProgress(null);
       setTimeout(() => setCommandStatus(null), 3000);
