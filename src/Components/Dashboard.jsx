@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { useAuth } from '../Context/AuthContext';
 import { getAllStreamData, updatePumpStatus } from '../Service/deviceService'; 
-import { useMqttWebSocket } from '../Hook/UseMqttWebSocket'; 
+import { webSocketClient } from '../Service/webSocketClient'; // ✅ Direct WebSocket client
 import { AlertTriangle } from 'lucide-react';
 
 // Import Sub-Components
@@ -15,15 +15,23 @@ const Dashboard = () => {
   const { deviceId: paramDeviceId } = useParams();
   // TODO: Change this to your actual device ID that belongs to your user account
   // Check your Protonest dashboard for your device list
-  const defaultDeviceId = 'device0011233'; // Change this to your device ID
+  const defaultDeviceId = 'device9988'; // Change this to your device ID
   const deviceId = paramDeviceId || defaultDeviceId;
   
   const { jwtToken } = useAuth(); 
 
-  // Data Hooks & States
-  // WebSocket is used for real-time data only
-  const { liveData, connectionStatus } = useMqttWebSocket(deviceId, jwtToken);
-  const [deviceList] = useState(['device0011233', 'device0000', 'device0001', 'device0002']); 
+  // WebSocket states
+  const [liveData, setLiveData] = useState({
+    moisture: 0,
+    temperature: 0,
+    humidity: 0,
+    light: 0,
+    battery: 0,
+    pumpStatus: "OFF",
+    pumpMode: "Optimal",
+  });
+  const [isConnected, setIsConnected] = useState(false);
+  const [deviceList] = useState(['device9988', 'device0011233', 'device0000', 'device0001', 'device0002']);
   
   // HTTP API for historical data visualization
   const [historicalData, setHistoricalData] = useState([]);
@@ -104,6 +112,95 @@ const Dashboard = () => {
 
   useEffect(() => {
     console.log("Dashboard mounted. DeviceId:", deviceId, "JWT available:", !!jwtToken);
+  }, [deviceId, jwtToken]);
+
+  // WebSocket Connection Management
+  useEffect(() => {
+    if (!jwtToken || !deviceId) {
+      console.warn("[Dashboard] Missing deviceId or JWT token for WebSocket");
+      return;
+    }
+
+    // Data handler for WebSocket messages
+    const handleData = (data) => {
+      console.log(`[Dashboard] 📡 Real-time ${data.sensorType}:`, data.value);
+
+      setLiveData((prev) => {
+        const updated = { ...prev };
+
+        switch (data.sensorType) {
+          case "temp":
+            updated.temperature = parseFloat(data.value);
+            console.log(`[Dashboard] ✅ Updated temperature: ${updated.temperature}`);
+            break;
+          case "humidity":
+            updated.humidity = parseFloat(data.value);
+            console.log(`[Dashboard] ✅ Updated humidity: ${updated.humidity}`);
+            break;
+          case "battery":
+            updated.battery = parseFloat(data.value);
+            console.log(`[Dashboard] ✅ Updated battery: ${updated.battery}`);
+            break;
+          case "light":
+            updated.light = parseFloat(data.value);
+            console.log(`[Dashboard] ✅ Updated light: ${updated.light}`);
+            break;
+          case "moisture":
+            updated.moisture = parseFloat(data.value);
+            console.log(`[Dashboard] ✅ Updated moisture: ${updated.moisture}`);
+            break;
+          case "pumpStatus":
+            updated.pumpStatus = data.value;
+            console.log(`[Dashboard] 🚨 Pump status updated to: ${data.value}`);
+            break;
+          case "pumpMode":
+            updated.pumpMode = data.value;
+            console.log(`[Dashboard] ⚙️ Pump mode updated to: ${data.value}`);
+            break;
+          default:
+            console.warn(`[Dashboard] ⚠️ Unknown sensor type: ${data.sensorType}`);
+        }
+
+        console.log(`[Dashboard] 📊 New liveData state:`, updated);
+        return updated;
+      });
+    };
+
+    // Setup connection callbacks
+    webSocketClient.onConnect(() => {
+      setIsConnected(true);
+      console.log("[Dashboard] ✅ WebSocket Connected");
+    });
+
+    webSocketClient.onDisconnect(() => {
+      setIsConnected(false);
+      console.log("[Dashboard] ❌ WebSocket Disconnected");
+    });
+
+    // Connect to WebSocket
+    const initWebSocket = async () => {
+      try {
+        console.log("[Dashboard] 🔄 Initializing WebSocket connection");
+        await webSocketClient.connect(jwtToken);
+        
+        // Subscribe to device topics
+        const success = webSocketClient.subscribeToDevice(deviceId, handleData);
+        if (success) {
+          console.log(`[Dashboard] ✅ Subscribed to ${deviceId} topics`);
+        }
+      } catch (error) {
+        console.error("[Dashboard] ❌ WebSocket connection failed:", error);
+        setIsConnected(false);
+      }
+    };
+
+    initWebSocket();
+
+    // Cleanup on unmount or when deviceId/jwtToken changes
+    return () => {
+      console.log("[Dashboard] 🧹 Cleaning up WebSocket connection");
+      webSocketClient.disconnect();
+    };
   }, [deviceId, jwtToken]);
 
   // Alert Logic
@@ -226,30 +323,30 @@ const Dashboard = () => {
       {/* Connection Status */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-4">
         <div className={`text-center py-2 rounded-lg text-sm font-medium ${
-          connectionStatus.websocket 
+          isConnected 
             ? 'bg-green-100 text-green-800 border border-green-300' 
             : 'bg-gray-100 text-gray-600 border border-gray-300'
         }`}>
-          WebSocket (Real-Time): {connectionStatus.websocket ? '🟢 Connected' : '⚪ Disconnected'}
+          WebSocket (Real-Time): {isConnected ? '🟢 Connected' : '⚪ Disconnected'}
         </div>
         
         <div className={`text-center py-2 rounded-lg text-sm font-medium ${
-          connectionStatus.mqtt 
+          isConnected 
             ? 'bg-blue-100 text-blue-800 border border-blue-300' 
             : 'bg-gray-100 text-gray-600 border border-gray-300'
         }`}>
-          MQTT Stream: {connectionStatus.mqtt ? '🟢 Receiving Data' : '⚪ Waiting for Data'}
+          MQTT Stream: {isConnected ? '🟢 Receiving Data' : '⚪ Waiting for Data'}
         </div>
       </div>
 
       {/* Overall Connection Status */}
       <div className={`text-center py-2 mb-4 rounded-lg text-sm font-medium ${
-        connectionStatus.type !== 'none'
+        isConnected
           ? 'bg-green-100 text-green-800 border border-green-300' 
           : 'bg-yellow-100 text-yellow-800 border border-yellow-300'
       }`}>
-        System Status: {connectionStatus.type !== 'none' 
-          ? `🟢 Online • Real-Time: ${connectionStatus.mqtt ? 'Active' : 'Standby'} • Historical: HTTP API` 
+        System Status: {isConnected 
+          ? `🟢 Online • Real-Time: ${isConnected ? 'Active' : 'Standby'} • Historical: HTTP API` 
           : '🟡 Limited - Real-time data only'}
       </div>
 
