@@ -150,21 +150,40 @@ class WebSocketClient {
       const stateTopic = `/topic/state/${deviceId}`;
       client.subscribe(stateTopic, (message) => {
         const data = JSON.parse(message.body);
-        console.log("🔧 Pump state:", data);
+        console.log("🔧 Pump state received:", data);
+
+        // Extract payload (handle nested structure like sensor data)
+        const payload = data.payload || data;
 
         // Call Dashboard callback for pump status
         if (self.dataCallback) {
-          if (data.power !== undefined) {
+          // Check for power/status in payload
+          const powerValue =
+            payload.power || payload.status || payload.pumpStatus;
+          if (powerValue !== undefined) {
+            // Normalize to uppercase: "on" -> "ON", "off" -> "OFF"
+            const normalizedPower = String(powerValue).toUpperCase();
+            console.log(
+              `🎯 Calling Dashboard callback: pumpStatus = ${normalizedPower}`
+            );
             self.dataCallback({
               sensorType: "pumpStatus",
-              value: data.power,
+              value: normalizedPower,
               timestamp: data.timestamp || new Date().toISOString(),
             });
           }
-          if (data.mode !== undefined) {
+
+          // Check for mode in payload
+          const modeValue = payload.mode || payload.pumpMode;
+          if (modeValue !== undefined) {
+            // Normalize mode to lowercase: "MANUAL" -> "manual"
+            const normalizedMode = String(modeValue).toLowerCase();
+            console.log(
+              `🎯 Calling Dashboard callback: pumpMode = ${normalizedMode}`
+            );
             self.dataCallback({
               sensorType: "pumpMode",
-              value: data.mode,
+              value: normalizedMode,
               timestamp: data.timestamp || new Date().toISOString(),
             });
           }
