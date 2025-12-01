@@ -15,7 +15,7 @@ const Dashboard = () => {
   const { deviceId: paramDeviceId } = useParams();
   // TODO: Change this to your actual device ID that belongs to your user account
   // Check your Protonest dashboard for your device list
-  const defaultDeviceId = 'device9988'; // Change this to your device ID
+  const defaultDeviceId = 'device0011233'; // Change this to your device ID
   const deviceId = paramDeviceId || defaultDeviceId;
   
   const { jwtToken } = useAuth(); 
