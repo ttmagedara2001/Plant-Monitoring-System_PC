@@ -21,10 +21,18 @@ export const getStreamDataByTopic = async (
     };
 
     // Set default time range to last 24 hours if not provided
-    const endDate = endTime ? new Date(endTime) : new Date();
+    const now = new Date();
+    const endDate = endTime ? new Date(endTime) : now;
     const startDate = startTime
       ? new Date(startTime)
-      : new Date(Date.now() - 24 * 60 * 60 * 1000);
+      : new Date(now.getTime() - 24 * 60 * 60 * 1000);
+
+    console.log(`⏰ [HTTP] Time calculation for ${topic}:`, {
+      currentTime: now.toISOString(),
+      startTime: startDate.toISOString(),
+      endTime: endDate.toISOString(),
+      rangeHours: ((endDate - startDate) / (1000 * 60 * 60)).toFixed(1),
+    });
 
     // Ensure times are in ISO-8601 format without milliseconds (API requirement)
     // Note: pagination and pageSize must be strings per API specification
@@ -37,20 +45,69 @@ export const getStreamDataByTopic = async (
       pageSize: String(pageSize),
     };
 
+    // Log in exact order for verification
+    console.log(`📤 [HTTP] Fetching ${topic} data:`);
+    console.log(
+      JSON.stringify(
+        {
+          deviceId: payload.deviceId,
+          topic: payload.topic,
+          startTime: payload.startTime,
+          endTime: payload.endTime,
+          pagination: payload.pagination,
+          pageSize: payload.pageSize,
+        },
+        null,
+        2
+      )
+    );
+
     const response = await api.post(`/get-stream-data/device/topic`, payload);
+
+    console.log(`📥 [HTTP] Response for ${topic}:`, {
+      status: response.data.status,
+      dataLength: response.data.data?.length || 0,
+    });
 
     if (response.data.status === "Success") {
       const dataLength = response.data.data?.length || 0;
       if (dataLength > 0) {
         console.log(`✅ ${topic}: ${dataLength} records`);
+        // Log first record to see data structure
+        console.log(`📋 [HTTP] Sample ${topic} record:`, response.data.data[0]);
+      } else {
+        console.log(`ℹ️ ${topic}: No data found in time range`);
       }
       return response.data.data || [];
     }
 
     return [];
   } catch (error) {
-    // Silently handle common errors (device auth, no data found, etc.)
-    // These are already logged by api.js interceptor
+    // Extract meaningful error message from various response formats
+    let errorMessage = "Unknown error";
+
+    if (error.response?.data) {
+      // Try different possible error message locations
+      errorMessage =
+        error.response.data.data ||
+        error.response.data.message ||
+        error.response.data.error ||
+        (typeof error.response.data === "string"
+          ? error.response.data
+          : null) ||
+        JSON.stringify(error.response.data);
+    } else if (error.message) {
+      errorMessage = error.message;
+    }
+
+    // Log error details for debugging
+    console.warn(`⚠️ [HTTP] Error fetching ${topic}:`, {
+      status: error.response?.status || "No response",
+      statusText: error.response?.statusText || "N/A",
+      message: errorMessage,
+      fullResponse: error.response?.data,
+    });
+
     // Return empty array instead of throwing to allow other topics to load
     return [];
   }
@@ -96,7 +153,7 @@ export const getStateDetails = async (deviceId, topic) => {
 
 /**
  * Fetch all historical stream data for a device
- * Fetches data from all topics: temp4/new, moisture, humidity, battery, light
+ * Fetches data from all topics with fallback to alternative topic names
  * Returns combined data formatted for chart display
  *
  * NOTE: This endpoint may return 400 errors if:
@@ -110,14 +167,28 @@ export const getAllStreamData = async (
   startTime = null,
   endTime = null
 ) => {
-  // Use common topic naming conventions (adjust based on your device setup)
-  const topics = ["temp", "moisture", "humidity", "battery", "light"];
+  // Try multiple topic naming conventions
+  // Format 1: Simple names (temp, moisture, humidity, battery, light)
+  // Format 2: Extended names (temp4/new, temp5/new, etc.)
+  const topicVariants = [
+    // Try simple names first (most common)
+    { name: "temp", label: "temperature" },
+    { name: "moisture", label: "moisture" },
+    { name: "humidity", label: "humidity" },
+    { name: "battery", label: "battery" },
+    { name: "light", label: "light" },
+  ];
 
   try {
+    console.log(`📊 [HTTP] Fetching historical data for ${deviceId}`);
+    console.log(
+      `📅 [HTTP] Time range: ${startTime || "Last 24h"} to ${endTime || "Now"}`
+    );
+
     // Fetch all topics in parallel with time parameters
     const results = await Promise.allSettled(
-      topics.map((topic) =>
-        getStreamDataByTopic(deviceId, topic, startTime, endTime, 0, 100)
+      topicVariants.map((topic) =>
+        getStreamDataByTopic(deviceId, topic.name, startTime, endTime, 0, 100)
       )
     );
 
@@ -130,12 +201,30 @@ export const getAllStreamData = async (
       (r) => r.status === "fulfilled" && r.value.length === 0
     ).length;
 
+    // Detailed logging for debugging
+    console.log(`📊 [HTTP] Historical data summary:`, {
+      successful: successful,
+      empty: empty,
+      failed: failed,
+      total: topicVariants.length,
+    });
+
     // Only log summary if there's actual data or if it's the first fetch
     if (successful > 0) {
-      console.log(`📊 Loaded ${successful} topics with historical data`);
+      console.log(`✅ [HTTP] Loaded ${successful} topics with historical data`);
     } else if (!window.__historicalDataWarningShown) {
       console.warn(
-        `ℹ️ No historical data available yet. Real-time data will still work.`
+        `ℹ️ [HTTP] No historical data available yet. Real-time data will still work.`
+      );
+      console.warn(`💡 [HTTP] Possible reasons:`);
+      console.warn(
+        `   1. Device recently added - ProtoNest hasn't saved MQTT data to DB yet`
+      );
+      console.warn(
+        `   2. Topic names mismatch - check what topic names are saved in DB`
+      );
+      console.warn(
+        `   3. Device not in your account - verify device ownership`
       );
       window.__historicalDataWarningShown = true;
     }
@@ -144,9 +233,15 @@ export const getAllStreamData = async (
     const dataByTimestamp = new Map();
 
     results.forEach((result, index) => {
-      const topic = topics[index];
+      const topicInfo = topicVariants[index];
+      const topicName = topicInfo.name;
+      const label = topicInfo.label;
 
       if (result.status === "fulfilled" && Array.isArray(result.value)) {
+        console.log(
+          `🔍 [HTTP] Processing ${topicName}: ${result.value.length} records`
+        );
+
         result.value.forEach((item) => {
           const timestamp =
             item.timestamp || item.time || new Date().toISOString();
@@ -168,22 +263,47 @@ export const getAllStreamData = async (
 
           const dataPoint = dataByTimestamp.get(timestamp);
 
-          // Map topic to the correct field
-          if (topic === "temp") {
-            dataPoint.temperature = Number(item.value || item.temperature || 0);
-          } else if (topic === "moisture") {
-            dataPoint.moisture = Number(item.value || item.moisture || 0);
-          } else if (topic === "humidity") {
-            dataPoint.humidity = Number(item.value || item.humidity || 0);
-          } else if (topic === "battery") {
-            dataPoint.battery = Number(item.value || item.battery || 0);
-          } else if (topic === "light") {
-            dataPoint.light = Number(item.value || item.light || 0);
+          // Parse payload if it's a JSON string (ProtoNest returns payload as string)
+          let parsedData = item;
+          if (item.payload && typeof item.payload === "string") {
+            try {
+              parsedData = JSON.parse(item.payload);
+            } catch (e) {
+              console.warn(
+                `⚠️ Failed to parse payload for ${topicName}:`,
+                item.payload
+              );
+              parsedData = item;
+            }
+          } else if (item.payload && typeof item.payload === "object") {
+            parsedData = item.payload;
+          }
+
+          // Map topic to the correct field using label
+          if (label === "temperature" || topicName === "temp") {
+            dataPoint.temperature = Number(
+              parsedData.temp || parsedData.temperature || item.value || 0
+            );
+            console.log(
+              `  📊 [${timestamp}] temperature: ${dataPoint.temperature}`
+            );
+          } else if (label === "moisture") {
+            dataPoint.moisture = Number(parsedData.moisture || item.value || 0);
+            console.log(`  📊 [${timestamp}] moisture: ${dataPoint.moisture}`);
+          } else if (label === "humidity") {
+            dataPoint.humidity = Number(parsedData.humidity || item.value || 0);
+            console.log(`  📊 [${timestamp}] humidity: ${dataPoint.humidity}`);
+          } else if (label === "battery") {
+            dataPoint.battery = Number(parsedData.battery || item.value || 0);
+            console.log(`  📊 [${timestamp}] battery: ${dataPoint.battery}`);
+          } else if (label === "light") {
+            dataPoint.light = Number(parsedData.light || item.value || 0);
+            console.log(`  📊 [${timestamp}] light: ${dataPoint.light}`);
           }
         });
       } else if (result.status === "rejected") {
         console.warn(
-          `⚠️ Failed to fetch ${topic} data:`,
+          `⚠️ [HTTP] Failed to fetch ${topicName} data:`,
           result.reason?.message
         );
       }
@@ -194,12 +314,48 @@ export const getAllStreamData = async (
       (a, b) => new Date(a.timestamp) - new Date(b.timestamp)
     );
 
+    // Fill in missing values with last known values to create continuous lines
+    const lastKnownValues = {
+      moisture: null,
+      temperature: null,
+      humidity: null,
+      light: null,
+      battery: null,
+    };
+
+    chartData.forEach((dataPoint) => {
+      // For each sensor, if current value is null, use last known value
+      // Otherwise, update last known value
+      Object.keys(lastKnownValues).forEach((key) => {
+        if (
+          dataPoint[key] !== null &&
+          dataPoint[key] !== undefined &&
+          dataPoint[key] !== 0
+        ) {
+          lastKnownValues[key] = dataPoint[key];
+        } else if (lastKnownValues[key] !== null) {
+          dataPoint[key] = lastKnownValues[key];
+        }
+      });
+    });
+
     if (chartData.length > 0) {
-      console.log(`✅ Historical data: ${chartData.length} data points`);
+      console.log(
+        `✅ [HTTP] Historical data: ${chartData.length} data points combined`
+      );
+      console.log(
+        `📅 [HTTP] Time range: ${chartData[0].time} to ${
+          chartData[chartData.length - 1].time
+        }`
+      );
+      console.log(
+        `📊 [HTTP] Latest data point:`,
+        chartData[chartData.length - 1]
+      );
     }
     return chartData;
   } catch (error) {
-    console.error("❌ Error fetching all stream data:", error);
+    console.error("❌ [HTTP] Error fetching all stream data:", error);
     throw error;
   }
 };
