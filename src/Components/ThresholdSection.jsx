@@ -2,9 +2,8 @@ import React from 'react';
 import { XCircle } from 'lucide-react';
 import ThresholdInput from './ThresholdInput';
 
-/**
- * Reusable section component for min/max threshold settings
- */
+//Reusable section component for min/max threshold settings
+
 const ThresholdSection = ({ 
   title,
   minConfig,
