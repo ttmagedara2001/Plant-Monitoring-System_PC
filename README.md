@@ -137,7 +137,7 @@ Color-coded status indicators for all sensors:
 ```
 ┌──────────────┐    MQTT Publish     ┌──────────────┐
 │  IoT Device  │ ─────────────────→  │   Backend    │
-│  (ESP32)     │                     │ MQTT Broker  │
+│  (MQTTX)     │                     │ MQTT Broker  │
 └──────────────┘                     └──────┬───────┘
        ↑                                    │
        │                                    │ WebSocket
