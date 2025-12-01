@@ -402,14 +402,15 @@ export const getHistoricalData = async (deviceId) => {
   Required: deviceId, topic, payload (as nested object with key-value pairs)
   Example: { deviceId: "device0000", topic: "temp5/new", payload: { humidity: 100 } }
  */
-export const updateDeviceState = async (deviceId, topic) => {
+export const updateDeviceState = async (deviceId, topic, payload = {}) => {
   try {
-    console.log("Updating device state:", { deviceId, topic });
+    console.log("Updating device state:", { deviceId, topic, payload });
 
     // Build request body according to API documentation
     const requestBody = {
       deviceId: deviceId,
       topic: topic,
+      payload: payload,
     };
 
     console.log(
@@ -461,13 +462,35 @@ export const updateDeviceState = async (deviceId, topic) => {
 };
 
 /**
- * Helper function for updating pump status
+ * Helper function for updating pump status via HTTP API
+ * The backend will receive this and forward to MQTT broker
  * @param {string} deviceId - Device ID
  * @param {string} status - Pump status ('ON' or 'OFF')
- * @param {string} topic - Topic to update (default: 'pump/status')
+ * @param {string} topic - Topic to update (default: 'pump')
+ * @param {string} mode - Control mode ('auto' or 'manual', default: 'auto')
  */
-export const updatePumpStatus = async (deviceId, status, topic = "pump") => {
-  return updateDeviceState(deviceId, topic, { pumpStatus: status });
+export const updatePumpStatus = async (
+  deviceId,
+  status,
+  topic = "pump",
+  mode = "auto"
+) => {
+  // Convert status to lowercase for MQTT compatibility
+  const pumpValue = status.toLowerCase(); // "ON" -> "on", "OFF" -> "off"
+
+  console.log(`📤 Sending pump command via HTTP API:`, {
+    deviceId,
+    topic,
+    pump: pumpValue,
+    mode: mode,
+  });
+
+  // Send to HTTP API with MQTT-compatible payload
+  // Backend should forward this to: protonest/<deviceId>/state/<topic>
+  return updateDeviceState(deviceId, topic, {
+    pump: pumpValue, // "on" or "off"
+    mode: mode, // "auto" (automation triggered) or "manual" (user button)
+  });
 };
 
 // Note: Device settings (thresholds) are managed in frontend localStorage only
