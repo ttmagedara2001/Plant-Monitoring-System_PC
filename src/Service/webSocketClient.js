@@ -1,21 +1,36 @@
 import { Client } from "@stomp/stompjs";
 
-// ✅ Replace with your valid JWT token
-const jwtToken =
-  "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJyYXRuYWFiaW5heWFuc25AZ21haWwuY29tIiwiZW1haWwiOiJyYXRuYWFiaW5heWFuc25AZ21haWwuY29tIiwiaWF0IjoxNzY0MzIwMTk1LCJleHAiOjE3NjQ0MTAxOTV9.LK5nZrAn2y3fzmVNFomm373NQKKa4FHB5c8Z51x27M8";
+// Get JWT token from localStorage (set by login process)
+const getJwtToken = () => {
+  const token = localStorage.getItem("jwtToken");
+  if (!token) {
+    console.warn("⚠️ No JWT token found in localStorage. Please login first.");
+  }
+  return token;
+};
 
-// ✅ Replace with your deviceId
-const deviceId = "device9988";
+// Initialize WebSocket connection
+const initializeWebSocket = () => {
+  const jwtToken = getJwtToken();
+  if (!jwtToken) {
+    console.error("❌ Cannot initialize WebSocket: No JWT token available");
+    return null;
+  }
 
-// ✅ Encode the token for safe URL usage
-const encodedToken = encodeURIComponent(jwtToken);
+  // ✅ Encode the token for safe URL usage
+  const encodedToken = encodeURIComponent(jwtToken);
 
-// ✅ Pass the JWT as a query parameter
-// const wsUrl = `ws://localhost:8091/ws?token=${encodedToken}`;
-const wsUrl = `wss://api.protonestconnect.co/ws?token=${encodedToken}`;
-// const wsUrl = `wss://protonest-connect-general-app.yellowsea-5dc9141a.westeurope.azurecontainerapps.io/ws?token=${encodedToken}`;
-//
-console.log("🔌 Connecting to:", wsUrl);
+  // ✅ Pass the JWT as a query parameter
+  // const wsUrl = `ws://localhost:8091/ws?token=${encodedToken}`;
+  const wsUrl = `wss://api.protonestconnect.co/ws?token=${encodedToken}`;
+  // const wsUrl = `wss://protonest-connect-general-app.yellowsea-5dc9141a.westeurope.azurecontainerapps.io/ws?token=${encodedToken}`;
+
+  console.log("🔌 Connecting to:", wsUrl.replace(encodedToken, "***TOKEN***"));
+
+  return wsUrl;
+};
+
+const wsUrl = initializeWebSocket();
 
 const client = new Client({
   brokerURL: wsUrl, // 👈 JWT now passed in the URL
@@ -60,11 +75,12 @@ client.activate();
 class WebSocketClient {
   constructor() {
     this.client = client;
-    this.currentDeviceId = deviceId;
+    this.currentDeviceId = null;
     this.subscriptions = new Map();
     this.dataCallback = null;
     this.connectCallback = null;
     this.disconnectCallback = null;
+    this.isReady = false;
 
     // Setup the wrapper to intercept STOMP client's onConnect
     this._setupConnectionHandlers();
@@ -75,121 +91,16 @@ class WebSocketClient {
    * This replaces the original onConnect to add callback support
    */
   _setupConnectionHandlers() {
-    const originalOnConnect = client.onConnect;
     const self = this;
 
     client.onConnect = (frame) => {
-      console.log("✅ Connected:", frame);
+      console.log("✅ WebSocket Connected:", frame);
+      self.isReady = true;
 
-      // Subscribe to stream topic ONCE - all sensor data comes through this topic
-      const streamTopic = `/topic/stream/${deviceId}`;
-      client.subscribe(streamTopic, (message) => {
-        const data = JSON.parse(message.body);
-        console.log(`📡 Received stream data:`, data);
-
-        // Detect sensor type from message payload and call Dashboard callback
-        if (self.dataCallback) {
-          // Message structure: {payload: {temp: "55"}, topic: "temp", timestamp: "..."}
-          // Extract the actual sensor data from the nested payload
-          const payload = data.payload || data;
-          const topic = data.topic;
-
-          const sensorMap = {
-            temp: "temp",
-            temperature: "temp",
-            humidity: "humidity",
-            moisture: "moisture",
-            light: "light",
-            battery: "battery",
-          };
-
-          let found = false;
-
-          // First, try to use the topic field if it exists and matches a sensor type
-          if (topic && payload[topic] !== undefined) {
-            const sensorType = sensorMap[topic] || topic;
-            console.log(
-              `🎯 Calling Dashboard callback: ${sensorType} = ${payload[topic]}`
-            );
-            self.dataCallback({
-              sensorType: sensorType,
-              value: payload[topic],
-              timestamp: data.timestamp || new Date().toISOString(),
-            });
-            found = true;
-          } else {
-            // Fallback: Check all possible sensor fields in payload
-            for (const [key, sensorType] of Object.entries(sensorMap)) {
-              if (payload[key] !== undefined) {
-                console.log(
-                  `🎯 Calling Dashboard callback: ${sensorType} = ${payload[key]}`
-                );
-                self.dataCallback({
-                  sensorType: sensorType,
-                  value: payload[key],
-                  timestamp: data.timestamp || new Date().toISOString(),
-                });
-                found = true;
-              }
-            }
-          }
-
-          if (!found) {
-            console.warn(`⚠️ No recognized sensor field in message:`, data);
-          }
-        } else {
-          console.warn(
-            `⚠️ No callback registered yet - data will be lost:`,
-            data
-          );
-        }
-      });
-      console.log(`🔔 Subscribed to ${streamTopic}`);
-
-      // Subscribe to pump state topic
-      const stateTopic = `/topic/state/${deviceId}`;
-      client.subscribe(stateTopic, (message) => {
-        const data = JSON.parse(message.body);
-        console.log("🔧 Pump state received:", data);
-
-        // Extract payload (handle nested structure like sensor data)
-        const payload = data.payload || data;
-
-        // Call Dashboard callback for pump status
-        if (self.dataCallback) {
-          // Check for power/status in payload
-          const powerValue =
-            payload.power || payload.status || payload.pumpStatus;
-          if (powerValue !== undefined) {
-            // Normalize to uppercase: "on" -> "ON", "off" -> "OFF"
-            const normalizedPower = String(powerValue).toUpperCase();
-            console.log(
-              `🎯 Calling Dashboard callback: pumpStatus = ${normalizedPower}`
-            );
-            self.dataCallback({
-              sensorType: "pumpStatus",
-              value: normalizedPower,
-              timestamp: data.timestamp || new Date().toISOString(),
-            });
-          }
-
-          // Check for mode in payload
-          const modeValue = payload.mode || payload.pumpMode;
-          if (modeValue !== undefined) {
-            // Normalize mode to lowercase: "MANUAL" -> "manual"
-            const normalizedMode = String(modeValue).toLowerCase();
-            console.log(
-              `🎯 Calling Dashboard callback: pumpMode = ${normalizedMode}`
-            );
-            self.dataCallback({
-              sensorType: "pumpMode",
-              value: normalizedMode,
-              timestamp: data.timestamp || new Date().toISOString(),
-            });
-          }
-        }
-      });
-      console.log(`🔔 Subscribed to ${stateTopic}`);
+      // If we have a device already set, subscribe to it
+      if (self.currentDeviceId) {
+        self._subscribeToDeviceTopics(self.currentDeviceId);
+      }
 
       // Call user's connect callback
       if (self.connectCallback) {
@@ -207,6 +118,149 @@ class WebSocketClient {
   }
 
   /**
+   * Subscribe to device topics dynamically
+   * @param {string} deviceId - Device ID to subscribe to
+   */
+  _subscribeToDeviceTopics(deviceId) {
+    const self = this;
+
+    // Subscribe to stream topic - all sensor data comes through this topic
+    const streamTopic = `/topic/stream/${deviceId}`;
+    const streamSub = this.client.subscribe(streamTopic, (message) => {
+      const data = JSON.parse(message.body);
+      console.log(`📡 [${deviceId}] Received stream data:`, data);
+
+      // Detect sensor type from message payload and call Dashboard callback
+      if (self.dataCallback) {
+        // Message structure: {payload: {temp: "55"}, topic: "temp", timestamp: "..."}
+        const payload = data.payload || data;
+        const topic = data.topic;
+
+        const sensorMap = {
+          temp: "temp",
+          temperature: "temp",
+          humidity: "humidity",
+          moisture: "moisture",
+          light: "light",
+          battery: "battery",
+        };
+
+        let found = false;
+
+        // First, try to use the topic field if it exists and matches a sensor type
+        if (topic && payload[topic] !== undefined) {
+          const sensorType = sensorMap[topic] || topic;
+          console.log(
+            `🎯 [${deviceId}] Calling Dashboard callback: ${sensorType} = ${payload[topic]}`
+          );
+          self.dataCallback({
+            sensorType: sensorType,
+            value: payload[topic],
+            timestamp: data.timestamp || new Date().toISOString(),
+          });
+          found = true;
+        } else {
+          // Fallback: Check all possible sensor fields in payload
+          for (const [key, sensorType] of Object.entries(sensorMap)) {
+            if (payload[key] !== undefined) {
+              console.log(
+                `🎯 [${deviceId}] Calling Dashboard callback: ${sensorType} = ${payload[key]}`
+              );
+              self.dataCallback({
+                sensorType: sensorType,
+                value: payload[key],
+                timestamp: data.timestamp || new Date().toISOString(),
+              });
+              found = true;
+            }
+          }
+        }
+
+        if (!found) {
+          console.warn(
+            `⚠️ [${deviceId}] No recognized sensor field in message:`,
+            data
+          );
+        }
+      } else {
+        console.warn(
+          `⚠️ [${deviceId}] No callback registered yet - data will be lost:`,
+          data
+        );
+      }
+    });
+    this.subscriptions.set(`stream-${deviceId}`, streamSub);
+    console.log(`🔔 Subscribed to ${streamTopic}`);
+
+    // Subscribe to pump state topic
+    const stateTopic = `/topic/state/${deviceId}`;
+    const stateSub = this.client.subscribe(stateTopic, (message) => {
+      const data = JSON.parse(message.body);
+      console.log(`🔧 [${deviceId}] Pump state received:`, data);
+
+      // Extract payload (handle nested structure like sensor data)
+      const payload = data.payload || data;
+
+      // Call Dashboard callback for pump status
+      if (self.dataCallback) {
+        // Check for power/status in payload
+        const powerValue =
+          payload.power || payload.status || payload.pumpStatus;
+        if (powerValue !== undefined) {
+          // Normalize to uppercase: "on" -> "ON", "off" -> "OFF"
+          const normalizedPower = String(powerValue).toUpperCase();
+          console.log(
+            `🎯 [${deviceId}] Calling Dashboard callback: pumpStatus = ${normalizedPower}`
+          );
+          self.dataCallback({
+            sensorType: "pumpStatus",
+            value: normalizedPower,
+            timestamp: data.timestamp || new Date().toISOString(),
+          });
+        }
+
+        // Check for mode in payload
+        const modeValue = payload.mode || payload.pumpMode;
+        if (modeValue !== undefined) {
+          // Normalize mode to lowercase: "MANUAL" -> "manual"
+          const normalizedMode = String(modeValue).toLowerCase();
+          console.log(
+            `🎯 [${deviceId}] Calling Dashboard callback: pumpMode = ${normalizedMode}`
+          );
+          self.dataCallback({
+            sensorType: "pumpMode",
+            value: normalizedMode,
+            timestamp: data.timestamp || new Date().toISOString(),
+          });
+        }
+      }
+    });
+    this.subscriptions.set(`state-${deviceId}`, stateSub);
+    console.log(`🔔 Subscribed to ${stateTopic}`);
+  }
+
+  /**
+   * Unsubscribe from device topics
+   * @param {string} deviceId - Device ID to unsubscribe from
+   */
+  _unsubscribeFromDeviceTopics(deviceId) {
+    const streamKey = `stream-${deviceId}`;
+    const stateKey = `state-${deviceId}`;
+
+    if (this.subscriptions.has(streamKey)) {
+      this.subscriptions.get(streamKey).unsubscribe();
+      this.subscriptions.delete(streamKey);
+      console.log(`🔕 Unsubscribed from /topic/stream/${deviceId}`);
+    }
+
+    if (this.subscriptions.has(stateKey)) {
+      this.subscriptions.get(stateKey).unsubscribe();
+      this.subscriptions.delete(stateKey);
+      console.log(`🔕 Unsubscribed from /topic/state/${deviceId}`);
+    }
+  }
+
+  /**
    * Connect to WebSocket (already connected above, but provides interface compatibility)
    * @param {string} token - JWT token (uses constant token above)
    */
@@ -217,12 +271,34 @@ class WebSocketClient {
 
   /**
    * Subscribe to device topics with callback
-   * @param {string} deviceIdParam - Device ID (uses constant deviceId above)
+   * @param {string} deviceIdParam - Device ID to subscribe to
    * @param {Function} callback - Data handler callback
    */
   subscribeToDevice(deviceIdParam, callback) {
+    // If switching to a different device, unsubscribe from old one
+    if (this.currentDeviceId && this.currentDeviceId !== deviceIdParam) {
+      console.log(
+        `[WebSocketClient] 🔄 Switching from ${this.currentDeviceId} to ${deviceIdParam}`
+      );
+      this._unsubscribeFromDeviceTopics(this.currentDeviceId);
+    }
+
+    // Update current device and callback
+    this.currentDeviceId = deviceIdParam;
     this.dataCallback = callback;
-    console.log(`[WebSocketClient] Callback registered for data handling`);
+    console.log(
+      `[WebSocketClient] Callback registered for device: ${deviceIdParam}`
+    );
+
+    // Subscribe to new device if connection is ready
+    if (this.isReady && this.isConnected) {
+      this._subscribeToDeviceTopics(deviceIdParam);
+    } else {
+      console.log(
+        `[WebSocketClient] Will subscribe to ${deviceIdParam} when connection is ready`
+      );
+    }
+
     return true;
   }
 
@@ -301,7 +377,11 @@ class WebSocketClient {
     if (typeof window === "undefined") return;
 
     window.sendPumpCommand = (power, mode = null) => {
-      return this.sendPumpCommand(deviceId, power, mode);
+      if (!this.currentDeviceId) {
+        console.error("❌ No device selected. Subscribe to a device first.");
+        return false;
+      }
+      return this.sendPumpCommand(this.currentDeviceId, power, mode);
     };
 
     window.simulateSensorData = (sensorType, value) => {
@@ -310,7 +390,12 @@ class WebSocketClient {
         return false;
       }
 
-      const destination = `protonest/${deviceId}/stream/${sensorType}`;
+      if (!this.currentDeviceId) {
+        console.error("❌ No device selected. Subscribe to a device first.");
+        return false;
+      }
+
+      const destination = `protonest/${this.currentDeviceId}/stream/${sensorType}`;
       const payload = { [sensorType]: String(value) };
 
       try {
@@ -329,7 +414,11 @@ class WebSocketClient {
     window.wsInfo = () => {
       console.log("📊 WebSocket Info:");
       console.log("   Connected:", this.isConnected);
-      console.log("   Device ID:", deviceId);
+      console.log("   Current Device:", this.currentDeviceId || "None");
+      console.log(
+        "   Active Subscriptions:",
+        Array.from(this.subscriptions.keys())
+      );
     };
 
     console.log("");
