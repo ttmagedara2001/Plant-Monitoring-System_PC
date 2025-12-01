@@ -35,9 +35,14 @@ const Dashboard = () => {
   
   // HTTP API for historical data visualization
   const [historicalData, setHistoricalData] = useState([]);
+  const [filteredData, setFilteredData] = useState([]); // Data after time range and interval filtering
   const [isLoadingChart, setIsLoadingChart] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [dataFetchError, setDataFetchError] = useState(null);
+  
+  // Time frame selection for historical chart
+  const [timeRange, setTimeRange] = useState('1h'); // '5m', '15m', '1h', '6h', '24h'
+  const [dataInterval, setDataInterval] = useState('auto'); // 'auto', '1s', '5s', '1m', '5m', '1h'
   
   // Settings & Control States (Frontend only - no backend API)
   const [settings, setSettings] = useState(() => {
@@ -59,6 +64,100 @@ const Dashboard = () => {
   const [alertMessage, setAlertMessage] = useState(null);
   const [commandStatus, setCommandStatus] = useState(null); 
   const [commandInProgress, setCommandInProgress] = useState(null);
+
+  // Helper function to filter and downsample data based on time range and interval
+  const filterDataByTimeframe = (data, range, interval) => {
+    if (!data || data.length === 0) return [];
+
+    // Calculate time range in milliseconds
+    const now = new Date();
+    
+    // Handle custom ranges (format: custom_<milliseconds>)
+    let rangeMs;
+    if (range.startsWith('custom_')) {
+      rangeMs = parseInt(range.replace('custom_', ''));
+    } else {
+      rangeMs = {
+        '1m': 1 * 60 * 1000,
+        '5m': 5 * 60 * 1000,
+        '15m': 15 * 60 * 1000,
+        '1h': 60 * 60 * 1000,
+        '6h': 6 * 60 * 60 * 1000,
+        '24h': 24 * 60 * 60 * 1000
+      }[range] || 60 * 60 * 1000;
+    }
+
+    const cutoffTime = now.getTime() - rangeMs;
+
+    // Filter data by time range
+    let filtered = data.filter(record => {
+      const recordTime = new Date(record.timestamp).getTime();
+      return recordTime >= cutoffTime;
+    });
+
+    // Group by interval if not 'auto' - show readings at exact interval points
+    if (interval !== 'auto' && filtered.length > 0) {
+      let intervalMs;
+      
+      // Handle custom intervals (format: custom_interval_<milliseconds>)
+      if (interval.startsWith('custom_interval_')) {
+        intervalMs = parseInt(interval.replace('custom_interval_', ''));
+      } else {
+        intervalMs = {
+          '1s': 1000,
+          '5s': 5000,
+          '1m': 60000,
+          '5m': 5 * 60000,
+          '1h': 60 * 60000
+        }[interval] || 0;
+      }
+
+      if (intervalMs > 0) {
+        // Group data into interval buckets and get one reading per interval
+        const intervalBuckets = new Map();
+        
+        filtered.forEach(record => {
+          const recordTime = new Date(record.timestamp).getTime();
+          // Calculate which interval bucket this record belongs to
+          const bucketKey = Math.floor(recordTime / intervalMs) * intervalMs;
+          
+          // Store the closest record to the bucket start time
+          if (!intervalBuckets.has(bucketKey)) {
+            intervalBuckets.set(bucketKey, record);
+          } else {
+            const existing = intervalBuckets.get(bucketKey);
+            const existingTime = new Date(existing.timestamp).getTime();
+            // Keep the record closest to the interval boundary
+            if (Math.abs(recordTime - bucketKey) < Math.abs(existingTime - bucketKey)) {
+              intervalBuckets.set(bucketKey, record);
+            }
+          }
+        });
+
+        // Convert back to array and sort by time
+        filtered = Array.from(intervalBuckets.values()).sort((a, b) => 
+          new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+        );
+      }
+    }
+
+    // Update time format based on interval - show seconds for granular intervals
+    const shouldShowSeconds = interval === '1s' || interval === '5s' || 
+                             (interval.startsWith('custom_interval_') && 
+                              parseInt(interval.replace('custom_interval_', '')) < 60000);
+    
+    // Format time field for display
+    filtered = filtered.map(record => ({
+      ...record,
+      time: new Date(record.timestamp).toLocaleTimeString([], 
+        shouldShowSeconds 
+          ? { hour: '2-digit', minute: '2-digit', second: '2-digit' }
+          : { hour: '2-digit', minute: '2-digit' }
+      )
+    }));
+
+    return filtered;
+  };
 
   // Fetch historical data from HTTP API when device changes
   useEffect(() => {
@@ -103,7 +202,7 @@ const Dashboard = () => {
     }, 30000); // 30 seconds
 
     return () => clearInterval(refreshInterval);
-  }, [deviceId, jwtToken]);
+  }, [deviceId, jwtToken, timeRange]);
 
   // Load settings when device changes
   useEffect(() => {
@@ -362,25 +461,44 @@ const Dashboard = () => {
   }, [liveData?.moisture, liveData?.pumpStatus, settings.moistureMin, settings.moistureMax, settings.autoMode, deviceId]);
   
   // Data Export Function - Export from HTTP API historical data only
-  const handleExportCSV = async () => {
+  const handleExportCSV = async (selectedSensors = null) => {
     setIsExporting(true);
     try {
-      if (historicalData.length === 0) {
-        alert("No historical data available to export. Please wait for data to accumulate.");
+      // Use filtered data if available, otherwise fall back to all historical data
+      const dataToExport = filteredData.length > 0 ? filteredData : historicalData;
+      
+      if (dataToExport.length === 0) {
+        alert("No data available to export. Please wait for data to accumulate.");
         return;
       }
-      const dataToExport = historicalData;
-      const headers = ["time", "moisture", "temperature", "humidity", "light", "battery"].join(','); 
-      const rows = dataToExport.map(d => 
-        `${d.time},${d.moisture ?? ''},${d.temperature ?? ''},${d.humidity ?? ''},${d.light ?? ''},${d.battery ?? ''}`
-      ).join('\n');
+      
+      // If selectedSensors is provided, filter columns; otherwise export all
+      const allSensors = ["moisture", "temperature", "humidity", "light", "battery"];
+      const sensorsToExport = selectedSensors && selectedSensors.length > 0 
+        ? selectedSensors.filter(s => allSensors.includes(s))
+        : allSensors;
+      
+      // Build headers dynamically based on selected sensors
+      const headers = ["time", ...sensorsToExport].join(',');
+      
+      // Build rows with only selected sensor data
+      const rows = dataToExport.map(d => {
+        const rowData = [d.time];
+        sensorsToExport.forEach(sensor => {
+          rowData.push(d[sensor] ?? '');
+        });
+        return rowData.join(',');
+      }).join('\n');
       
       const csvContent = `${headers}\n${rows}`;
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `agricop_${deviceId}_report.csv`;
+      const exportType = selectedSensors ? 'selected' : 'all';
+      const timeRangeLabel = timeRange.replace('custom_', 'custom-');
+      const intervalLabel = dataInterval === 'auto' ? 'auto' : dataInterval.replace('custom_interval_', 'interval-');
+      link.download = `agricop_${deviceId}_${exportType}_${timeRangeLabel}_${intervalLabel}_report.csv`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -409,6 +527,32 @@ const Dashboard = () => {
     }
   };
   
+  // Handle time range change
+  const handleTimeRangeChange = (newRange) => {
+    console.log(`📊 Changing time range to: ${newRange}`);
+    setTimeRange(newRange);
+    
+    // Auto-adjust interval based on time range for optimal display
+    if (newRange === '1m') {
+      setDataInterval('1s');
+    } else if (newRange === '5m') {
+      setDataInterval('1s');
+    } else if (newRange === '15m') {
+      setDataInterval('5s');
+    } else if (newRange === '1h') {
+      setDataInterval('auto');
+    } else if (newRange === '6h') {
+      setDataInterval('1m');
+    } else if (newRange === '24h') {
+      setDataInterval('5m');
+    }
+  };
+
+  const handleDataIntervalChange = (newInterval) => {
+    console.log(`📊 Changing data interval to: ${newInterval}`);
+    setDataInterval(newInterval);
+  };
+
   const togglePump = async () => {
     setCommandInProgress('pump');
     const currentStatus = liveData?.pumpStatus === 'ON';
@@ -554,6 +698,12 @@ const Dashboard = () => {
             isExporting={isExporting}
             dataSource="HTTP API"
             error={dataFetchError}
+            timeRange={timeRange}
+            dataInterval={dataInterval}
+            onTimeRangeChange={handleTimeRangeChange}
+            onDataIntervalChange={handleDataIntervalChange}
+            allData={historicalData}
+            onFilteredDataChange={setFilteredData}
         />
 
         {/* Settings Panel */}
