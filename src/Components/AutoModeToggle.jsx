@@ -1,8 +1,6 @@
 import React from 'react';
 
-/**
- * Reusable toggle switch component for auto mode
- */
+// Reusable toggle switch component for auto mode
 const AutoModeToggle = ({ 
   enabled,
   onToggle,
