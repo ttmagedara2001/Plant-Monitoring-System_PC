@@ -36,7 +36,7 @@ api.interceptors.request.use(
       url: config.url,
       baseURL: config.baseURL,
       hasToken: !!token && token !== "MOCK_TOKEN_FOR_TESTING",
-      payload: config.data ? JSON.parse(config.data) : undefined,
+      payload: config.data || undefined,
     });
 
     return config;
