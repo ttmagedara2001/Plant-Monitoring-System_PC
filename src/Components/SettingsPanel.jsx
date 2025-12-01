@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Settings, Power, Loader2, AlertTriangle, Info, Save } from 'lucide-react';
+
 import SensorStatusIndicator from './SensorStatusIndicator';
 import ThresholdSection from './ThresholdSection';
 import CommandStatusMessage from './CommandStatusMessage';

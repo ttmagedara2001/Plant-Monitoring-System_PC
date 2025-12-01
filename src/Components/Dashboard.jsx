@@ -13,14 +13,13 @@ import HistoricalChart from './HistoricalChartTest';
 
 const Dashboard = () => {
   const { deviceId: paramDeviceId } = useParams();
-  // TODO: Change this to your actual device ID that belongs to your user account
-  // Check your Protonest dashboard for your device list
-  const defaultDeviceId = 'device0011233';
+  //Change this to your actual device ID that belongs to your user account
+  const defaultDeviceId = 'device0011233'; //'device9988'
   const deviceId = paramDeviceId || defaultDeviceId;
   
   const { jwtToken } = useAuth(); 
 
-  // WebSocket states
+  // WebSocket states: default values
   const [liveData, setLiveData] = useState({
     moisture: 0,
     temperature: 0,
@@ -40,9 +39,9 @@ const Dashboard = () => {
   const [isExporting, setIsExporting] = useState(false);
   const [dataFetchError, setDataFetchError] = useState(null);
   
-  // Time frame selection for historical chart
-  const [timeRange, setTimeRange] = useState('1h'); // '5m', '15m', '1h', '6h', '24h'
-  const [dataInterval, setDataInterval] = useState('auto'); // 'auto', '1s', '5s', '1m', '5m', '1h'
+  // Time frame selection for historical chart: default to 1 hour
+  const [timeRange, setTimeRange] = useState('1h'); 
+  const [dataInterval, setDataInterval] = useState('auto'); 
   
   // Settings & Control States (Frontend only - no backend API)
   const [settings, setSettings] = useState(() => {
@@ -58,7 +57,7 @@ const Dashboard = () => {
       lightMin: '200',
       lightMax: '1000',
       batteryMin: '20',
-      autoMode: true  // ✅ Auto pump control ENABLED by default
+      autoMode: true 
     };
   });
   const [alertMessage, setAlertMessage] = useState(null);
@@ -69,10 +68,10 @@ const Dashboard = () => {
   const filterDataByTimeframe = (data, range, interval) => {
     if (!data || data.length === 0) return [];
 
-    // Calculate time range in milliseconds
+    // Calculate time range in ms
     const now = new Date();
     
-    // Handle custom ranges (format: custom_<milliseconds>)
+    // Handle custom ranges (format: custom_<ms>)
     let rangeMs;
     if (range.startsWith('custom_')) {
       rangeMs = parseInt(range.replace('custom_', ''));
@@ -99,7 +98,7 @@ const Dashboard = () => {
     if (interval !== 'auto' && filtered.length > 0) {
       let intervalMs;
       
-      // Handle custom intervals (format: custom_interval_<milliseconds>)
+      // Handle custom intervals (format: custom_interval_<ms>)
       if (interval.startsWith('custom_interval_')) {
         intervalMs = parseInt(interval.replace('custom_interval_', ''));
       } else {
@@ -194,12 +193,12 @@ const Dashboard = () => {
 
     fetchHistoricalData();
     
-    // Refresh historical data every 30 seconds to show newly saved real-time data
+    // Refresh historical data every 30s to show newly saved real-time data
     const refreshInterval = setInterval(() => {
       if (deviceId && jwtToken) {
         fetchHistoricalData();
       }
-    }, 30000); // 30 seconds
+    }, 30000); // 30s
 
     return () => clearInterval(refreshInterval);
   }, [deviceId, jwtToken, timeRange]);
@@ -408,7 +407,7 @@ const Dashboard = () => {
     setAlertMessage(alerts.length > 0 ? alerts[0] : null);
   }, [liveData, settings]);
 
-  // 🤖 AUTOMATION LOGIC - Auto Pump Control based on Moisture Levels
+  // Automation Logic - Auto Pump Control based on Moisture Levels
   useEffect(() => {
     // Only run automation if auto mode is enabled in settings
     if (!settings.autoMode) return;
@@ -427,7 +426,7 @@ const Dashboard = () => {
       pumpStatus: currentPumpStatus
     });
 
-    // RULE 1: Turn pump ON if moisture is too LOW (CRITICAL) and pump is currently OFF
+    // 1: Turn pump ON if moisture is too LOW (CRITICAL) and pump is currently OFF
     if (currentMoisture < minMoisture && currentPumpStatus === "OFF") {
       console.log(`[Automation] 💧 CRITICAL: Moisture ${currentMoisture}% < ${minMoisture}% - Sending HTTP request to turn pump ON`);
       
@@ -443,7 +442,7 @@ const Dashboard = () => {
         });
     }
 
-    // RULE 2: Turn pump OFF if moisture is sufficient and pump is currently ON
+    // 2: Turn pump OFF if moisture is sufficient and pump is currently ON
     if (currentMoisture > maxMoisture && currentPumpStatus === "ON") {
       console.log(`[Automation] 🛑 AUTO STOP: Moisture ${currentMoisture}% > ${maxMoisture}% - Sending HTTP request to turn pump OFF`);
       
@@ -723,3 +722,5 @@ const Dashboard = () => {
 };
 
 export default Dashboard;
+
+// Comments - done 

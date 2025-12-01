@@ -17,7 +17,7 @@ const HistoricalChart = ({
   allData = [],
   onFilteredDataChange
 }) => {
-  // Local state to manage which lines are visible
+  // Local state to manage which lines are visible for all sensors/ if not needed for the default add 'false'
   const [visibleSeries, setVisibleSeries] = useState({
     moisture: true,
     temperature: true,
@@ -35,7 +35,7 @@ const HistoricalChart = ({
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [exportTimeRange, setExportTimeRange] = useState(timeRange);
   const [exportDataInterval, setExportDataInterval] = useState(dataInterval);
-  const [exportSensorSelection, setExportSensorSelection] = useState('all'); // 'all' or 'selected'
+  const [exportSensorSelection, setExportSensorSelection] = useState('all'); // 'all' or 'selected': which sensors to export
 
   // Handle custom range application
   const applyCustomRange = () => {
@@ -44,7 +44,7 @@ const HistoricalChart = ({
       return;
     }
 
-    // Convert to milliseconds
+    // Convert to ms
     const multipliers = {
       seconds: 1000,
       minutes: 60 * 1000,
@@ -107,14 +107,14 @@ const HistoricalChart = ({
       return validIntervals;
     }
     
-    // For preset ranges
+    // For preset ranges : to make sense with the time range chosen
     const validIntervals = {
-      '1m': ['auto', '1s'],                    // 1 minute: only auto and 1s make sense
-      '5m': ['auto', '1s', '5s'],              // 5 minutes: up to 5s
-      '15m': ['auto', '1s', '5s', '1m'],       // 15 minutes: up to 1m
-      '1h': ['auto', '1s', '5s', '1m', '5m'],  // 1 hour: up to 5m
-      '6h': ['auto', '5s', '1m', '5m'],        // 6 hours: 5s to 5m (1s would create too many points)
-      '24h': ['auto', '1m', '5m', '1h']        // 24 hours: 1m to 1h
+      '1m': ['auto', '1s'],                    
+      '5m': ['auto', '1s', '5s'],              
+      '15m': ['auto', '1s', '5s', '1m'],       
+      '1h': ['auto', '1s', '5s', '1m', '5m'],  
+      '6h': ['auto', '5s', '1m', '5m'],        
+      '24h': ['auto', '1m', '5m', '1h']        
     };
     return validIntervals[range] || ['auto'];
   };
@@ -127,7 +127,7 @@ const HistoricalChart = ({
 
     const now = new Date();
     
-    // Handle custom ranges (format: custom_<milliseconds>)
+    // Handle custom ranges (format: custom_<ms>)
     let rangeMs;
     if (timeRange.startsWith('custom_')) {
       rangeMs = parseInt(timeRange.replace('custom_', ''));
@@ -154,7 +154,7 @@ const HistoricalChart = ({
     if (dataInterval !== 'auto' && filtered.length > 0) {
       let intervalMs;
       
-      // Handle custom intervals (format: custom_interval_<milliseconds>)
+      // Handle custom intervals (format: custom_interval_<ms>)
       if (dataInterval.startsWith('custom_interval_')) {
         intervalMs = parseInt(dataInterval.replace('custom_interval_', ''));
       } else {
@@ -633,7 +633,7 @@ const HistoricalChart = ({
                 domain={[0, 'auto']}
             />
             
-            {/* Right Axis specifically for Light (high values) */}
+            {/* Right Axis specifically for Light (high values; eg 800/900 lux) */}
             <YAxis 
                 yAxisId="right" 
                 orientation="right" 
