@@ -1,11 +1,5 @@
 import axios from "axios";
 
-// 🔒 TEMPORARY: Constant JWT token for development/testing
-// TODO: Remove this and use dynamic token from API in production
-const CONSTANT_JWT_TOKEN =
-  "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJyYXRuYWFiaW5heWFuc25AZ21haWwuY29tIiwiZW1haWwiOiJyYXRuYWFiaW5heWFuc25AZ21haWwuY29tIiwiaWF0IjoxNzY0MzIwMTk1LCJleHAiOjE3NjQ0MTAxOTV9.LK5nZrAn2y3fzmVNFomm373NQKKa4FHB5c8Z51x27M8";
-const USE_CONSTANT_TOKEN = true; // Set to false to use dynamic token from API
-
 // Environment-based API URL selection
 const getApiUrl = () => {
   const isDev = import.meta.env.DEV;
@@ -22,16 +16,6 @@ const API_URL = getApiUrl();
 // Authentication and get JWT + refresh token
 export const login = async (email, password) => {
   try {
-    // 🔒 DEVELOPMENT MODE: Return constant token
-    if (USE_CONSTANT_TOKEN) {
-      console.log("🔒 Using constant JWT token (development mode)");
-      return {
-        jwtToken: CONSTANT_JWT_TOKEN,
-        refreshToken: "CONSTANT_REFRESH_TOKEN",
-        userId: email,
-      };
-    }
-
     // Validate input before making request
     if (!email || !password) {
       throw new Error("Email and password are required");
