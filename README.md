@@ -135,8 +135,8 @@ Color-coded status indicators for all sensors:
 ### Communication Flow
 
 ```
-┌──────────────┐    MQTT Publish    ┌──────────────┐
-│  IoT Device  │ ─────────────────→ │   Backend    │
+┌──────────────┐    MQTT Publish     ┌──────────────┐
+│  IoT Device  │ ─────────────────→  │   Backend    │
 │  (ESP32)     │                     │ MQTT Broker  │
 └──────────────┘                     └──────┬───────┘
        ↑                                    │
@@ -144,10 +144,10 @@ Color-coded status indicators for all sensors:
        │ MQTT Subscribe                     │ (Real-time)
        │                                    ↓
        │                             ┌──────────────┐
-       │    ←─── HTTP API ───────── │   Frontend   │
-       │      (Commands)              │  Dashboard   │
+       │    ←─── HTTP API ─────────  │   Frontend   │
+       │      (Commands)             │  Dashboard   │
        └─────────────────────────────│  (React)     │
-         Device Confirmation          └──────────────┘
+         Device Confirmation         └──────────────┘
 ```
 
 ### Data Flows
