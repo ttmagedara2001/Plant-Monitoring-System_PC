@@ -145,42 +145,69 @@ class WebSocketClient {
           battery: "battery",
         };
 
-        let found = false;
+        // Check if this is a batch state update (all sensors in one message)
+        const sensorKeys = Object.keys(sensorMap);
+        const foundSensors = sensorKeys.filter(
+          (key) => payload[key] !== undefined
+        );
 
-        // First, try to use the topic field if it exists and matches a sensor type
-        if (topic && payload[topic] !== undefined) {
-          const sensorType = sensorMap[topic] || topic;
+        if (foundSensors.length > 2) {
+          // This is a complete state update - send all at once
           console.log(
-            `🎯 [${deviceId}] Calling Dashboard callback: ${sensorType} = ${payload[topic]}`
+            `🎯 [${deviceId}] Received BATCH state update with ${foundSensors.length} sensors`
           );
+
+          const stateUpdate = {};
+          foundSensors.forEach((key) => {
+            const sensorType = sensorMap[key];
+            stateUpdate[sensorType] = payload[key];
+            console.log(`   - ${sensorType}: ${payload[key]}`);
+          });
+
           self.dataCallback({
-            sensorType: sensorType,
-            value: payload[topic],
+            sensorType: "batchUpdate",
+            value: stateUpdate,
             timestamp: data.timestamp || new Date().toISOString(),
           });
-          found = true;
         } else {
-          // Fallback: Check all possible sensor fields in payload
-          for (const [key, sensorType] of Object.entries(sensorMap)) {
-            if (payload[key] !== undefined) {
-              console.log(
-                `🎯 [${deviceId}] Calling Dashboard callback: ${sensorType} = ${payload[key]}`
-              );
-              self.dataCallback({
-                sensorType: sensorType,
-                value: payload[key],
-                timestamp: data.timestamp || new Date().toISOString(),
-              });
-              found = true;
+          // Single sensor update (original logic)
+          let found = false;
+
+          // First, try to use the topic field if it exists and matches a sensor type
+          if (topic && payload[topic] !== undefined) {
+            const sensorType = sensorMap[topic] || topic;
+            console.log(
+              `🎯 [${deviceId}] Calling Dashboard callback: ${sensorType} = ${payload[topic]}`
+            );
+            self.dataCallback({
+              sensorType: sensorType,
+              value: payload[topic],
+              timestamp: data.timestamp || new Date().toISOString(),
+            });
+            found = true;
+          } else {
+            // Fallback: Check all possible sensor fields in payload
+            for (const [key, sensorType] of Object.entries(sensorMap)) {
+              if (payload[key] !== undefined) {
+                console.log(
+                  `🎯 [${deviceId}] Calling Dashboard callback: ${sensorType} = ${payload[key]}`
+                );
+                self.dataCallback({
+                  sensorType: sensorType,
+                  value: payload[key],
+                  timestamp: data.timestamp || new Date().toISOString(),
+                });
+                found = true;
+              }
             }
           }
-        }
 
-        if (!found) {
-          console.warn(
-            `⚠️ [${deviceId}] No recognized sensor field in message:`,
-            data
-          );
+          if (!found) {
+            console.warn(
+              `⚠️ [${deviceId}] No recognized sensor field in message:`,
+              data
+            );
+          }
         }
       } else {
         console.warn(
