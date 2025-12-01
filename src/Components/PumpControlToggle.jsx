@@ -1,7 +1,7 @@
 import React from 'react';
 import { Power, Loader2 } from 'lucide-react';
 
-// Reusable pump control component with auto/manual mode support
+// Reusable pump control component with auto/manual mode support : Manual control button is disabled in auto mode.
 const PumpControlToggle = ({ 
   pumpStatus,
   pumpMode,

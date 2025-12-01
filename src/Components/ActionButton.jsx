@@ -1,7 +1,7 @@
 import React from 'react';
 import { Loader2 } from 'lucide-react';
 
-//Reusable action button with loading state
+//Reusable action button with loading state: Used to save device settings in the Settings Panel.
 const ActionButton = ({ 
   onClick, 
   disabled, 

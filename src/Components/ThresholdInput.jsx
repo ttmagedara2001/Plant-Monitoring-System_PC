@@ -1,8 +1,7 @@
 import React from 'react';
 
-/**
- * Reusable input component for threshold values with validation
- */
+//Reusable input component for threshold values with validation (9 times for the sensor thresholds in the Settings Panel)
+
 const ThresholdInput = ({ 
   label, 
   value, 

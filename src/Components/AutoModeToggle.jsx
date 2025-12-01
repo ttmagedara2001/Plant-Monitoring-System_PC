@@ -1,6 +1,6 @@
 import React from 'react';
 
-// Reusable toggle switch component for auto mode
+// Reusable toggle switch component for auto mode : Used in the Device Settings Panel for the pump control.
 const AutoModeToggle = ({ 
   enabled,
   onToggle,

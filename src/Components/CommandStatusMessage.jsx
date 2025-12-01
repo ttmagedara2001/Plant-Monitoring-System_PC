@@ -1,7 +1,7 @@
 import React from 'react';
 import { CheckCircle, XCircle } from 'lucide-react';
 
-//Reusable status message component for displaying command results
+//Reusable status message component for displaying command results : Success and error messages after user actions
 const CommandStatusMessage = ({ status }) => {
   if (!status) return null;
 
