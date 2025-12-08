@@ -136,13 +136,13 @@ Payload: {
 The dashboard (through the MQTT/WebSocket bridge) expects pump commands in the following shape:
 
 ```text
-Topic: protonest/device0011233/state/motor/paddy
-Payload: {"status":"ON"}
+Topic: protonest/device0011233/state/pump
+Payload: {"power":"ON"}
 ```
 
 ```text
-Topic: protonest/device0011233/state/motor/paddy
-Payload: {"status":"OFF"}
+Topic: protonest/device0011233/state/pump
+Payload: {"power":"OFF"}
 ```
 
 Recommended:
@@ -154,14 +154,14 @@ If your device reports pump feedback, it should publish:
 
 ```text
 Topic: protonest/device0011233/state/pump
-Payload: {"pumpStatus":"ON","pumpMode":"Optimal"}
+Payload: {"power":"on","mode":"manual"}
 ```
 
 or
 
 ```text
 Topic: protonest/device0011233/state/pump
-Payload: {"pumpStatus":"OFF","pumpMode":"Optimal"}
+Payload: {"power":"off","mode":"auto"}
 ```
 
 ---
