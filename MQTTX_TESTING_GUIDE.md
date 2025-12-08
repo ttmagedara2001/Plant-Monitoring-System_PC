@@ -221,7 +221,7 @@ When you publish the payloads above (and the backend forwards them to the WebSoc
 3. Manually simulate device feedback in MQTTX:
    ```text
    Topic: protonest/device200300/state/pump
-   Payload: {"pumpStatus":"ON","pumpMode":"Optimal"}
+   Payload: {"power":"ON","mode":"manual"}
    ```
 4. Dashboard pump banner should change to **ON**.
 
