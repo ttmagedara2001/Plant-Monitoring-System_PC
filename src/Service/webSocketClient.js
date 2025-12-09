@@ -9,11 +9,10 @@ const getJwtToken = () => {
   return token;
 };
 
-// Initialize WebSocket connection
-const initializeWebSocket = () => {
-  const jwtToken = getJwtToken();
+// Build WebSocket URL with JWT token
+const buildWebSocketUrl = (jwtToken) => {
   if (!jwtToken) {
-    console.error("❌ Cannot initialize WebSocket: No JWT token available");
+    console.error("❌ Cannot build WebSocket URL: No JWT token available");
     return null;
   }
 
@@ -25,48 +24,16 @@ const initializeWebSocket = () => {
   const wsUrl = `wss://api.protonestconnect.co/ws?token=${encodedToken}`;
   // const wsUrl = `wss://protonest-connect-general-app.yellowsea-5dc9141a.westeurope.azurecontainerapps.io/ws?token=${encodedToken}`;
 
-  console.log("🔌 Connecting to:", wsUrl.replace(encodedToken, "***TOKEN***"));
+  console.log(
+    "🔌 WebSocket URL built:",
+    wsUrl.replace(encodedToken, "***TOKEN***")
+  );
 
   return wsUrl;
 };
 
-const wsUrl = initializeWebSocket();
-
-const client = new Client({
-  brokerURL: wsUrl, // 👈 JWT now passed in the URL
-  reconnectDelay: 5000,
-  heartbeatIncoming: 4000,
-  heartbeatOutgoing: 4000,
-
-  // ✅ Called when connection succeeds
-  // NOTE: This is overridden by WebSocketClient wrapper class below
-  onConnect: (frame) => {
-    // Wrapper class will handle subscriptions and callbacks
-    console.log("✅ Connected (will be replaced by wrapper):", frame);
-  },
-
-  // ✅ Called when server sends a STOMP error frame
-  onStompError: (frame) => {
-    console.error("❌ Broker reported error:", frame.headers["message"]);
-    console.error("Details:", frame.body);
-  },
-
-  // ✅ Called if the WebSocket fails before STOMP connects
-  onWebSocketError: (event) => {
-    console.error("🚫 WebSocket error", event);
-  },
-
-  // ✅ Called when the socket closes
-  onWebSocketClose: (event) => {
-    console.warn("🔻 WebSocket closed", event);
-  },
-
-  // Optional: verbose debug logs
-  debug: (msg) => console.log("🪵 Debug:", msg),
-});
-
-// 🚀 Activate the client
-client.activate();
+// Create STOMP client (will be configured when connect() is called)
+let client = null;
 
 /**
  * WebSocket Client Wrapper Class for Dashboard Integration
@@ -74,47 +41,75 @@ client.activate();
  */
 class WebSocketClient {
   constructor() {
-    this.client = client;
+    this.client = null;
     this.currentDeviceId = null;
     this.subscriptions = new Map();
     this.dataCallback = null;
     this.connectCallback = null;
     this.disconnectCallback = null;
     this.isReady = false;
-
-    // Setup the wrapper to intercept STOMP client's onConnect
-    this._setupConnectionHandlers();
+    this.jwtToken = null;
   }
 
   /**
-   * Setup connection handlers to intercept STOMP events
-   * This replaces the original onConnect to add callback support
+   * Initialize STOMP client with JWT token
+   * @param {string} token - JWT token
    */
-  _setupConnectionHandlers() {
-    const self = this;
+  _initializeClient(token) {
+    if (this.client) {
+      console.log("[WebSocketClient] Client already initialized");
+      return;
+    }
 
-    client.onConnect = (frame) => {
-      console.log("✅ WebSocket Connected:", frame);
-      self.isReady = true;
+    const wsUrl = buildWebSocketUrl(token);
+    if (!wsUrl) {
+      throw new Error("Failed to build WebSocket URL - invalid token");
+    }
 
-      // If we have a device already set, subscribe to it
-      if (self.currentDeviceId) {
-        self._subscribeToDeviceTopics(self.currentDeviceId);
-      }
+    this.client = new Client({
+      brokerURL: wsUrl,
+      reconnectDelay: 5000,
+      heartbeatIncoming: 4000,
+      heartbeatOutgoing: 4000,
 
-      // Call user's connect callback
-      if (self.connectCallback) {
-        self.connectCallback();
-      }
-    };
+      onConnect: (frame) => {
+        console.log("✅ WebSocket Connected:", frame);
+        this.isReady = true;
 
-    // Setup disconnect handler
-    client.onWebSocketClose = (event) => {
-      console.warn("🔻 WebSocket closed", event);
-      if (self.disconnectCallback) {
-        self.disconnectCallback();
-      }
-    };
+        // If we have a device already set, subscribe to it
+        if (this.currentDeviceId) {
+          this._subscribeToDeviceTopics(this.currentDeviceId);
+        }
+
+        // Call user's connect callback
+        if (this.connectCallback) {
+          this.connectCallback();
+        }
+      },
+
+      onStompError: (frame) => {
+        console.error("❌ Broker reported error:", frame.headers["message"]);
+        console.error("Details:", frame.body);
+      },
+
+      onWebSocketError: (event) => {
+        console.error("🚫 WebSocket error", event);
+      },
+
+      onWebSocketClose: (event) => {
+        console.warn("🔻 WebSocket closed", event);
+        this.isReady = false;
+        if (this.disconnectCallback) {
+          this.disconnectCallback();
+        }
+      },
+
+      debug: (msg) => console.log("🪵 Debug:", msg),
+    });
+
+    // Activate the client
+    this.client.activate();
+    console.log("[WebSocketClient] STOMP client activated");
   }
 
   /**
@@ -288,11 +283,31 @@ class WebSocketClient {
   }
 
   /**
-   * Connect to WebSocket (already connected above, but provides interface compatibility)
-   * @param {string} token - JWT token (uses constant token above)
+   * Connect to WebSocket (initializes client with token)
+   * @param {string} token - JWT token
    */
   async connect(token) {
-    console.log("[WebSocketClient] Using pre-configured connection");
+    if (!token) {
+      console.error(
+        "[WebSocketClient] ❌ Cannot connect: No JWT token provided"
+      );
+      throw new Error("JWT token required for WebSocket connection");
+    }
+
+    this.jwtToken = token;
+
+    // Initialize client if not already done
+    if (!this.client) {
+      console.log("[WebSocketClient] 🔄 Initializing STOMP client...");
+      this._initializeClient(token);
+    } else if (!this.isConnected) {
+      // Client exists but disconnected - try to reconnect
+      console.log("[WebSocketClient] 🔄 Reconnecting...");
+      this.client.activate();
+    } else {
+      console.log("[WebSocketClient] ✅ Already connected");
+    }
+
     return Promise.resolve();
   }
 
@@ -394,7 +409,20 @@ class WebSocketClient {
    * Disconnect
    */
   disconnect() {
-    console.log("[WebSocketClient] Disconnect called (client persists)");
+    if (this.client && this.isConnected) {
+      console.log("[WebSocketClient] 🔌 Disconnecting...");
+
+      // Unsubscribe from all topics
+      if (this.currentDeviceId) {
+        this._unsubscribeFromDeviceTopics(this.currentDeviceId);
+      }
+
+      // Deactivate client
+      this.client.deactivate();
+      this.isReady = false;
+    } else {
+      console.log("[WebSocketClient] Already disconnected");
+    }
   }
 
   /**

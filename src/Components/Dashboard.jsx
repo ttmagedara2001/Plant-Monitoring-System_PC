@@ -27,7 +27,7 @@ const Dashboard = () => {
     light: 0,
     battery: 0,
     pumpStatus: "OFF",
-    pumpMode: "Optimal",
+    pumpMode: "manual",
   });
   const [isConnected, setIsConnected] = useState(false);
   const [deviceList] = useState(['device9988', 'device0011233', 'device0000', 'device0001', 'device0002']);
@@ -40,8 +40,14 @@ const Dashboard = () => {
   const [dataFetchError, setDataFetchError] = useState(null);
   
   // Time frame selection for historical chart: default to 1 hour
-  const [timeRange, setTimeRange] = useState('1h'); 
-  const [dataInterval, setDataInterval] = useState('auto'); 
+  const [timeRange, setTimeRange] = useState(() => {
+    const saved = localStorage.getItem(`timeRange_${deviceId}`);
+    return saved || '1h';
+  }); 
+  const [dataInterval, setDataInterval] = useState(() => {
+    const saved = localStorage.getItem(`dataInterval_${deviceId}`);
+    return saved || 'auto';
+  }); 
   
   // Settings & Control States (Frontend only - no backend API)
   const [settings, setSettings] = useState(() => {
@@ -57,7 +63,7 @@ const Dashboard = () => {
       lightMin: '200',
       lightMax: '1000',
       batteryMin: '20',
-      autoMode: true 
+      autoMode: false 
     };
   });
   const [alertMessage, setAlertMessage] = useState(null);
@@ -203,8 +209,32 @@ const Dashboard = () => {
     return () => clearInterval(refreshInterval);
   }, [deviceId, jwtToken, timeRange]);
 
-  // Load settings when device changes
+  // Reset all data when device changes
   useEffect(() => {
+    console.log(`[Dashboard] 🔄 Device changed to: ${deviceId} - Resetting all data`);
+    
+    // Reset live data to defaults
+    setLiveData({
+      moisture: 0,
+      temperature: 0,
+      humidity: 0,
+      light: 0,
+      battery: 0,
+      pumpStatus: "OFF",
+      pumpMode: "manual",
+    });
+    
+    // Reset historical data
+    setHistoricalData([]);
+    setFilteredData([]);
+    setDataFetchError(null);
+    
+    // Reset alerts and command status
+    setAlertMessage(null);
+    setCommandStatus(null);
+    setCommandInProgress(null);
+    
+    // Load device-specific settings from localStorage
     const saved = localStorage.getItem(`settings_${deviceId}`);
     if (saved) {
       setSettings(JSON.parse(saved));
@@ -220,14 +250,19 @@ const Dashboard = () => {
         humidityMax: '80',
         lightMin: '200',
         lightMax: '1000',
-        batteryMin: '20'
+        batteryMin: '20',
+        autoMode: false 
       });
     }
+    
+    // Load device-specific time range and interval
+    const savedTimeRange = localStorage.getItem(`timeRange_${deviceId}`);
+    const savedInterval = localStorage.getItem(`dataInterval_${deviceId}`);
+    setTimeRange(savedTimeRange || '1h');
+    setDataInterval(savedInterval || 'auto');
+    
+    console.log(`[Dashboard] ✅ Reset complete for device: ${deviceId}`);
   }, [deviceId]);
-
-  useEffect(() => {
-    console.log("Dashboard mounted. DeviceId:", deviceId, "JWT available:", !!jwtToken);
-  }, [deviceId, jwtToken]);
 
   // WebSocket Connection Management
   useEffect(() => {
@@ -442,15 +477,15 @@ const Dashboard = () => {
         });
     }
 
-    // 2: Turn pump OFF if moisture is sufficient and pump is currently ON
-    if (currentMoisture > maxMoisture && currentPumpStatus === "ON") {
-      console.log(`[Automation] 🛑 AUTO STOP: Moisture ${currentMoisture}% > ${maxMoisture}% - Sending HTTP request to turn pump OFF`);
+    // 2: Turn pump OFF if moisture returns to NORMAL range (>= min) and pump is currently ON
+    if (currentMoisture >= minMoisture && currentPumpStatus === "ON") {
+      console.log(`[Automation] ✅ NORMAL: Moisture ${currentMoisture}% >= ${minMoisture}% - Sending HTTP request to turn pump OFF`);
       
       // Send HTTP API request to backend, which will forward to MQTT
       updatePumpStatus(deviceId, "OFF", "pump")
         .then(() => {
           console.log(`[Automation] ✅ HTTP API request successful - Backend will send MQTT command`);
-          setAlertMessage(`AUTO: Pump deactivation requested - Moisture optimal (${currentMoisture.toFixed(1)}%)`);
+          setAlertMessage(`AUTO: Pump deactivation requested - Moisture restored (${currentMoisture.toFixed(1)}%)`);
         })
         .catch((error) => {
           console.error(`[Automation] ❌ HTTP API request failed:`, error);
@@ -530,26 +565,31 @@ const Dashboard = () => {
   const handleTimeRangeChange = (newRange) => {
     console.log(`📊 Changing time range to: ${newRange}`);
     setTimeRange(newRange);
+    localStorage.setItem(`timeRange_${deviceId}`, newRange);
     
     // Auto-adjust interval based on time range for optimal display
+    let newInterval = 'auto';
     if (newRange === '1m') {
-      setDataInterval('1s');
+      newInterval = '1s';
     } else if (newRange === '5m') {
-      setDataInterval('1s');
+      newInterval = '1s';
     } else if (newRange === '15m') {
-      setDataInterval('5s');
+      newInterval = '5s';
     } else if (newRange === '1h') {
-      setDataInterval('auto');
+      newInterval = 'auto';
     } else if (newRange === '6h') {
-      setDataInterval('1m');
+      newInterval = '1m';
     } else if (newRange === '24h') {
-      setDataInterval('5m');
+      newInterval = '5m';
     }
+    setDataInterval(newInterval);
+    localStorage.setItem(`dataInterval_${deviceId}`, newInterval);
   };
 
   const handleDataIntervalChange = (newInterval) => {
     console.log(`📊 Changing data interval to: ${newInterval}`);
     setDataInterval(newInterval);
+    localStorage.setItem(`dataInterval_${deviceId}`, newInterval);
   };
 
   const togglePump = async () => {
