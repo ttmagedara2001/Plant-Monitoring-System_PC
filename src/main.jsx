@@ -75,6 +75,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
   <AuthProvider>
     <AutoLogin>
       <BrowserRouter
+      basename="/Plant-Monitoring-System_PC"
         future={{
           v7_startTransition: true,
           v7_relativeSplatPath: true
