@@ -356,6 +356,21 @@ const SettingsPanel = ({
         </ActionButton>
       </div>
 
+      {/* Auto Mode Activation Warning */}
+      {hasUnsavedChanges && localSettings.autoMode !== settings.autoMode && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm">
+          <div className="flex items-center gap-2 text-blue-800 font-medium mb-1">
+            <Info className="w-4 h-4" />
+            {localSettings.autoMode ? 'Auto Mode Will Activate' : 'Auto Mode Will Deactivate'}
+          </div>
+          <p className="text-blue-700">
+            {localSettings.autoMode 
+              ? 'Click "Save Changes" to activate automatic pump control. The system will monitor soil moisture and control the pump automatically.'
+              : 'Click "Save Changes" to switch to manual control mode.'}
+          </p>
+        </div>
+      )}
+
       {/* Command Status */}
       <CommandStatusMessage status={commandStatus} />
 

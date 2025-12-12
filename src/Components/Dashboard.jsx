@@ -444,17 +444,24 @@ const Dashboard = () => {
 
   // Automation Logic - Auto Pump Control based on Moisture Levels
   useEffect(() => {
-    // Only run automation if auto mode is enabled in settings
-    if (!settings.autoMode) return;
+    // Only run automation if auto mode is enabled in SAVED settings
+    if (!settings.autoMode) {
+      console.log(`[Automation] ⚙️ Auto mode is DISABLED - Manual control only`);
+      return;
+    }
 
     const currentMoisture = liveData?.moisture;
-    if (currentMoisture === undefined) return;
+    if (currentMoisture === undefined) {
+      console.log(`[Automation] ⏳ Waiting for moisture data...`);
+      return;
+    }
 
     const minMoisture = parseFloat(settings.moistureMin);
     const maxMoisture = parseFloat(settings.moistureMax);
     const currentPumpStatus = liveData?.pumpStatus || "OFF";
 
-    console.log(`[Automation] 🤖 Checking conditions:`, {
+    console.log(`[Automation] 🤖 AUTO MODE ACTIVE - Checking conditions:`, {
+      autoMode: settings.autoMode,
       moisture: currentMoisture,
       min: minMoisture,
       max: maxMoisture,
@@ -463,33 +470,36 @@ const Dashboard = () => {
 
     // 1: Turn pump ON if moisture is too LOW (CRITICAL) and pump is currently OFF
     if (currentMoisture < minMoisture && currentPumpStatus === "OFF") {
-      console.log(`[Automation] 💧 CRITICAL: Moisture ${currentMoisture}% < ${minMoisture}% - Sending HTTP request to turn pump ON`);
+      console.log(`[Automation] 🚨 CRITICAL SITUATION DETECTED!`);
+      console.log(`[Automation] 💧 Moisture ${currentMoisture}% < ${minMoisture}% - AUTO MODE turning pump ON`);
+      console.log(`[Automation] 📡 Sending MQTT command via HTTP API...`);
       
-      // Send HTTP API request to backend, which will forward to MQTT
-      updatePumpStatus(deviceId, "ON", "pump")
+      // Send HTTP API request to backend, which will forward to MQTT device
+      updatePumpStatus(deviceId, "ON", "pump", "auto")
         .then(() => {
-          console.log(`[Automation] ✅ HTTP API request successful - Backend will send MQTT command`);
-          setAlertMessage(`AUTO: Pump activation requested - Moisture CRITICAL (${currentMoisture.toFixed(1)}%)`);
+          console.log(`[Automation] ✅ HTTP API request successful - Backend forwarding MQTT command to IoT device`);
+          setAlertMessage(`AUTO MODE: Pump activated automatically - Moisture CRITICAL (${currentMoisture.toFixed(1)}%)`);
         })
         .catch((error) => {
           console.error(`[Automation] ❌ HTTP API request failed:`, error);
-          setAlertMessage(`ERROR: Failed to activate pump - ${error.message}`);
+          setAlertMessage(`ERROR: Auto mode failed to activate pump - ${error.message}`);
         });
     }
 
     // 2: Turn pump OFF if moisture returns to NORMAL range (>= min) and pump is currently ON
     if (currentMoisture >= minMoisture && currentPumpStatus === "ON") {
-      console.log(`[Automation] ✅ NORMAL: Moisture ${currentMoisture}% >= ${minMoisture}% - Sending HTTP request to turn pump OFF`);
+      console.log(`[Automation] ✅ NORMAL: Moisture ${currentMoisture}% >= ${minMoisture}% - AUTO MODE turning pump OFF`);
+      console.log(`[Automation] 📡 Sending MQTT command via HTTP API...`);
       
-      // Send HTTP API request to backend, which will forward to MQTT
-      updatePumpStatus(deviceId, "OFF", "pump")
+      // Send HTTP API request to backend, which will forward to MQTT device
+      updatePumpStatus(deviceId, "OFF", "pump", "auto")
         .then(() => {
-          console.log(`[Automation] ✅ HTTP API request successful - Backend will send MQTT command`);
-          setAlertMessage(`AUTO: Pump deactivation requested - Moisture restored (${currentMoisture.toFixed(1)}%)`);
+          console.log(`[Automation] ✅ HTTP API request successful - Backend forwarding MQTT command to IoT device`);
+          setAlertMessage(`AUTO MODE: Pump deactivated - Moisture restored to normal (${currentMoisture.toFixed(1)}%)`);
         })
         .catch((error) => {
           console.error(`[Automation] ❌ HTTP API request failed:`, error);
-          setAlertMessage(`ERROR: Failed to deactivate pump - ${error.message}`);
+          setAlertMessage(`ERROR: Auto mode failed to deactivate pump - ${error.message}`);
         });
     }
   }, [liveData?.moisture, liveData?.pumpStatus, settings.moistureMin, settings.moistureMax, settings.autoMode, deviceId]);
@@ -551,13 +561,29 @@ const Dashboard = () => {
       // Save settings to localStorage (frontend only - no backend API available)
       localStorage.setItem(`settings_${deviceId}`, JSON.stringify(settings));
       console.log('💾 Settings saved to localStorage:', settings);
-      setCommandStatus({ type: 'success', message: 'Settings saved locally!' });
+      
+      // Log auto mode status
+      if (settings.autoMode) {
+        console.log('🤖 AUTO MODE ENABLED - System will automatically control pump based on moisture levels');
+        console.log(`📊 Moisture thresholds: Min=${settings.moistureMin}%, Max=${settings.moistureMax}%`);
+        console.log('💧 Pump will turn ON when moisture < minimum threshold');
+        console.log('✅ Pump will turn OFF when moisture >= minimum threshold');
+      } else {
+        console.log('👤 MANUAL MODE - User has full control of pump');
+      }
+      
+      setCommandStatus({ 
+        type: 'success', 
+        message: settings.autoMode 
+          ? 'Settings saved! Auto mode is now ACTIVE.' 
+          : 'Settings saved! Manual control mode is active.'
+      });
     } catch (error) {
       console.error('Failed to save settings:', error);
       setCommandStatus({ type: 'error', message: 'Failed to save settings.' });
     } finally {
       setCommandInProgress(null);
-      setTimeout(() => setCommandStatus(null), 3000);
+      setTimeout(() => setCommandStatus(null), 5000);
     }
   };
   
