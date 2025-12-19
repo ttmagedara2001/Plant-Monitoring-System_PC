@@ -1,6 +1,7 @@
 // Use this to display historical data charts with toggles for different metrics
 import React, { useState, useMemo } from 'react';
 import { Download, Loader2, Eye, EyeOff, Database, Wifi, AlertCircle, Clock } from 'lucide-react';
+import SensorToggleToolbar from './SensorToggleToolbar';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
 const HistoricalChart = ({ 
@@ -281,11 +282,11 @@ const HistoricalChart = ({
     }`;
 
   return (
-    <div className="lg:col-span-2 bg-white rounded-3xl p-6 shadow-md flex flex-col border border-gray-100">
+   <div className="w-full bg-white rounded-2xl p-4 shadow-sm flex flex-col border border-gray-200 px-6 py-6">
       {/* Header Section */}
       <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
         <div className="flex items-center gap-3">
-          <h3 className="text-xl font-bold text-gray-800">Historical Trends</h3>
+          <h3 className="text-xl font-bold text-gray-800">Historical Trends of the Sensors</h3>
           <span className="text-xs bg-gray-100 text-gray-500 px-2 py-1 rounded-full flex items-center gap-1">
             <Clock className="w-3 h-3" />
             {timeRangeLabels[timeRange] || timeRange.replace('custom_', '').replace(/\d+/, (ms) => {
@@ -451,10 +452,10 @@ const HistoricalChart = ({
       {/* Custom Range Dialog */}
       {showCustomDialog && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4 shadow-2xl">
+          <div className="bg-white rounded-xl p-6 max-w-md w-full mx- shadow-2xl">
             <h3 className="text-lg font-bold text-gray-800 mb-4">Custom Time Range</h3>
             
-            <div className="space-y-4">
+            <div className="space-y-10">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Time Range</label>
                 <div className="flex gap-2">
@@ -523,86 +524,69 @@ const HistoricalChart = ({
         </div>
       )}
 
-      {/* Time Range Selector */}
-      <div className="mb-4 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-100">
-        <div className="flex flex-col gap-3">
-          <div className="flex items-center gap-2 mb-2">
-            <Clock className="w-4 h-4 text-blue-600" />
-            <span className="text-sm font-semibold text-gray-700">Time Range</span>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {['1m', '5m', '15m', '1h', '6h', '24h'].map((range) => (
-              <button
-                key={range}
-                onClick={() => onTimeRangeChange && onTimeRangeChange(range)}
-                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${
-                  timeRange === range
-                    ? 'bg-blue-500 text-white shadow-md scale-105'
-                    : 'bg-white text-gray-600 hover:bg-blue-100 border border-gray-200'
-                }`}
-              >
-                {timeRangeLabels[range]}
-              </button>
-            ))}
-            <button
-              onClick={() => setShowCustomDialog(true)}
-              className="px-4 py-2 rounded-lg text-xs font-bold transition-all bg-gradient-to-r from-purple-50 to-pink-50 text-purple-700 hover:from-purple-100 hover:to-pink-100 border border-purple-200"
+      {/* (Compact selectors moved to the visibility toolbar; large selector bar removed) */}
+
+      {/* Toggles Toolbar with compact Time Range + Interval selectors on the right */}
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex-1">
+          <SensorToggleToolbar
+            visibleSeries={visibleSeries}
+            toggleSeries={toggleSeries}
+            getButtonClass={getButtonClass}
+            className="mb-0 p-0 bg-transparent border-0"
+          />
+        </div>
+
+        <div className="flex items-center gap-3 ml-4">
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-600 hidden md:inline">Time Range</span>
+            <select
+              value={timeRange.startsWith('custom_') ? 'custom' : timeRange}
+              onChange={e => {
+                if (e.target.value === 'custom') {
+                  setShowCustomDialog(true);
+                } else {
+                  onTimeRangeChange && onTimeRangeChange(e.target.value);
+                }
+              }}
+              className="px-3 py-1 rounded-lg text-xs border border-gray-300 bg-white"
             >
-              ⚙️ Custom
-            </button>
+              <option value="1m">1m</option>
+              <option value="5m">5m</option>
+              <option value="15m">15m</option>
+              <option value="1h">1h</option>
+              <option value="6h">6h</option>
+              <option value="24h">24h</option>
+              <option value="custom">Custom</option>
+            </select>
           </div>
-          
-          <div className="flex items-center gap-2 mt-2 mb-2">
-            <span className="text-sm font-semibold text-gray-700">Data Interval</span>
-            <span className="text-xs text-gray-500">(sampling rate)</span>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {['auto', '1s', '5s', '1m', '5m', '1h'].map((interval) => {
-              const isValid = validIntervals.includes(interval);
-              const isActive = dataInterval === interval;
-              
-              return (
-                <button
-                  key={interval}
-                  onClick={() => isValid && onDataIntervalChange && onDataIntervalChange(interval)}
-                  disabled={!isValid}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                    isActive
-                      ? 'bg-indigo-500 text-white shadow-md'
-                      : isValid
-                      ? 'bg-white text-gray-600 hover:bg-indigo-100 border border-gray-200'
-                      : 'bg-gray-50 text-gray-300 border border-gray-100 pointer-events-none cursor-not-allowed'
-                  }`}
-                >
+
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-600 hidden md:inline">Interval</span>
+            <select
+              value={dataInterval.startsWith('custom_interval_') ? 'custom' : dataInterval}
+              onChange={e => {
+                if (e.target.value === 'custom') {
+                  setShowCustomDialog(true);
+                } else {
+                  onDataIntervalChange && onDataIntervalChange(e.target.value);
+                }
+              }}
+              className="px-3 py-1 rounded-lg text-xs border border-gray-300 bg-white"
+            >
+              {['auto', '1s', '5s', '1m', '5m', '1h'].map(interval => (
+                <option key={interval} value={interval} disabled={!validIntervals.includes(interval)}>
                   {intervalLabels[interval]}
-                </button>
-              );
-            })}
+                </option>
+              ))}
+              <option value="custom">Custom</option>
+            </select>
           </div>
         </div>
       </div>
-
-      {/* Toggles Toolbar */}
-      <div className="flex flex-wrap gap-2 mb-6 justify-center md:justify-start p-3 bg-gray-50 rounded-xl border border-gray-100">
-        <button onClick={() => toggleSeries('moisture')} className={getButtonClass(visibleSeries.moisture, 'bg-cyan-500')}>
-          {visibleSeries.moisture ? <Eye className="w-3 h-3"/> : <EyeOff className="w-3 h-3"/>} Moisture
-        </button>
-        <button onClick={() => toggleSeries('temperature')} className={getButtonClass(visibleSeries.temperature, 'bg-green-500')}>
-          {visibleSeries.temperature ? <Eye className="w-3 h-3"/> : <EyeOff className="w-3 h-3"/>} Temp
-        </button>
-        <button onClick={() => toggleSeries('humidity')} className={getButtonClass(visibleSeries.humidity, 'bg-blue-500')}>
-          {visibleSeries.humidity ? <Eye className="w-3 h-3"/> : <EyeOff className="w-3 h-3"/>} Humidity
-        </button>
-        <button onClick={() => toggleSeries('light')} className={getButtonClass(visibleSeries.light, 'bg-yellow-500')}>
-          {visibleSeries.light ? <Eye className="w-3 h-3"/> : <EyeOff className="w-3 h-3"/>} Light
-        </button>
-        <button onClick={() => toggleSeries('battery')} className={getButtonClass(visibleSeries.battery, 'bg-purple-500')}>
-          {visibleSeries.battery ? <Eye className="w-3 h-3"/> : <EyeOff className="w-3 h-3"/>} Battery
-        </button>
-      </div>
       
-      {/* Chart Container */}
-      <div className="h-80 w-full flex-grow relative">
+      {/* Chart Container - increase horizontal space */}
+      <div className="h-96 w-full flex-grow relative">
         {isLoading ? (
            <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-400 bg-white/50 z-10">
              <Loader2 className="animate-spin w-10 h-10 mb-3 text-blue-500" />

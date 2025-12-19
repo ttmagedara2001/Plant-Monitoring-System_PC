@@ -3,13 +3,17 @@ import { useParams } from 'react-router-dom';
 import { useAuth } from '../Context/AuthContext';
 import { getAllStreamData, updatePumpStatus } from '../Service/deviceService'; 
 import { webSocketClient } from '../Service/webSocketClient'; // ✅ Direct WebSocket client
-import { AlertTriangle } from 'lucide-react';
+//import { AlertTriangle } from 'lucide-react';
 
 // Import Sub-Components
 import Header from './Header';
 import SettingsPanel from './SettingsPanel';
 import StatusCard from './StatusCard';
+import { AlertTriangle } from 'lucide-react';
 import HistoricalChart from './HistoricalChartTest';
+import PageHeader from './PageHeader';
+
+
 
 const Dashboard = () => {
   const { deviceId: paramDeviceId } = useParams();
@@ -48,6 +52,7 @@ const Dashboard = () => {
     const saved = localStorage.getItem(`dataInterval_${deviceId}`);
     return saved || 'auto';
   }); 
+  // header clock handled by PageHeader component
   
   // Settings & Control States (Frontend only - no backend API)
   const [settings, setSettings] = useState(() => {
@@ -262,6 +267,28 @@ const Dashboard = () => {
     setDataInterval(savedInterval || 'auto');
     
     console.log(`[Dashboard] ✅ Reset complete for device: ${deviceId}`);
+  }, [deviceId]);
+
+  // Listen for settings updates from other components (e.g., DeviceSettingsPage immediate saves)
+  useEffect(() => {
+    const onSettingsUpdated = (e) => {
+      try {
+        const updatedDevice = e?.detail?.deviceId;
+        if (!updatedDevice || updatedDevice !== deviceId) return;
+        const saved = localStorage.getItem(`settings_${deviceId}`);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          // Update only if parsed has settings structure
+          setSettings((prev) => ({ ...prev, ...(parsed || {}) }));
+          console.log('[Dashboard] 🔁 Settings reloaded from localStorage due to external update');
+        }
+      } catch (err) {
+        console.error('[Dashboard] Failed to handle settings:updated event', err);
+      }
+    };
+
+    window.addEventListener('settings:updated', onSettingsUpdated);
+    return () => window.removeEventListener('settings:updated', onSettingsUpdated);
   }, [deviceId]);
 
   // WebSocket Connection Management
@@ -673,59 +700,23 @@ const Dashboard = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#f0f4f8] p-4 font-sans text-gray-800">
-      
-      {/* Connection Status */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-4">
-        <div className={`text-center py-2 rounded-lg text-sm font-medium ${
-          isConnected 
-            ? 'bg-green-100 text-green-800 border border-green-300' 
-            : 'bg-gray-100 text-gray-600 border border-gray-300'
-        }`}>
-          WebSocket (Real-Time): {isConnected ? '🟢 Connected' : '⚪ Disconnected'}
-        </div>
-        
-        <div className={`text-center py-2 rounded-lg text-sm font-medium ${
-          isConnected 
-            ? 'bg-blue-100 text-blue-800 border border-blue-300' 
-            : 'bg-gray-100 text-gray-600 border border-gray-300'
-        }`}>
-          MQTT Stream: {isConnected ? '🟢 Receiving Data' : '⚪ Waiting for Data'}
-        </div>
-      </div>
+    <div className="min-h-screen bg-[#f0f4f8] p-4 font-sans text-gray-800 overflow-x-hidden">
+      {/* Header at the very top */}
+      <Header deviceId={deviceId} deviceList={deviceList} isConnected={isConnected} />
 
-      {/* Overall Connection Status */}
-      <div className={`text-center py-2 mb-4 rounded-lg text-sm font-medium ${
-        isConnected
-          ? 'bg-green-100 text-green-800 border border-green-300' 
-          : 'bg-yellow-100 text-yellow-800 border border-yellow-300'
-      }`}>
-        System Status: {isConnected 
-          ? `🟢 Online • Real-Time: ${isConnected ? 'Active' : 'Standby'} • Historical: HTTP API` 
-          : '🟡 Limited - Real-time data only'}
-      </div>
+      {/* Page heading */}
+      <PageHeader
+        title="Dashboard"
+        subtitle="Real-time sensor readings, charts, and controls for your device."
+        deviceId={deviceId}
+      />
 
-      {/* Alert Banner */}
-      {alertMessage && (
-          <div className="bg-red-500 text-white rounded-lg p-3 mb-6 shadow-xl flex items-center justify-center font-bold text-lg animate-pulse transition-all">
-              <AlertTriangle className="w-6 h-6 mr-3" />
-              {alertMessage}
-          </div>
-      )}
 
-      <Header deviceId={deviceId} deviceList={deviceList} />
+        {/* Connection Status Panel (navigation and dark mode only) */}
 
-      {/* Pump Status Banner */}
-      <div className={`rounded-xl py-4 text-center mb-8 border transition-colors duration-500 shadow-sm ${
-        pumpStatus === 'ON' ? 'bg-green-100 border-green-300 text-green-900' : 'bg-blue-100 border-blue-300 text-blue-900'
-      }`}>
-        <h2 className="text-xl font-bold">
-          Pump : {pumpStatus} ({liveData?.pumpMode || 'Optimal'})
-        </h2>
-      </div>
-
-      {/* Real-Time Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+        {/* Real-Time Cards + Pump Banner (centered, compact within main container) */}
+      <div className="w-full max-w-7xl mx-auto px-4 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-4">
         <StatusCard 
           value={getVal('moisture', '%')} 
           label="Soil Moisture" 
@@ -751,37 +742,38 @@ const Dashboard = () => {
           label="Battery" 
           borderColor={getBorderColor('battery', parseFloat(settings.batteryMin), 100)} 
         />
+        </div>
+
+        {/* Pump Status Banner (aligned with cards) */}
+        <div className={`rounded-xl py-3 text-center border transition-colors duration-500 shadow-sm ${
+          pumpStatus === 'ON' ? 'bg-green-100 border-green-300 text-green-900' : 'bg-blue-100 border-blue-300 text-blue-900'
+        }`}>
+          <h2 className="text-lg font-semibold">
+            Pump : {pumpStatus} ({liveData?.pumpMode || 'Optimal'})
+          </h2>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        
-        {/* Historical Chart Component - HTTP API Data Only */}
-        <HistoricalChart 
-            chartData={historicalData}
-            isLoading={isLoadingChart}
-            onExportCSV={handleExportCSV}
-            isExporting={isExporting}
-            dataSource="HTTP API"
-            error={dataFetchError}
-            timeRange={timeRange}
-            dataInterval={dataInterval}
-            onTimeRangeChange={handleTimeRangeChange}
-            onDataIntervalChange={handleDataIntervalChange}
-            allData={historicalData}
-            onFilteredDataChange={setFilteredData}
-        />
+     
 
-        {/* Settings Panel */}
-        <SettingsPanel 
-          settings={settings} 
-          setSettings={setSettings} 
-          handleSaveSettings={handleSaveSettings} 
-          commandInProgress={commandInProgress}
-          commandStatus={commandStatus}
-          liveData={liveData} 
-          togglePump={togglePump} 
-          pumpStatus={pumpStatus}
-        />
+      <div className="w-full max-w-7xl mx-auto flex flex-col items-center justify-center">
+        {/* Historical Chart Component - HTTP API Data Only */}
+        <div className="w-full">
+          <HistoricalChart 
+              chartData={historicalData}
+              isLoading={isLoadingChart}
+              onExportCSV={handleExportCSV}
+              isExporting={isExporting}
+              dataSource="HTTP API"
+              error={dataFetchError}
+              timeRange={timeRange}
+              dataInterval={dataInterval}
+              onTimeRangeChange={handleTimeRangeChange}
+              onDataIntervalChange={handleDataIntervalChange}
+              allData={historicalData}
+              onFilteredDataChange={setFilteredData}
+          />
+        </div>
       </div>
     </div>
   );
