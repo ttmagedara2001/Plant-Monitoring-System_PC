@@ -1,5 +1,36 @@
 # MQTTX Testing Guide
 
+## Device Configuration
+
+**Primary Test Device:**
+
+- Device ID: `device0011233`
+- Owner: Your ProtoNest account
+- Used throughout this guide for examples
+
+**Alternative Test Devices:**
+
+- `device9988`
+- `device0000`
+- `device0001`
+- `device0002`
+
+> **Note:** The device ID must belong to your ProtoNest account. If you see 403 errors, verify device ownership in your ProtoNest dashboard.
+
+**MQTT Connection Details:**
+
+- **Broker Host:** `mqtt.protonest.co`
+- **Port:** `8883` (secure MQTT over TLS)
+- **Protocol:** `mqtts://`
+- **Username/Password:** Not required (authentication via JWT over HTTPS)
+
+**API Endpoints:**
+
+- **Base URL:** `https://api.protonestconnect.co/api/v1/user`
+- **WebSocket:** `wss://api.protonestconnect.co/ws?token={JWT_TOKEN}`
+
+---
+
 ## Step 1: Install MQTTX
 
 Download from: https://mqttx.app/
@@ -11,7 +42,7 @@ Download from: https://mqttx.app/
 - **Host:** mqtt.protonest.co
 - **Port:** 8883
 - **Protocol:** mqtts://
-- **Client ID:** (auto-generated or custom) -> `device200300`
+- **Client ID:** (auto-generated or custom) -> `device0011233` (recommended: use your actual device ID)
 - **Username / Password:** _leave empty_ (Dashboard authentication is done over HTTPS, not MQTT)
 - **TLS / SSL:**
   - Enable TLS
@@ -30,8 +61,8 @@ Download from: https://mqttx.app/
 
 Create a new **tab** in MQTTX and subscribe to:
 
-- `protonest/device200300/stream/#`
-- `protonest/device200300/state/#`
+- `protonest/device0011233/stream/#`
+- `protonest/device0011233/state/#`
 
 This allows you to:
 
@@ -47,35 +78,35 @@ This allows you to:
 ### Temperature Data
 
 ```text
-Topic: protonest/device200300/stream/temp
+Topic: protonest/device0011233/stream/temp
 Payload: {"temp":"25.5"}
 ```
 
 ### Moisture Data
 
 ```text
-Topic: protonest/device200300/stream/moisture
+Topic: protonest/device0011233/stream/moisture
 Payload: {"moisture":"45.2"}
 ```
 
 ### Humidity Data
 
 ```text
-Topic: protonest/device200300/stream/humidity
+Topic: protonest/device0011233/stream/humidity
 Payload: {"humidity":"65.8"}
 ```
 
 ### Light Data
 
 ```text
-Topic: protonest/device200300/stream/light
+Topic: protonest/device0011233/stream/light
 Payload: {"light":"850"}
 ```
 
 ### Battery Data
 
 ```text
-Topic: protonest/device200300/stream/battery
+Topic: protonest/device0011233/stream/battery
 Payload: {"battery":"87.5"}
 ```
 
@@ -84,7 +115,7 @@ Payload: {"battery":"87.5"}
 If the device/bridge supports a single multiplexed topic:
 
 ```text
-Topic: protonest/device200300/stream/all
+Topic: protonest/device0011233/stream/all
 Payload: {
   "temp": "25.5",
   "moisture": "45.2",
@@ -105,13 +136,13 @@ Payload: {
 The dashboard (through the MQTT/WebSocket bridge) expects pump commands in the following shape:
 
 ```text
-Topic: protonest/device200300/state/motor/paddy
-Payload: {"status":"ON"}
+Topic: protonest/device0011233/state/pump
+Payload: {"power":"ON"}
 ```
 
 ```text
-Topic: protonest/device200300/state/motor/paddy
-Payload: {"status":"OFF"}
+Topic: protonest/device0011233/state/pump
+Payload: {"power":"OFF"}
 ```
 
 Recommended:
@@ -122,15 +153,15 @@ Recommended:
 If your device reports pump feedback, it should publish:
 
 ```text
-Topic: protonest/device200300/state/pump
-Payload: {"pumpStatus":"ON","pumpMode":"Optimal"}
+Topic: protonest/device0011233/state/pump
+Payload: {"power":"on","mode":"manual"}
 ```
 
 or
 
 ```text
-Topic: protonest/device200300/state/pump
-Payload: {"pumpStatus":"OFF","pumpMode":"Optimal"}
+Topic: protonest/device0011233/state/pump
+Payload: {"power":"off","mode":"auto"}
 ```
 
 ---
@@ -141,16 +172,16 @@ When you publish the payloads above (and the backend forwards them to the WebSoc
 
 1. **Status Cards (top metrics)**
 
-   - `protonest/device200300/stream/moisture` → “Soil Moisture” card
-   - `protonest/device200300/stream/temp` → “Temperature” card
-   - `protonest/device200300/stream/humidity`→ “Humidity” card
-   - `protonest/device200300/stream/light` → “Light” card
-   - `protonest/device200300/stream/battery` → “Battery” card
+   - `protonest/device0011233/stream/moisture` → "Soil Moisture" card
+   - `protonest/device0011233/stream/temp` → "Temperature" card
+   - `protonest/device0011233/stream/humidity`→ "Humidity" card
+   - `protonest/device0011233/stream/light` → "Light" card
+   - `protonest/device0011233/stream/battery` → "Battery" card
 
 2. **Pump Banner**
 
-   - `protonest/device200300/state/pump` with `"pumpStatus":"ON"` → Green “Pump : ON” banner
-   - `"pumpStatus":"OFF"` → Blue “Pump : OFF” banner
+   - `protonest/device0011233/state/pump` with `"pumpStatus":"ON"` → Green "Pump : ON" banner
+   - `"pumpStatus":"OFF"` → Blue "Pump : OFF" banner
 
 3. **Historical Chart**
 
@@ -190,7 +221,7 @@ When you publish the payloads above (and the backend forwards them to the WebSoc
 3. Manually simulate device feedback in MQTTX:
    ```text
    Topic: protonest/device200300/state/pump
-   Payload: {"pumpStatus":"ON","pumpMode":"Optimal"}
+   Payload: {"power":"ON","mode":"manual"}
    ```
 4. Dashboard pump banner should change to **ON**.
 

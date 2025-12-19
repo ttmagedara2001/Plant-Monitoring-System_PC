@@ -9,6 +9,9 @@ const PumpControlToggle = ({
   isLoading,
   onToggle
 }) => {
+  // Determine the current mode based on the auto mode toggle
+  const currentMode = isAutoMode ? 'auto' : 'manual';
+  
   return (
     <div className={`${isAutoMode ? 'opacity-50 pointer-events-none' : ''}`}>
       <div className="flex items-center justify-between">
@@ -20,11 +23,9 @@ const PumpControlToggle = ({
             Status: <span className={`font-bold ml-1 ${pumpStatus === 'ON' ? 'text-green-600' : 'text-gray-600'}`}>
               {pumpStatus}
             </span>
-            {pumpMode && (
-              <span className="text-xs ml-2 px-2 py-0.5 bg-blue-100 text-blue-700 rounded">
-                {pumpMode}
-              </span>
-            )}
+            <span className="text-xs ml-2 px-2 py-0.5 bg-blue-100 text-blue-700 rounded capitalize">
+              {currentMode}
+            </span>
           </div>
         </div>
         

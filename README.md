@@ -247,15 +247,19 @@ See `PROJECT_DOCUMENTATION.md` for complete API reference.
 
 ## 📚 Documentation
 
-| Document                            | Purpose                                      |
-| ----------------------------------- | -------------------------------------------- |
-| **PROJECT_DOCUMENTATION.md**        | 📘 Complete project documentation (71 pages) |
-| **DATA_FLOW_ARCHITECTURE.md**       | Detailed data flow diagrams                  |
-| **DEVICE_AUTHORIZATION_FIX.md**     | Device ownership troubleshooting             |
-| **DEVICE_PAYLOAD_SPECIFICATION.md** | MQTT payload formats                         |
-| **MQTTX_TESTING_GUIDE.md**          | Testing with MQTTX tool                      |
-| **WEBSOCKET_INTEGRATION_GUIDE.md**  | WebSocket integration tutorial               |
-| **WEBSOCKET_MIGRATION.md**          | Migration from polling to WebSocket          |
+Additional guides and references:
+
+| Document                   | Purpose                                                                |
+| -------------------------- | ---------------------------------------------------------------------- |
+| **MQTTX_TESTING_GUIDE.md** | 🧪 Step-by-step MQTT testing with device configuration (device0011233) |
+| **PROTONEST_SETUP.md**     | ⚙️ ProtoNest platform setup and configuration guide                    |
+| **README.md**              | 📖 Main project documentation (features, setup, troubleshooting)       |
+
+**Quick Reference:**
+
+- 🚀 **Getting Started?** Read this README for setup and features
+- 🧪 **Testing MQTT?** Follow MQTTX_TESTING_GUIDE.md with device ID: `device0011233`
+- ⚙️ **ProtoNest Setup?** Check PROTONEST_SETUP.md for platform configuration
 
 ---
 
@@ -340,16 +344,6 @@ reconnectDelay: 5000, // 5 seconds
 2. Check localStorage: `console.log(localStorage.getItem('settings_device0011233'))`
 3. Clear localStorage and re-save if needed
 
-### Chart Performance Issues
-
-- Reduce data range (last 6 hours instead of 24)
-- Increase refresh interval (60 seconds instead of 30)
-- Limit data points displayed
-
-**For detailed troubleshooting**, see `PROJECT_DOCUMENTATION.md` section 13.
-
----
-
 ## 🚀 Quick Deploy
 
 ### Vercel
@@ -357,12 +351,6 @@ reconnectDelay: 5000, // 5 seconds
 ```bash
 npm install -g vercel
 vercel
-```
-
-### Netlify
-
-```bash
-netlify deploy --prod --dir=dist
 ```
 
 ### Docker
@@ -384,6 +372,4 @@ docker run -p 80:80 plant-monitoring:latest
 
 **Issues**: Open GitHub issue with detailed description and console logs  
 **Questions**: Use GitHub Discussions  
-**Documentation**: See `PROJECT_DOCUMENTATION.md` for complete reference
 
-**License**: MIT License

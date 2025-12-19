@@ -3,13 +3,17 @@ import { useParams } from 'react-router-dom';
 import { useAuth } from '../Context/AuthContext';
 import { getAllStreamData, updatePumpStatus } from '../Service/deviceService'; 
 import { webSocketClient } from '../Service/webSocketClient'; // ✅ Direct WebSocket client
-import { AlertTriangle } from 'lucide-react';
+//import { AlertTriangle } from 'lucide-react';
 
 // Import Sub-Components
 import Header from './Header';
 import SettingsPanel from './SettingsPanel';
 import StatusCard from './StatusCard';
+import { AlertTriangle } from 'lucide-react';
 import HistoricalChart from './HistoricalChartTest';
+import PageHeader from './PageHeader';
+
+
 
 const Dashboard = () => {
   const { deviceId: paramDeviceId } = useParams();
@@ -27,7 +31,7 @@ const Dashboard = () => {
     light: 0,
     battery: 0,
     pumpStatus: "OFF",
-    pumpMode: "Optimal",
+    pumpMode: "manual",
   });
   const [isConnected, setIsConnected] = useState(false);
   const [deviceList] = useState(['device9988', 'device0011233', 'device0000', 'device0001', 'device0002']);
@@ -40,8 +44,15 @@ const Dashboard = () => {
   const [dataFetchError, setDataFetchError] = useState(null);
   
   // Time frame selection for historical chart: default to 1 hour
-  const [timeRange, setTimeRange] = useState('1h'); 
-  const [dataInterval, setDataInterval] = useState('auto'); 
+  const [timeRange, setTimeRange] = useState(() => {
+    const saved = localStorage.getItem(`timeRange_${deviceId}`);
+    return saved || '1h';
+  }); 
+  const [dataInterval, setDataInterval] = useState(() => {
+    const saved = localStorage.getItem(`dataInterval_${deviceId}`);
+    return saved || 'auto';
+  }); 
+  // header clock handled by PageHeader component
   
   // Settings & Control States (Frontend only - no backend API)
   const [settings, setSettings] = useState(() => {
@@ -57,7 +68,7 @@ const Dashboard = () => {
       lightMin: '200',
       lightMax: '1000',
       batteryMin: '20',
-      autoMode: true 
+      autoMode: false 
     };
   });
   const [alertMessage, setAlertMessage] = useState(null);
@@ -203,8 +214,32 @@ const Dashboard = () => {
     return () => clearInterval(refreshInterval);
   }, [deviceId, jwtToken, timeRange]);
 
-  // Load settings when device changes
+  // Reset all data when device changes
   useEffect(() => {
+    console.log(`[Dashboard] 🔄 Device changed to: ${deviceId} - Resetting all data`);
+    
+    // Reset live data to defaults
+    setLiveData({
+      moisture: 0,
+      temperature: 0,
+      humidity: 0,
+      light: 0,
+      battery: 0,
+      pumpStatus: "OFF",
+      pumpMode: "manual",
+    });
+    
+    // Reset historical data
+    setHistoricalData([]);
+    setFilteredData([]);
+    setDataFetchError(null);
+    
+    // Reset alerts and command status
+    setAlertMessage(null);
+    setCommandStatus(null);
+    setCommandInProgress(null);
+    
+    // Load device-specific settings from localStorage
     const saved = localStorage.getItem(`settings_${deviceId}`);
     if (saved) {
       setSettings(JSON.parse(saved));
@@ -220,14 +255,41 @@ const Dashboard = () => {
         humidityMax: '80',
         lightMin: '200',
         lightMax: '1000',
-        batteryMin: '20'
+        batteryMin: '20',
+        autoMode: false 
       });
     }
+    
+    // Load device-specific time range and interval
+    const savedTimeRange = localStorage.getItem(`timeRange_${deviceId}`);
+    const savedInterval = localStorage.getItem(`dataInterval_${deviceId}`);
+    setTimeRange(savedTimeRange || '1h');
+    setDataInterval(savedInterval || 'auto');
+    
+    console.log(`[Dashboard] ✅ Reset complete for device: ${deviceId}`);
   }, [deviceId]);
 
+  // Listen for settings updates from other components (e.g., DeviceSettingsPage immediate saves)
   useEffect(() => {
-    console.log("Dashboard mounted. DeviceId:", deviceId, "JWT available:", !!jwtToken);
-  }, [deviceId, jwtToken]);
+    const onSettingsUpdated = (e) => {
+      try {
+        const updatedDevice = e?.detail?.deviceId;
+        if (!updatedDevice || updatedDevice !== deviceId) return;
+        const saved = localStorage.getItem(`settings_${deviceId}`);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          // Update only if parsed has settings structure
+          setSettings((prev) => ({ ...prev, ...(parsed || {}) }));
+          console.log('[Dashboard] 🔁 Settings reloaded from localStorage due to external update');
+        }
+      } catch (err) {
+        console.error('[Dashboard] Failed to handle settings:updated event', err);
+      }
+    };
+
+    window.addEventListener('settings:updated', onSettingsUpdated);
+    return () => window.removeEventListener('settings:updated', onSettingsUpdated);
+  }, [deviceId]);
 
   // WebSocket Connection Management
   useEffect(() => {
@@ -409,17 +471,24 @@ const Dashboard = () => {
 
   // Automation Logic - Auto Pump Control based on Moisture Levels
   useEffect(() => {
-    // Only run automation if auto mode is enabled in settings
-    if (!settings.autoMode) return;
+    // Only run automation if auto mode is enabled in SAVED settings
+    if (!settings.autoMode) {
+      console.log(`[Automation] ⚙️ Auto mode is DISABLED - Manual control only`);
+      return;
+    }
 
     const currentMoisture = liveData?.moisture;
-    if (currentMoisture === undefined) return;
+    if (currentMoisture === undefined) {
+      console.log(`[Automation] ⏳ Waiting for moisture data...`);
+      return;
+    }
 
     const minMoisture = parseFloat(settings.moistureMin);
     const maxMoisture = parseFloat(settings.moistureMax);
     const currentPumpStatus = liveData?.pumpStatus || "OFF";
 
-    console.log(`[Automation] 🤖 Checking conditions:`, {
+    console.log(`[Automation] 🤖 AUTO MODE ACTIVE - Checking conditions:`, {
+      autoMode: settings.autoMode,
       moisture: currentMoisture,
       min: minMoisture,
       max: maxMoisture,
@@ -428,33 +497,36 @@ const Dashboard = () => {
 
     // 1: Turn pump ON if moisture is too LOW (CRITICAL) and pump is currently OFF
     if (currentMoisture < minMoisture && currentPumpStatus === "OFF") {
-      console.log(`[Automation] 💧 CRITICAL: Moisture ${currentMoisture}% < ${minMoisture}% - Sending HTTP request to turn pump ON`);
+      console.log(`[Automation] 🚨 CRITICAL SITUATION DETECTED!`);
+      console.log(`[Automation] 💧 Moisture ${currentMoisture}% < ${minMoisture}% - AUTO MODE turning pump ON`);
+      console.log(`[Automation] 📡 Sending MQTT command via HTTP API...`);
       
-      // Send HTTP API request to backend, which will forward to MQTT
-      updatePumpStatus(deviceId, "ON", "pump")
+      // Send HTTP API request to backend, which will forward to MQTT device
+      updatePumpStatus(deviceId, "ON", "pump", "auto")
         .then(() => {
-          console.log(`[Automation] ✅ HTTP API request successful - Backend will send MQTT command`);
-          setAlertMessage(`AUTO: Pump activation requested - Moisture CRITICAL (${currentMoisture.toFixed(1)}%)`);
+          console.log(`[Automation] ✅ HTTP API request successful - Backend forwarding MQTT command to IoT device`);
+          setAlertMessage(`AUTO MODE: Pump activated automatically - Moisture CRITICAL (${currentMoisture.toFixed(1)}%)`);
         })
         .catch((error) => {
           console.error(`[Automation] ❌ HTTP API request failed:`, error);
-          setAlertMessage(`ERROR: Failed to activate pump - ${error.message}`);
+          setAlertMessage(`ERROR: Auto mode failed to activate pump - ${error.message}`);
         });
     }
 
-    // 2: Turn pump OFF if moisture is sufficient and pump is currently ON
-    if (currentMoisture > maxMoisture && currentPumpStatus === "ON") {
-      console.log(`[Automation] 🛑 AUTO STOP: Moisture ${currentMoisture}% > ${maxMoisture}% - Sending HTTP request to turn pump OFF`);
+    // 2: Turn pump OFF if moisture returns to NORMAL range (>= min) and pump is currently ON
+    if (currentMoisture >= minMoisture && currentPumpStatus === "ON") {
+      console.log(`[Automation] ✅ NORMAL: Moisture ${currentMoisture}% >= ${minMoisture}% - AUTO MODE turning pump OFF`);
+      console.log(`[Automation] 📡 Sending MQTT command via HTTP API...`);
       
-      // Send HTTP API request to backend, which will forward to MQTT
-      updatePumpStatus(deviceId, "OFF", "pump")
+      // Send HTTP API request to backend, which will forward to MQTT device
+      updatePumpStatus(deviceId, "OFF", "pump", "auto")
         .then(() => {
-          console.log(`[Automation] ✅ HTTP API request successful - Backend will send MQTT command`);
-          setAlertMessage(`AUTO: Pump deactivation requested - Moisture optimal (${currentMoisture.toFixed(1)}%)`);
+          console.log(`[Automation] ✅ HTTP API request successful - Backend forwarding MQTT command to IoT device`);
+          setAlertMessage(`AUTO MODE: Pump deactivated - Moisture restored to normal (${currentMoisture.toFixed(1)}%)`);
         })
         .catch((error) => {
           console.error(`[Automation] ❌ HTTP API request failed:`, error);
-          setAlertMessage(`ERROR: Failed to deactivate pump - ${error.message}`);
+          setAlertMessage(`ERROR: Auto mode failed to deactivate pump - ${error.message}`);
         });
     }
   }, [liveData?.moisture, liveData?.pumpStatus, settings.moistureMin, settings.moistureMax, settings.autoMode, deviceId]);
@@ -516,13 +588,29 @@ const Dashboard = () => {
       // Save settings to localStorage (frontend only - no backend API available)
       localStorage.setItem(`settings_${deviceId}`, JSON.stringify(settings));
       console.log('💾 Settings saved to localStorage:', settings);
-      setCommandStatus({ type: 'success', message: 'Settings saved locally!' });
+      
+      // Log auto mode status
+      if (settings.autoMode) {
+        console.log('🤖 AUTO MODE ENABLED - System will automatically control pump based on moisture levels');
+        console.log(`📊 Moisture thresholds: Min=${settings.moistureMin}%, Max=${settings.moistureMax}%`);
+        console.log('💧 Pump will turn ON when moisture < minimum threshold');
+        console.log('✅ Pump will turn OFF when moisture >= minimum threshold');
+      } else {
+        console.log('👤 MANUAL MODE - User has full control of pump');
+      }
+      
+      setCommandStatus({ 
+        type: 'success', 
+        message: settings.autoMode 
+          ? 'Settings saved! Auto mode is now ACTIVE.' 
+          : 'Settings saved! Manual control mode is active.'
+      });
     } catch (error) {
       console.error('Failed to save settings:', error);
       setCommandStatus({ type: 'error', message: 'Failed to save settings.' });
     } finally {
       setCommandInProgress(null);
-      setTimeout(() => setCommandStatus(null), 3000);
+      setTimeout(() => setCommandStatus(null), 5000);
     }
   };
   
@@ -530,26 +618,31 @@ const Dashboard = () => {
   const handleTimeRangeChange = (newRange) => {
     console.log(`📊 Changing time range to: ${newRange}`);
     setTimeRange(newRange);
+    localStorage.setItem(`timeRange_${deviceId}`, newRange);
     
     // Auto-adjust interval based on time range for optimal display
+    let newInterval = 'auto';
     if (newRange === '1m') {
-      setDataInterval('1s');
+      newInterval = '1s';
     } else if (newRange === '5m') {
-      setDataInterval('1s');
+      newInterval = '1s';
     } else if (newRange === '15m') {
-      setDataInterval('5s');
+      newInterval = '5s';
     } else if (newRange === '1h') {
-      setDataInterval('auto');
+      newInterval = 'auto';
     } else if (newRange === '6h') {
-      setDataInterval('1m');
+      newInterval = '1m';
     } else if (newRange === '24h') {
-      setDataInterval('5m');
+      newInterval = '5m';
     }
+    setDataInterval(newInterval);
+    localStorage.setItem(`dataInterval_${deviceId}`, newInterval);
   };
 
   const handleDataIntervalChange = (newInterval) => {
     console.log(`📊 Changing data interval to: ${newInterval}`);
     setDataInterval(newInterval);
+    localStorage.setItem(`dataInterval_${deviceId}`, newInterval);
   };
 
   const togglePump = async () => {
@@ -607,59 +700,23 @@ const Dashboard = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#f0f4f8] p-4 font-sans text-gray-800">
-      
-      {/* Connection Status */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-4">
-        <div className={`text-center py-2 rounded-lg text-sm font-medium ${
-          isConnected 
-            ? 'bg-green-100 text-green-800 border border-green-300' 
-            : 'bg-gray-100 text-gray-600 border border-gray-300'
-        }`}>
-          WebSocket (Real-Time): {isConnected ? '🟢 Connected' : '⚪ Disconnected'}
-        </div>
-        
-        <div className={`text-center py-2 rounded-lg text-sm font-medium ${
-          isConnected 
-            ? 'bg-blue-100 text-blue-800 border border-blue-300' 
-            : 'bg-gray-100 text-gray-600 border border-gray-300'
-        }`}>
-          MQTT Stream: {isConnected ? '🟢 Receiving Data' : '⚪ Waiting for Data'}
-        </div>
-      </div>
+    <div className="min-h-screen bg-[#f0f4f8] p-4 font-sans text-gray-800 overflow-x-hidden">
+      {/* Header at the very top */}
+      <Header deviceId={deviceId} deviceList={deviceList} isConnected={isConnected} />
 
-      {/* Overall Connection Status */}
-      <div className={`text-center py-2 mb-4 rounded-lg text-sm font-medium ${
-        isConnected
-          ? 'bg-green-100 text-green-800 border border-green-300' 
-          : 'bg-yellow-100 text-yellow-800 border border-yellow-300'
-      }`}>
-        System Status: {isConnected 
-          ? `🟢 Online • Real-Time: ${isConnected ? 'Active' : 'Standby'} • Historical: HTTP API` 
-          : '🟡 Limited - Real-time data only'}
-      </div>
+      {/* Page heading */}
+      <PageHeader
+        title="Dashboard"
+        subtitle="Real-time sensor readings, charts, and controls for your device."
+        deviceId={deviceId}
+      />
 
-      {/* Alert Banner */}
-      {alertMessage && (
-          <div className="bg-red-500 text-white rounded-lg p-3 mb-6 shadow-xl flex items-center justify-center font-bold text-lg animate-pulse transition-all">
-              <AlertTriangle className="w-6 h-6 mr-3" />
-              {alertMessage}
-          </div>
-      )}
 
-      <Header deviceId={deviceId} deviceList={deviceList} />
+        {/* Connection Status Panel (navigation and dark mode only) */}
 
-      {/* Pump Status Banner */}
-      <div className={`rounded-xl py-4 text-center mb-8 border transition-colors duration-500 shadow-sm ${
-        pumpStatus === 'ON' ? 'bg-green-100 border-green-300 text-green-900' : 'bg-blue-100 border-blue-300 text-blue-900'
-      }`}>
-        <h2 className="text-xl font-bold">
-          Pump : {pumpStatus} ({liveData?.pumpMode || 'Optimal'})
-        </h2>
-      </div>
-
-      {/* Real-Time Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+        {/* Real-Time Cards + Pump Banner (centered, compact within main container) */}
+      <div className="w-full max-w-7xl mx-auto px-4 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-4">
         <StatusCard 
           value={getVal('moisture', '%')} 
           label="Soil Moisture" 
@@ -685,37 +742,38 @@ const Dashboard = () => {
           label="Battery" 
           borderColor={getBorderColor('battery', parseFloat(settings.batteryMin), 100)} 
         />
+        </div>
+
+        {/* Pump Status Banner (aligned with cards) */}
+        <div className={`rounded-xl py-3 text-center border transition-colors duration-500 shadow-sm ${
+          pumpStatus === 'ON' ? 'bg-green-100 border-green-300 text-green-900' : 'bg-blue-100 border-blue-300 text-blue-900'
+        }`}>
+          <h2 className="text-lg font-semibold">
+            Pump : {pumpStatus} ({liveData?.pumpMode || 'Optimal'})
+          </h2>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        
-        {/* Historical Chart Component - HTTP API Data Only */}
-        <HistoricalChart 
-            chartData={historicalData}
-            isLoading={isLoadingChart}
-            onExportCSV={handleExportCSV}
-            isExporting={isExporting}
-            dataSource="HTTP API"
-            error={dataFetchError}
-            timeRange={timeRange}
-            dataInterval={dataInterval}
-            onTimeRangeChange={handleTimeRangeChange}
-            onDataIntervalChange={handleDataIntervalChange}
-            allData={historicalData}
-            onFilteredDataChange={setFilteredData}
-        />
+     
 
-        {/* Settings Panel */}
-        <SettingsPanel 
-          settings={settings} 
-          setSettings={setSettings} 
-          handleSaveSettings={handleSaveSettings} 
-          commandInProgress={commandInProgress}
-          commandStatus={commandStatus}
-          liveData={liveData} 
-          togglePump={togglePump} 
-          pumpStatus={pumpStatus}
-        />
+      <div className="w-full max-w-7xl mx-auto flex flex-col items-center justify-center">
+        {/* Historical Chart Component - HTTP API Data Only */}
+        <div className="w-full">
+          <HistoricalChart 
+              chartData={historicalData}
+              isLoading={isLoadingChart}
+              onExportCSV={handleExportCSV}
+              isExporting={isExporting}
+              dataSource="HTTP API"
+              error={dataFetchError}
+              timeRange={timeRange}
+              dataInterval={dataInterval}
+              onTimeRangeChange={handleTimeRangeChange}
+              onDataIntervalChange={handleDataIntervalChange}
+              allData={historicalData}
+              onFilteredDataChange={setFilteredData}
+          />
+        </div>
       </div>
     </div>
   );

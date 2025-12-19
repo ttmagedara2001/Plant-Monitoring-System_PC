@@ -116,8 +116,8 @@ export const getStreamDataByTopic = async (
 /**
  * Fetch State Details for a specific device and topic
  * POST /get-state-details/device/topic
- * Topics can include: temp5/new, moisture, humidity, battery, light, motor status, etc.
- * Example: getStateDetails("device0000", "temp5/new")
+ * Topics can include: temp, moisture, humidity, battery, light, motor status, etc.
+ * Example: getStateDetails("device0000", "temp")
  */
 export const getStateDetails = async (deviceId, topic) => {
   try {
