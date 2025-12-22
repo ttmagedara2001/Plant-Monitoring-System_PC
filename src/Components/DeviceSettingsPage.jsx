@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useNotifications } from '../Context/NotificationContext';
 import ThresholdSection from './ThresholdSection';
 import { Droplet, Thermometer, Cloud, Sun, Battery, Power, Settings, Gauge } from 'lucide-react';
 import ActionButton from './ActionButton';
@@ -22,6 +23,7 @@ const DeviceSettingsPage = ({ deviceId: propDeviceId }) => {
   const [saveStatus, setSaveStatus] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [modalErrors, setModalErrors] = useState([]);
+  const { addNotification } = useNotifications();
 
   useEffect(() => {
     if (!deviceId) return;
@@ -72,7 +74,13 @@ const DeviceSettingsPage = ({ deviceId: propDeviceId }) => {
 
   const handleAutoModeToggle = () => {
     // Toggle local UI state only; persist on Save so user can review changes before applying
-    setAutoMode(prev => !prev);
+    setAutoMode(prev => {
+      const next = !prev;
+      try {
+        addNotification({ type: 'pump:mode', message: `Pump mode set to ${next ? 'auto' : 'manual'}`, timestamp: new Date().toISOString(), meta: { deviceId } });
+      } catch (e) {}
+      return next;
+    });
   };
 
   const handlePumpToggle = () => {
@@ -80,6 +88,10 @@ const DeviceSettingsPage = ({ deviceId: propDeviceId }) => {
       const next = !prev;
       // persist immediately so dashboard or other tabs can react
       persistSettings({ pumpOn: next });
+      try {
+        const mode = autoMode ? 'auto' : 'manual';
+        addNotification({ type: 'pump:status', message: `Pump turned ${next ? 'ON' : 'OFF'} (${mode})`, timestamp: new Date().toISOString(), meta: { deviceId, mode } });
+      } catch (e) {}
       return next;
     });
   };
@@ -94,7 +106,7 @@ const DeviceSettingsPage = ({ deviceId: propDeviceId }) => {
   });
 
   useEffect(() => {
-    // initialize from global snapshot if present
+    // initialize from global snapshot if present (also sync pump and mode)
     try {
       const snap = window.__latestLiveData || null;
       if (snap && typeof snap === 'object') {
@@ -105,6 +117,8 @@ const DeviceSettingsPage = ({ deviceId: propDeviceId }) => {
           light: typeof snap.light !== 'undefined' ? snap.light : prev.light,
           battery: typeof snap.battery !== 'undefined' ? snap.battery : prev.battery,
         }));
+        if (typeof snap.pumpStatus !== 'undefined') setPumpOn(String(snap.pumpStatus).toUpperCase() === 'ON');
+        if (typeof snap.pumpMode !== 'undefined') setAutoMode(String(snap.pumpMode).toLowerCase() === 'auto');
       }
     } catch (e) {}
 
@@ -118,6 +132,16 @@ const DeviceSettingsPage = ({ deviceId: propDeviceId }) => {
         light: typeof d.light !== 'undefined' ? d.light : prev.light,
         battery: typeof d.battery !== 'undefined' ? d.battery : prev.battery,
       }));
+
+      // Sync pump status and mode with live updates so UI reflects MQTT messages in real time
+      try {
+        if (typeof d.pumpStatus !== 'undefined') {
+          setPumpOn(String(d.pumpStatus).toUpperCase() === 'ON');
+        }
+        if (typeof d.pumpMode !== 'undefined') {
+          setAutoMode(String(d.pumpMode).toLowerCase() === 'auto');
+        }
+      } catch (e) {}
     };
 
     window.addEventListener('live:update', handler);

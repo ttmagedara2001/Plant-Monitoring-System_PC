@@ -2,7 +2,9 @@ import React from 'react';
 import logo from '../assets/images/logo_title.png';
 import imageIcon from '../assets/images/logo_plant.png';
 import { useAuth } from '../Context/AuthContext';
-import { Sprout, LogOut, ChevronDown, Bell, Wifi, Radio, Server, LayoutDashboard, Settings } from 'lucide-react';
+import { Sprout, LogOut, ChevronDown, Bell, Wifi, Radio, Server, LayoutDashboard, Settings, AlertTriangle, AlertCircle } from 'lucide-react';
+import { useNotifications } from '../Context/NotificationContext';
+import { useRef } from 'react';
 import { webSocketClient } from '../Service/webSocketClient';
 import { useEffect, useState } from 'react';
 
@@ -146,14 +148,82 @@ const Header = ({ deviceId, deviceList, activeTab, setActiveTab, selectedDevice,
       </div>
 
       {/* Bell Icon for Alerts - rightmost */}
-      <div className="flex items-center gap-4 ml-8">
-        <button className="relative group" title="View Alerts">
-          <Bell className="w-6 h-6 text-gray-500 hover:text-yellow-500 transition" />
-        </button>
-      </div>
+          <div className="flex items-center gap-4 ml-8">
+            <NotificationsBell selectedDevice={currentDevice} />
+          </div>
       </div>
     </header>
   );
 };
 
 export default Header;
+
+const NotificationsBell = ({ selectedDevice }) => {
+  const { notifications, markRead, clearAll } = useNotifications();
+  const [open, setOpen] = React.useState(false);
+  const ref = useRef();
+
+  React.useEffect(() => {
+    const onDoc = (e) => {
+      if (!ref.current) return;
+      if (!ref.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener('click', onDoc);
+    return () => document.removeEventListener('click', onDoc);
+  }, []);
+
+  // show only notifications for the selected device (or those without deviceId)
+  const visible = notifications.filter(n => {
+    const did = n.meta && n.meta.deviceId ? n.meta.deviceId : null;
+    return did === null || did === selectedDevice;
+  });
+
+  const unread = visible.filter(n => !n.read).length;
+
+  const iconFor = (type) => {
+    if (type === 'critical') return <AlertTriangle className="w-4 h-4 text-red-600" />;
+    if (type && type.startsWith('pump')) return <AlertCircle className="w-4 h-4 text-blue-600" />;
+    return <Bell className="w-4 h-4 text-gray-600" />;
+  };
+
+  return (
+    <div className="relative" ref={ref}>
+      <button onClick={() => setOpen(v => !v)} className="relative group" title="View Alerts" aria-haspopup="true">
+        <Bell className="w-6 h-6 text-gray-500 hover:text-yellow-500 transition" />
+        {unread > 0 && (
+          <span className="absolute -top-1 -right-1 inline-flex items-center justify-center px-1.5 py-0.5 text-xs font-bold leading-none text-white bg-red-600 rounded-full">{unread}</span>
+        )}
+      </button>
+
+      {open && (
+        <div className="absolute right-0 mt-2 w-80 max-h-96 overflow-auto bg-white border rounded shadow-lg z-50">
+          <div className="flex items-center justify-between px-3 py-2 border-b">
+            <div className="font-semibold">Notifications</div>
+            <div className="flex items-center gap-2">
+              <button onClick={() => { clearAll(selectedDevice); }} className="text-xs text-gray-500 hover:underline">Clear</button>
+            </div>
+          </div>
+          <ul className="divide-y">
+            {visible.length === 0 && (
+              <li className="p-3 text-sm text-gray-500">No notifications</li>
+            )}
+            {visible.map((n) => (
+              <li key={n.id} className={`p-3 text-sm ${n.read ? 'bg-white' : 'bg-gray-50'}`}>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-shrink-0 mt-0.5">{iconFor(n.type)}</div>
+                  <div className="truncate">
+                    <div className={`font-medium ${n.type === 'critical' ? 'text-red-700' : 'text-gray-800'}`}>{n.message}</div>
+                    <div className="text-xs text-gray-500 mt-1">{new Date(n.timestamp).toLocaleString()}</div>
+                  </div>
+                  <div className="ml-2">
+                    {!n.read && <button onClick={() => markRead(n.id)} className="text-xs text-blue-600">Mark</button>}
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+};

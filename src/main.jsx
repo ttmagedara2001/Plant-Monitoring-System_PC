@@ -4,6 +4,7 @@ import App from './App.jsx';
 import './index.css';
 import { HashRouter } from 'react-router-dom'; // Only HashRouter is needed now
 import { AuthProvider, useAuth } from './Context/AuthContext.jsx';
+import { NotificationProvider } from './Context/NotificationContext.jsx';
 import { login } from "./Service/authService";
 
 // The import of BrowserRouter is no longer needed
@@ -77,13 +78,15 @@ ReactDOM.createRoot(document.getElementById('root')).render(
   // Remove StrictMode to prevent double mounting in development
   <AuthProvider>
     <AutoLogin>
-      <HashRouter // <-- FIXED
+			<HashRouter // <-- FIXED
         future={{
           v7_startTransition: true,
           v7_relativeSplatPath: true
         }}
       >
-        <App />
+				<NotificationProvider>
+					<App />
+				</NotificationProvider>
       </HashRouter>
     </AutoLogin>
   </AuthProvider>
