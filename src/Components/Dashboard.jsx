@@ -10,6 +10,7 @@ import SensorStatusIndicator from './SensorStatusIndicator';
 import { AlertTriangle } from 'lucide-react';
 import HistoricalChart from './HistoricalChartTest';
 import PageHeader from './PageHeader';
+import SeasonalEffects from './SeasonalEffects';
 
 
 
@@ -605,6 +606,8 @@ const Dashboard = ({ deviceId: propDeviceId, liveData: propLiveData, settings: p
 
   return (
     <div className="min-h-screen bg-[#f0f4f8] p-4 font-sans text-gray-800 overflow-x-hidden">
+      {/* Seasonal effects (snow/wishes) - only active in December */}
+      <SeasonalEffects />
       <div className="w-[calc(100%-2rem)] max-w-7xl justify-center mx-auto mb-6">
       {/* Page heading */}
       <PageHeader

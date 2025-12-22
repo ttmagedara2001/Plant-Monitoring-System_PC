@@ -6,9 +6,11 @@ import DeviceSettingsPage from './Components/DeviceSettingsPage';
 import { useAuth } from './Context/AuthContext';
 import { webSocketClient } from './Service/webSocketClient';
 import { updatePumpStatus } from './Service/deviceService';
+import { useNotifications } from './Context/NotificationContext';
 
 function App() {
   const { jwtToken } = useAuth();
+  const { addNotification } = useNotifications();
 
   // SPA navigation state
   const [activeTab, setActiveTab] = useState(() => {
@@ -75,6 +77,58 @@ function App() {
       // ignore
     }
   }, [liveData]);
+
+  // Watch for critical sensor transitions and pump status changes to emit notifications
+  const _prevLive = React.useRef(null);
+  React.useEffect(() => {
+    try {
+      const prev = _prevLive.current || {};
+      const curr = liveData || {};
+
+      // load thresholds from persisted settings for selected device if present
+      let persisted = null;
+      try {
+        const raw = localStorage.getItem(`settings_${selectedDevice}`);
+        if (raw) persisted = JSON.parse(raw).thresholds || null;
+      } catch (e) {}
+
+      const sensors = ['moisture','temperature','humidity','light','battery'];
+      const isCritical = (key, value) => {
+        if (value === undefined || value === null || String(value) === 'unknown') return true;
+        const num = Number(value);
+        if (Number.isNaN(num)) return true;
+        const group = (persisted && persisted[key]) || null;
+        const min = group && typeof group.min !== 'undefined' ? Number(group.min) : undefined;
+        const max = group && typeof group.max !== 'undefined' ? Number(group.max) : undefined;
+        if (typeof min !== 'undefined' && !Number.isNaN(min) && num < min) return true;
+        if (typeof max !== 'undefined' && !Number.isNaN(max) && num > max) return true;
+        return false;
+      };
+
+      sensors.forEach((s) => {
+        const prevCritical = isCritical(s, prev[s]);
+        const currCritical = isCritical(s, curr[s]);
+        // if previously unknown (first run) treat as non-critical so we produce notifications for current criticals
+        if (!prevCritical && currCritical) {
+          try {
+            addNotification({ type: 'critical', message: `Critical: ${s}=${curr[s]}`, timestamp: new Date().toISOString(), meta: { deviceId: selectedDevice, sensor: s, value: curr[s] } });
+          } catch (e) {}
+        }
+      });
+
+      // pump status changed
+      if ((prev.pumpStatus || '') !== (curr.pumpStatus || '')) {
+        const mode = curr.pumpMode || (settings && settings.autoMode ? 'auto' : 'manual') || 'manual';
+        try {
+          addNotification({ type: 'pump:status', message: `Pump ${curr.pumpStatus} (${mode})`, timestamp: new Date().toISOString(), meta: { deviceId: selectedDevice, mode } });
+        } catch (e) {}
+      }
+    } catch (e) {
+      // ignore
+    } finally {
+      _prevLive.current = liveData;
+    }
+  }, [liveData, selectedDevice, addNotification, settings]);
 
   
   useEffect(() => {
