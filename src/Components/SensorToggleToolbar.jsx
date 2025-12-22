@@ -11,7 +11,7 @@ const SENSOR_DEFS = [
 ];
 
 const SensorToggleToolbar = ({ visibleSeries, toggleSeries, getButtonClass, className = '' }) => (
-  <div className={`flex flex-wrap gap-2 mb-6 justify-center md:justify-start p-3 bg-gray-50 rounded-xl border border-gray-100 ${className}`}>
+  <div className={`flex items-center gap-2 justify-center md:justify-start ${className}`}>
     {SENSOR_DEFS.map(({ key, label, color }) => (
       <button
         key={key}

@@ -8,12 +8,16 @@ const ThresholdSection = ({
   title,
   minConfig,
   maxConfig,
-  rangeError 
+  rangeError,
+  icon: Icon,
 }) => {
   return (
     <div className="space-y-4">
       <h4 className="font-semibold text-gray-700 border-b pb-2">
-        {title}
+        <div className="flex items-center gap-3">
+          {Icon && <Icon className="w-5 h-5 text-gray-600" />}
+          <span>{title}</span>
+        </div>
       </h4>
       
       {rangeError && (

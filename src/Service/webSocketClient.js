@@ -45,8 +45,9 @@ class WebSocketClient {
     this.currentDeviceId = null;
     this.subscriptions = new Map();
     this.dataCallback = null;
-    this.connectCallback = null;
-    this.disconnectCallback = null;
+    // Support multiple listeners
+    this.connectCallbacks = [];
+    this.disconnectCallbacks = [];
     this.isReady = false;
     this.jwtToken = null;
   }
@@ -82,8 +83,17 @@ class WebSocketClient {
         }
 
         // Call user's connect callback
-        if (this.connectCallback) {
-          this.connectCallback();
+        if (
+          Array.isArray(this.connectCallbacks) &&
+          this.connectCallbacks.length > 0
+        ) {
+          this.connectCallbacks.forEach((cb) => {
+            try {
+              cb();
+            } catch (e) {
+              console.warn("[WebSocketClient] connect callback failed", e);
+            }
+          });
         }
       },
 
@@ -99,8 +109,17 @@ class WebSocketClient {
       onWebSocketClose: (event) => {
         console.warn("🔻 WebSocket closed", event);
         this.isReady = false;
-        if (this.disconnectCallback) {
-          this.disconnectCallback();
+        if (
+          Array.isArray(this.disconnectCallbacks) &&
+          this.disconnectCallbacks.length > 0
+        ) {
+          this.disconnectCallbacks.forEach((cb) => {
+            try {
+              cb();
+            } catch (e) {
+              console.warn("[WebSocketClient] disconnect callback failed", e);
+            }
+          });
         }
       },
 
@@ -283,6 +302,22 @@ class WebSocketClient {
   }
 
   /**
+   * Public wrapper to unsubscribe from a device's topics without disconnecting
+   * @param {string} deviceId
+   */
+  unsubscribeFromDevice(deviceId) {
+    try {
+      this._unsubscribeFromDeviceTopics(deviceId);
+    } catch (e) {
+      console.warn(
+        "[WebSocketClient] Failed to unsubscribe from device",
+        deviceId,
+        e
+      );
+    }
+  }
+
+  /**
    * Connect to WebSocket (initializes client with token)
    * @param {string} token - JWT token
    */
@@ -362,18 +397,41 @@ class WebSocketClient {
    * Register connect callback
    */
   onConnect(callback) {
-    this.connectCallback = callback;
-    // If already connected, call immediately
-    if (this.isConnected) {
-      callback();
+    if (typeof callback === "function") {
+      this.connectCallbacks.push(callback);
+      if (this.isConnected) {
+        try {
+          callback();
+        } catch (e) {
+          console.warn("[WebSocketClient] onConnect immediate call failed", e);
+        }
+      }
     }
+  }
+
+  // Remove a previously registered connect callback
+  offConnect(callback) {
+    if (!callback) return;
+    this.connectCallbacks = this.connectCallbacks.filter(
+      (cb) => cb !== callback
+    );
   }
 
   /**
    * Register disconnect callback
    */
   onDisconnect(callback) {
-    this.disconnectCallback = callback;
+    if (typeof callback === "function") {
+      this.disconnectCallbacks.push(callback);
+    }
+  }
+
+  // Remove a previously registered disconnect callback
+  offDisconnect(callback) {
+    if (!callback) return;
+    this.disconnectCallbacks = this.disconnectCallbacks.filter(
+      (cb) => cb !== callback
+    );
   }
 
   /**
