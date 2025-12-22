@@ -1,39 +1,29 @@
 import React, { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
 import { useAuth } from '../Context/AuthContext';
 import { getAllStreamData, updatePumpStatus } from '../Service/deviceService'; 
-import { webSocketClient } from '../Service/webSocketClient'; // ✅ Direct WebSocket client
 //import { AlertTriangle } from 'lucide-react';
 
 // Import Sub-Components
 import Header from './Header';
-import SettingsPanel from './SettingsPanel';
 import StatusCard from './StatusCard';
+import SensorStatusIndicator from './SensorStatusIndicator';
 import { AlertTriangle } from 'lucide-react';
 import HistoricalChart from './HistoricalChartTest';
 import PageHeader from './PageHeader';
 
 
 
-const Dashboard = () => {
-  const { deviceId: paramDeviceId } = useParams();
+const Dashboard = ({ deviceId: propDeviceId, liveData: propLiveData, settings: propSettings, isConnected: propIsConnected, alertMessage: propAlertMessage }) => {
   //Change this to your actual device ID that belongs to your user account
   const defaultDeviceId = 'device0011233'; //'device9988'
-  const deviceId = paramDeviceId || defaultDeviceId;
+  const deviceId = propDeviceId || defaultDeviceId;
   
   const { jwtToken } = useAuth(); 
 
-  // WebSocket states: default values
-  const [liveData, setLiveData] = useState({
-    moisture: 0,
-    temperature: 0,
-    humidity: 0,
-    light: 0,
-    battery: 0,
-    pumpStatus: "OFF",
-    pumpMode: "manual",
-  });
-  const [isConnected, setIsConnected] = useState(false);
+  // liveData, settings, and connection are provided by App via props
+  const liveData = propLiveData || { moisture: 0, temperature: 0, humidity: 0, light: 0, battery: 0, pumpStatus: 'OFF', pumpMode: 'manual' };
+  const isConnected = typeof propIsConnected !== 'undefined' ? propIsConnected : false;
+  const settings = propSettings || { moistureMin: '20', moistureMax: '70', tempMin: '10', tempMax: '35', humidityMin: '30', humidityMax: '80', lightMin: '200', lightMax: '1000', batteryMin: '20', autoMode: false };
   const [deviceList] = useState(['device9988', 'device0011233', 'device0000', 'device0001', 'device0002']);
   
   // HTTP API for historical data visualization
@@ -54,24 +44,64 @@ const Dashboard = () => {
   }); 
   // header clock handled by PageHeader component
   
-  // Settings & Control States (Frontend only - no backend API)
-  const [settings, setSettings] = useState(() => {
-    // Load settings from localStorage or use defaults
-    const saved = localStorage.getItem(`settings_${deviceId}`);
-    return saved ? JSON.parse(saved) : { 
-      moistureMin: '20', 
-      moistureMax: '70',
-      tempMin: '10',
-      tempMax: '35',
-      humidityMin: '30',
-      humidityMax: '80',
-      lightMin: '200',
-      lightMax: '1000',
-      batteryMin: '20',
-      autoMode: false 
-    };
-  });
-  const [alertMessage, setAlertMessage] = useState(null);
+  // alert states (computed here in Dashboard for every real-time update)
+  const alertMessage = propAlertMessage || null;
+  const [alertStates, setAlertStates] = useState({});
+
+  // Compute per-sensor alert levels/messages on every liveData or settings change
+  useEffect(() => {
+    try {
+      const compute = (key) => {
+        const raw = propLiveData?.[key];
+        if (raw === undefined || raw === null || settings == null) return { level: 'normal', message: null };
+        const val = Number(raw);
+        if (!isFinite(val)) return { level: 'normal', message: null };
+
+        if (key === 'moisture') {
+          const min = parseFloat(settings.moistureMin);
+          const max = parseFloat(settings.moistureMax);
+          if (!isNaN(min) && val < min) return { level: 'critical', message: `CRITICAL: ${val.toFixed(1)}% < ${min}%` };
+          if (!isNaN(max) && val > max) return { level: 'warning', message: `WARNING: ${val.toFixed(1)}% > ${max}%` };
+        }
+        if (key === 'temperature') {
+          const min = parseFloat(settings.tempMin);
+          const max = parseFloat(settings.tempMax);
+          if (!isNaN(min) && val < min) return { level: 'critical', message: `CRITICAL: ${val.toFixed(1)}°C < ${min}°C` };
+          if (!isNaN(max) && val > max) return { level: 'warning', message: `WARNING: ${val.toFixed(1)}°C > ${max}°C` };
+        }
+        if (key === 'humidity') {
+          const min = parseFloat(settings.humidityMin);
+          const max = parseFloat(settings.humidityMax);
+          if (!isNaN(min) && val < min) return { level: 'critical', message: `CRITICAL: ${val.toFixed(1)}% < ${min}%` };
+          if (!isNaN(max) && val > max) return { level: 'warning', message: `WARNING: ${val.toFixed(1)}% > ${max}%` };
+        }
+        if (key === 'light') {
+          const min = parseFloat(settings.lightMin);
+          const max = parseFloat(settings.lightMax);
+          if (!isNaN(min) && val < min) return { level: 'critical', message: `CRITICAL: ${Math.round(val)} lux < ${min} lux` };
+          if (!isNaN(max) && val > max) return { level: 'warning', message: `WARNING: ${Math.round(val)} lux > ${max} lux` };
+        }
+        if (key === 'battery') {
+          const min = parseFloat(settings.batteryMin);
+          if (!isNaN(min) && val < min) return { level: 'critical', message: `Warning: below ${min}%` };
+        }
+        return { level: 'normal', message: null };
+      };
+
+      const states = {
+        moisture: compute('moisture'),
+        temperature: compute('temperature'),
+        humidity: compute('humidity'),
+        light: compute('light'),
+        battery: compute('battery'),
+      };
+      // Debug: show computed states
+      console.debug('[Dashboard] computed alertStates ->', { rawLive: propLiveData, settings, states });
+      setAlertStates(states);
+    } catch (e) {
+      console.warn('[Dashboard] alertStates compute failed', e);
+    }
+  }, [propLiveData, settings]);
   const [commandStatus, setCommandStatus] = useState(null); 
   const [commandInProgress, setCommandInProgress] = useState(null);
 
@@ -214,322 +244,31 @@ const Dashboard = () => {
     return () => clearInterval(refreshInterval);
   }, [deviceId, jwtToken, timeRange]);
 
-  // Reset all data when device changes
+  // Reset view-specific data when device changes (keep liveData/settings handled by App)
   useEffect(() => {
-    console.log(`[Dashboard] 🔄 Device changed to: ${deviceId} - Resetting all data`);
-    
-    // Reset live data to defaults
-    setLiveData({
-      moisture: 0,
-      temperature: 0,
-      humidity: 0,
-      light: 0,
-      battery: 0,
-      pumpStatus: "OFF",
-      pumpMode: "manual",
-    });
-    
-    // Reset historical data
+    console.log(`[Dashboard] 🔄 Device changed to: ${deviceId} - Resetting view state`);
     setHistoricalData([]);
     setFilteredData([]);
     setDataFetchError(null);
-    
-    // Reset alerts and command status
-    setAlertMessage(null);
     setCommandStatus(null);
     setCommandInProgress(null);
-    
-    // Load device-specific settings from localStorage
-    const saved = localStorage.getItem(`settings_${deviceId}`);
-    if (saved) {
-      setSettings(JSON.parse(saved));
-      console.log('📥 Settings loaded from localStorage for device:', deviceId);
-    } else {
-      // Reset to defaults if no saved settings for this device
-      setSettings({ 
-        moistureMin: '20', 
-        moistureMax: '70',
-        tempMin: '10',
-        tempMax: '35',
-        humidityMin: '30',
-        humidityMax: '80',
-        lightMin: '200',
-        lightMax: '1000',
-        batteryMin: '20',
-        autoMode: false 
-      });
-    }
-    
-    // Load device-specific time range and interval
+
+    // Load device-specific time range and interval (view-only)
     const savedTimeRange = localStorage.getItem(`timeRange_${deviceId}`);
     const savedInterval = localStorage.getItem(`dataInterval_${deviceId}`);
     setTimeRange(savedTimeRange || '1h');
     setDataInterval(savedInterval || 'auto');
-    
-    console.log(`[Dashboard] ✅ Reset complete for device: ${deviceId}`);
+
+    console.log(`[Dashboard] ✅ View reset complete for device: ${deviceId}`);
   }, [deviceId]);
 
-  // Listen for settings updates from other components (e.g., DeviceSettingsPage immediate saves)
-  useEffect(() => {
-    const onSettingsUpdated = (e) => {
-      try {
-        const updatedDevice = e?.detail?.deviceId;
-        if (!updatedDevice || updatedDevice !== deviceId) return;
-        const saved = localStorage.getItem(`settings_${deviceId}`);
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          // Update only if parsed has settings structure
-          setSettings((prev) => ({ ...prev, ...(parsed || {}) }));
-          console.log('[Dashboard] 🔁 Settings reloaded from localStorage due to external update');
-        }
-      } catch (err) {
-        console.error('[Dashboard] Failed to handle settings:updated event', err);
-      }
-    };
+  // (Settings and liveData persistence handled by App)
 
-    window.addEventListener('settings:updated', onSettingsUpdated);
-    return () => window.removeEventListener('settings:updated', onSettingsUpdated);
-  }, [deviceId]);
+  // WebSocket and liveData are handled at the App level now.
+  // Dashboard is a display-only component and receives `propLiveData`, `propIsConnected`, and `propSettings` from App.
 
-  // WebSocket Connection Management
-  useEffect(() => {
-    if (!jwtToken || !deviceId) {
-      console.warn("[Dashboard] Missing deviceId or JWT token for WebSocket");
-      return;
-    }
-
-    // Data handler for WebSocket messages
-    const handleData = (data) => {
-      console.log(`[Dashboard] 📡 Real-time ${data.sensorType}:`, data.value);
-
-      setLiveData((prev) => {
-        const updated = { ...prev };
-
-        // Handle batch state updates (all sensors at once)
-        if (data.sensorType === "batchUpdate") {
-          console.log(`[Dashboard] 🔄 Processing BATCH state update:`, data.value);
-          
-          // Update all sensors from the batch
-          if (data.value.temp !== undefined) {
-            updated.temperature = parseFloat(data.value.temp);
-            console.log(`[Dashboard] ✅ Updated temperature: ${updated.temperature}`);
-          }
-          if (data.value.humidity !== undefined) {
-            updated.humidity = parseFloat(data.value.humidity);
-            console.log(`[Dashboard] ✅ Updated humidity: ${updated.humidity}`);
-          }
-          if (data.value.battery !== undefined) {
-            updated.battery = parseFloat(data.value.battery);
-            console.log(`[Dashboard] ✅ Updated battery: ${updated.battery}`);
-          }
-          if (data.value.light !== undefined) {
-            updated.light = parseFloat(data.value.light);
-            console.log(`[Dashboard] ✅ Updated light: ${updated.light}`);
-          }
-          if (data.value.moisture !== undefined) {
-            updated.moisture = parseFloat(data.value.moisture);
-            console.log(`[Dashboard] ✅ Updated moisture: ${updated.moisture}`);
-          }
-          
-          console.log(`[Dashboard] 📊 Batch update complete. New state:`, updated);
-        } else {
-          // Handle individual sensor updates (original logic)
-          switch (data.sensorType) {
-            case "temp":
-              updated.temperature = parseFloat(data.value);
-              console.log(`[Dashboard] ✅ Updated temperature: ${updated.temperature}`);
-              break;
-            case "humidity":
-              updated.humidity = parseFloat(data.value);
-              console.log(`[Dashboard] ✅ Updated humidity: ${updated.humidity}`);
-              break;
-            case "battery":
-              updated.battery = parseFloat(data.value);
-              console.log(`[Dashboard] ✅ Updated battery: ${updated.battery}`);
-              break;
-            case "light":
-              updated.light = parseFloat(data.value);
-              console.log(`[Dashboard] ✅ Updated light: ${updated.light}`);
-              break;
-            case "moisture":
-              updated.moisture = parseFloat(data.value);
-              console.log(`[Dashboard] ✅ Updated moisture: ${updated.moisture}`);
-              break;
-            case "pumpStatus":
-              updated.pumpStatus = data.value;
-              console.log(`[Dashboard] 🚨 Pump status updated to: ${data.value}`);
-              break;
-            case "pumpMode":
-              updated.pumpMode = data.value;
-              console.log(`[Dashboard] ⚙️ Pump mode updated to: ${data.value}`);
-              break;
-            default:
-              console.warn(`[Dashboard] ⚠️ Unknown sensor type: ${data.sensorType}`);
-          }
-        }
-
-        console.log(`[Dashboard] 📊 New liveData state:`, updated);
-        return updated;
-      });
-    };
-
-    // Setup connection callbacks
-    webSocketClient.onConnect(() => {
-      setIsConnected(true);
-      console.log("[Dashboard] ✅ WebSocket Connected");
-    });
-
-    webSocketClient.onDisconnect(() => {
-      setIsConnected(false);
-      console.log("[Dashboard] ❌ WebSocket Disconnected");
-    });
-
-    // Connect to WebSocket
-    const initWebSocket = async () => {
-      try {
-        console.log("[Dashboard] 🔄 Initializing WebSocket connection");
-        await webSocketClient.connect(jwtToken);
-        
-        // Subscribe to device topics
-        const success = webSocketClient.subscribeToDevice(deviceId, handleData);
-        if (success) {
-          console.log(`[Dashboard] ✅ Subscribed to ${deviceId} topics`);
-        }
-      } catch (error) {
-        console.error("[Dashboard] ❌ WebSocket connection failed:", error);
-        setIsConnected(false);
-      }
-    };
-
-    initWebSocket();
-
-    // Cleanup on unmount or when deviceId/jwtToken changes
-    return () => {
-      console.log("[Dashboard] 🧹 Cleaning up WebSocket connection");
-      webSocketClient.disconnect();
-    };
-  }, [deviceId, jwtToken]);
-
-  // Alert Logic - Check all sensors for critical conditions
-  useEffect(() => {
-    const currentData = liveData || {}; 
-    const alerts = [];
-
-    // Moisture alerts
-    const minM = parseFloat(settings.moistureMin);
-    const maxM = parseFloat(settings.moistureMax);
-    if (currentData.moisture !== undefined) {
-      if (currentData.moisture < minM) {
-        alerts.push(`CRITICAL: Soil Moisture (${currentData.moisture.toFixed(1)}%) is below minimum (${minM}%)`);
-      } else if (currentData.moisture > maxM) {
-        alerts.push(`WARNING: Soil Moisture (${currentData.moisture.toFixed(1)}%) exceeds maximum (${maxM}%)`);
-      }
-    }
-
-    // Temperature alerts
-    const minT = parseFloat(settings.tempMin);
-    const maxT = parseFloat(settings.tempMax);
-    if (currentData.temperature !== undefined) {
-      if (currentData.temperature < minT) {
-        alerts.push(`CRITICAL: Temperature (${currentData.temperature.toFixed(1)}°C) is below minimum (${minT}°C)`);
-      } else if (currentData.temperature > maxT) {
-        alerts.push(`WARNING: Temperature (${currentData.temperature.toFixed(1)}°C) exceeds maximum (${maxT}°C)`);
-      }
-    }
-
-    // Humidity alerts
-    const minH = parseFloat(settings.humidityMin);
-    const maxH = parseFloat(settings.humidityMax);
-    if (currentData.humidity !== undefined) {
-      if (currentData.humidity < minH) {
-        alerts.push(`CRITICAL: Humidity (${currentData.humidity.toFixed(1)}%) is below minimum (${minH}%)`);
-      } else if (currentData.humidity > maxH) {
-        alerts.push(`WARNING: Humidity (${currentData.humidity.toFixed(1)}%) exceeds maximum (${maxH}%)`);
-      }
-    }
-
-    // Light alerts
-    const minL = parseFloat(settings.lightMin);
-    const maxL = parseFloat(settings.lightMax);
-    if (currentData.light !== undefined) {
-      if (currentData.light < minL) {
-        alerts.push(`CRITICAL: Light (${currentData.light.toFixed(0)} lux) is below minimum (${minL} lux)`);
-      } else if (currentData.light > maxL) {
-        alerts.push(`WARNING: Light (${currentData.light.toFixed(0)} lux) exceeds maximum (${maxL} lux)`);
-      }
-    }
-
-    // Battery alert
-    const minB = parseFloat(settings.batteryMin);
-    if (currentData.battery !== undefined && currentData.battery < minB) {
-      alerts.push(`CRITICAL: Battery (${currentData.battery.toFixed(1)}%) is below minimum (${minB}%)`);
-    }
-
-    // Set the alert message (show first critical alert or null if none)
-    setAlertMessage(alerts.length > 0 ? alerts[0] : null);
-  }, [liveData, settings]);
-
-  // Automation Logic - Auto Pump Control based on Moisture Levels
-  useEffect(() => {
-    // Only run automation if auto mode is enabled in SAVED settings
-    if (!settings.autoMode) {
-      console.log(`[Automation] ⚙️ Auto mode is DISABLED - Manual control only`);
-      return;
-    }
-
-    const currentMoisture = liveData?.moisture;
-    if (currentMoisture === undefined) {
-      console.log(`[Automation] ⏳ Waiting for moisture data...`);
-      return;
-    }
-
-    const minMoisture = parseFloat(settings.moistureMin);
-    const maxMoisture = parseFloat(settings.moistureMax);
-    const currentPumpStatus = liveData?.pumpStatus || "OFF";
-
-    console.log(`[Automation] 🤖 AUTO MODE ACTIVE - Checking conditions:`, {
-      autoMode: settings.autoMode,
-      moisture: currentMoisture,
-      min: minMoisture,
-      max: maxMoisture,
-      pumpStatus: currentPumpStatus
-    });
-
-    // 1: Turn pump ON if moisture is too LOW (CRITICAL) and pump is currently OFF
-    if (currentMoisture < minMoisture && currentPumpStatus === "OFF") {
-      console.log(`[Automation] 🚨 CRITICAL SITUATION DETECTED!`);
-      console.log(`[Automation] 💧 Moisture ${currentMoisture}% < ${minMoisture}% - AUTO MODE turning pump ON`);
-      console.log(`[Automation] 📡 Sending MQTT command via HTTP API...`);
-      
-      // Send HTTP API request to backend, which will forward to MQTT device
-      updatePumpStatus(deviceId, "ON", "pump", "auto")
-        .then(() => {
-          console.log(`[Automation] ✅ HTTP API request successful - Backend forwarding MQTT command to IoT device`);
-          setAlertMessage(`AUTO MODE: Pump activated automatically - Moisture CRITICAL (${currentMoisture.toFixed(1)}%)`);
-        })
-        .catch((error) => {
-          console.error(`[Automation] ❌ HTTP API request failed:`, error);
-          setAlertMessage(`ERROR: Auto mode failed to activate pump - ${error.message}`);
-        });
-    }
-
-    // 2: Turn pump OFF if moisture returns to NORMAL range (>= min) and pump is currently ON
-    if (currentMoisture >= minMoisture && currentPumpStatus === "ON") {
-      console.log(`[Automation] ✅ NORMAL: Moisture ${currentMoisture}% >= ${minMoisture}% - AUTO MODE turning pump OFF`);
-      console.log(`[Automation] 📡 Sending MQTT command via HTTP API...`);
-      
-      // Send HTTP API request to backend, which will forward to MQTT device
-      updatePumpStatus(deviceId, "OFF", "pump", "auto")
-        .then(() => {
-          console.log(`[Automation] ✅ HTTP API request successful - Backend forwarding MQTT command to IoT device`);
-          setAlertMessage(`AUTO MODE: Pump deactivated - Moisture restored to normal (${currentMoisture.toFixed(1)}%)`);
-        })
-        .catch((error) => {
-          console.error(`[Automation] ❌ HTTP API request failed:`, error);
-          setAlertMessage(`ERROR: Auto mode failed to deactivate pump - ${error.message}`);
-        });
-    }
-  }, [liveData?.moisture, liveData?.pumpStatus, settings.moistureMin, settings.moistureMax, settings.autoMode, deviceId]);
+  // Alerts and automation are handled at the App level now.
+  // Dashboard is a display-only component that receives `propAlertMessage` and `propLiveData` from App.
   
   // Data Export Function - Export from HTTP API historical data only
   const handleExportCSV = async (selectedSensors = null) => {
@@ -673,16 +412,50 @@ const Dashboard = () => {
 
   // Helpers
   const getVal = (key, unit, decimals = 1) => {
-    return liveData?.[key] ? `${Number(liveData[key]).toFixed(decimals)}${unit}` : '--';
+    const raw = liveData?.[key];
+    if (raw === null || raw === undefined || raw === '') return '--';
+    const num = Number(raw);
+    if (!isFinite(num)) return '--';
+    return `${num.toFixed(decimals)}${unit}`;
   };
   
   const pumpStatus = liveData?.pumpStatus || 'OFF';
   
   const getBorderColor = (key, min, max) => {
-    const val = liveData?.[key];
-    
+    const raw = liveData?.[key];
+    // Debug: show incoming value and provided bounds
+    console.debug(`[Dashboard][getBorderColor] key=${key} raw=${raw} min=${min} max=${max}`);
+    if (raw === undefined || raw === null || raw === '') {
+      return (function(){
+        switch (key) {
+          case 'moisture': return 'border-cyan-500';
+          case 'temperature': return 'border-green-500';
+          case 'humidity': return 'border-blue-400';
+          case 'light': return 'border-yellow-500';
+          case 'battery': return 'border-purple-500';
+          default: return 'border-green-500';
+        }
+      })();
+    }
+
+    const val = Number(raw);
+    if (!isFinite(val)) {
+      // Non-numeric values: keep default styling
+      switch (key) {
+        case 'moisture': return 'border-cyan-500';
+        case 'temperature': return 'border-green-500';
+        case 'humidity': return 'border-blue-400';
+        case 'light': return 'border-yellow-500';
+        case 'battery': return 'border-purple-500';
+        default: return 'border-green-500';
+      }
+    }
+
+    // Debug: log value and bounds
+    console.debug(`[Dashboard][getBorderColor] ${key} value=${val} min=${min} max=${max}`);
+
     // Check if value is critical (outside bounds)
-    const isCritical = val !== undefined && (val < min || val > max);
+    const isCritical = (!isNaN(min) && val < min) || (!isNaN(max) && val > max);
     
     if (isCritical) {
       return 'border-red-500 bg-red-50'; // Red border and light red background for critical
@@ -699,53 +472,199 @@ const Dashboard = () => {
     }
   };
 
+  // Compute per-sensor alert message based on thresholds from `settings`
+  const getSensorAlert = (key) => {
+    const raw = liveData?.[key];
+    if (raw === undefined || raw === null || settings == null) return null;
+    const val = Number(raw);
+    if (!isFinite(val)) return null;
+
+    try {
+      console.debug(`[Dashboard][getSensorAlert] checking ${key} val=${val} settings=`, settings);
+      switch (key) {
+        case 'moisture': {
+          const min = parseFloat(settings.moistureMin);
+          const max = parseFloat(settings.moistureMax);
+          console.debug(`[Dashboard][getSensorAlert][moisture] val=${val} min=${min} max=${max}`);
+          if (!isNaN(min) && val < min) return `CRITICAL: ${val.toFixed(1)}% < ${min}%`;
+          if (!isNaN(max) && val > max) return `WARNING: ${val.toFixed(1)}% > ${max}%`;
+          return null;
+        }
+        case 'temperature': {
+          const min = parseFloat(settings.tempMin);
+          const max = parseFloat(settings.tempMax);
+          console.debug(`[Dashboard][getSensorAlert][temperature] val=${val} min=${min} max=${max}`);
+          if (!isNaN(min) && val < min) return `CRITICAL: ${val.toFixed(1)}°C < ${min}°C`;
+          if (!isNaN(max) && val > max) return `WARNING: ${val.toFixed(1)}°C > ${max}°C`;
+          return null;
+        }
+        case 'humidity': {
+          const min = parseFloat(settings.humidityMin);
+          const max = parseFloat(settings.humidityMax);
+          console.debug(`[Dashboard][getSensorAlert][humidity] val=${val} min=${min} max=${max}`);
+          if (!isNaN(min) && val < min) return `CRITICAL: ${val.toFixed(1)}% < ${min}%`;
+          if (!isNaN(max) && val > max) return `WARNING: ${val.toFixed(1)}% > ${max}%`;
+          return null;
+        }
+        case 'light': {
+          const min = parseFloat(settings.lightMin);
+          const max = parseFloat(settings.lightMax);
+          console.debug(`[Dashboard][getSensorAlert][light] val=${val} min=${min} max=${max}`);
+          if (!isNaN(min) && val < min) return `CRITICAL: ${Math.round(val)} lux < ${min} lux`;
+          if (!isNaN(max) && val > max) return `WARNING: ${Math.round(val)} lux > ${max} lux`;
+          return null;
+        }
+        case 'battery': {
+          const min = parseFloat(settings.batteryMin);
+          console.debug(`[Dashboard][getSensorAlert][battery] val=${val} min=${min}`);
+          if (!isNaN(min) && val < min) return `Warning: below ${min}%`;
+          return null;
+        }
+        default:
+          return null;
+      }
+    } catch (e) {
+      console.error('[Dashboard] getSensorAlert error', e);
+      return null;
+    }
+  };
+
+  // Map sensor key to status string used by SensorStatusIndicator
+  // Returns 'warning' when equal to min or max, 'critical' when outside bounds, and 'normal' otherwise.
+  const getSensorStatus = (key) => {
+    try {
+      const raw = liveData?.[key];
+      // Treat missing data as critical for visibility
+      if (raw === undefined || raw === null || settings == null) return 'critical';
+      const val = Number(raw);
+      if (!isFinite(val)) return 'critical';
+
+      // derive min/max from settings depending on key, with safe defaults
+      let min = NaN;
+      let max = NaN;
+      const FALLBACK = {
+        moistureMin: 20,
+        moistureMax: 70,
+        tempMin: 10,
+        tempMax: 35,
+        humidityMin: 30,
+        humidityMax: 80,
+        lightMin: 200,
+        lightMax: 1000,
+        batteryMin: 20,
+      };
+      switch (key) {
+        case 'moisture':
+          min = parseFloat(settings.moistureMin);
+          max = parseFloat(settings.moistureMax);
+          if (isNaN(min)) min = FALLBACK.moistureMin;
+          if (isNaN(max)) max = FALLBACK.moistureMax;
+          break;
+        case 'temperature':
+          min = parseFloat(settings.tempMin);
+          max = parseFloat(settings.tempMax);
+          if (isNaN(min)) min = FALLBACK.tempMin;
+          if (isNaN(max)) max = FALLBACK.tempMax;
+          break;
+        case 'humidity':
+          min = parseFloat(settings.humidityMin);
+          max = parseFloat(settings.humidityMax);
+          if (isNaN(min)) min = FALLBACK.humidityMin;
+          if (isNaN(max)) max = FALLBACK.humidityMax;
+          break;
+        case 'light':
+          min = parseFloat(settings.lightMin);
+          max = parseFloat(settings.lightMax);
+          if (isNaN(min)) min = FALLBACK.lightMin;
+          if (isNaN(max)) max = FALLBACK.lightMax;
+          break;
+        case 'battery':
+          min = parseFloat(settings.batteryMin);
+          if (isNaN(min)) min = FALLBACK.batteryMin;
+          max = 100;
+          break;
+        default:
+          break;
+      }
+
+      // Warning when exactly equal to a bound
+      if (!isNaN(min) && val === min) return 'warning';
+      if (!isNaN(max) && val === max) return 'warning';
+
+      // Critical when outside bounds
+      if (!isNaN(min) && val < min) return 'critical';
+      if (!isNaN(max) && val > max) return 'critical';
+
+      // Otherwise neutral
+      return 'normal';
+    } catch (e) {
+      console.warn('[Dashboard] getSensorStatus failed', e);
+      return 'critical';
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#f0f4f8] p-4 font-sans text-gray-800 overflow-x-hidden">
-      {/* Header at the very top */}
-      <Header deviceId={deviceId} deviceList={deviceList} isConnected={isConnected} />
-
+      <div className="w-[calc(100%-2rem)] max-w-7xl justify-center mx-auto mb-6">
       {/* Page heading */}
       <PageHeader
         title="Dashboard"
         subtitle="Real-time sensor readings, charts, and controls for your device."
         deviceId={deviceId}
       />
+      </div>
 
 
         {/* Connection Status Panel (navigation and dark mode only) */}
 
         {/* Real-Time Cards + Pump Banner (centered, compact within main container) */}
-      <div className="w-full max-w-7xl mx-auto px-4 mb-8">
+      <div className="w-[calc(100%-2rem)] mx-auto px-4 mb-8">
+        <div className="max-w-7xl mx-auto">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-4">
-        <StatusCard 
-          value={getVal('moisture', '%')} 
-          label="Soil Moisture" 
-          borderColor={getBorderColor('moisture', parseFloat(settings.moistureMin), parseFloat(settings.moistureMax))} 
-        />
-        <StatusCard 
-          value={getVal('temperature', '°C')} 
-          label="Temperature" 
-          borderColor={getBorderColor('temperature', parseFloat(settings.tempMin), parseFloat(settings.tempMax))} 
-        />
-        <StatusCard 
-          value={getVal('humidity', '%')} 
-          label="Humidity" 
-          borderColor={getBorderColor('humidity', parseFloat(settings.humidityMin), parseFloat(settings.humidityMax))} 
-        />
-        <StatusCard 
-          value={getVal('light', ' lux', 0)} 
-          label="Light" 
-          borderColor={getBorderColor('light', parseFloat(settings.lightMin), parseFloat(settings.lightMax))} 
-        />
-        <StatusCard 
-          value={getVal('battery', '%')} 
-          label="Battery" 
-          borderColor={getBorderColor('battery', parseFloat(settings.batteryMin), 100)} 
-        />
+          <SensorStatusIndicator
+            label="Soil Moisture"
+            value={liveData?.moisture}
+            unit="%"
+            decimals={1}
+            status={getSensorStatus('moisture')}
+          />
+
+          <SensorStatusIndicator
+            label="Temperature"
+            value={liveData?.temperature}
+            unit="°C"
+            decimals={1}
+            status={getSensorStatus('temperature')}
+          />
+
+          <SensorStatusIndicator
+            label="Humidity"
+            value={liveData?.humidity}
+            unit="%"
+            decimals={1}
+            status={getSensorStatus('humidity')}
+          />
+
+          <SensorStatusIndicator
+            label="Light"
+            value={liveData?.light}
+            unit=" lux"
+            decimals={0}
+            status={getSensorStatus('light')}
+          />
+
+          <SensorStatusIndicator
+            label="Battery"
+            value={liveData?.battery}
+            unit="%"
+            decimals={0}
+            status={getSensorStatus('battery')}
+          />
+        </div>
         </div>
 
         {/* Pump Status Banner (aligned with cards) */}
-        <div className={`rounded-xl py-3 text-center border transition-colors duration-500 shadow-sm ${
+        <div className={`w-[calc(100%-2rem)] max-w-7xl mx-auto rounded-xl py-3 text-center border transition-colors duration-500 shadow-sm ${
           pumpStatus === 'ON' ? 'bg-green-100 border-green-300 text-green-900' : 'bg-blue-100 border-blue-300 text-blue-900'
         }`}>
           <h2 className="text-lg font-semibold">
@@ -756,7 +675,7 @@ const Dashboard = () => {
 
      
 
-      <div className="w-full max-w-7xl mx-auto flex flex-col items-center justify-center">
+      <div className="w-[calc(100%-2rem)] mx-auto flex flex-col items-center justify-center">
         {/* Historical Chart Component - HTTP API Data Only */}
         <div className="w-full">
           <HistoricalChart 

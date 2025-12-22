@@ -282,7 +282,7 @@ const HistoricalChart = ({
     }`;
 
   return (
-   <div className="w-full bg-white rounded-2xl p-4 shadow-sm flex flex-col border border-gray-200 px-6 py-6">
+   <div className="w-[calc(100%-2rem)] max-w-7xl mx-auto bg-white rounded-2xl p-4 shadow-sm flex flex-col border border-gray-200 px-6 py-6">
       {/* Header Section */}
       <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
         <div className="flex items-center gap-3">

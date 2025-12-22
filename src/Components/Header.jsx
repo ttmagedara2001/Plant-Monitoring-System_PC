@@ -1,15 +1,44 @@
 import React from 'react';
 import logo from '../assets/images/logo_title.png';
 import imageIcon from '../assets/images/logo_plant.png';
-import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../Context/AuthContext';
 import { Sprout, LogOut, ChevronDown, Bell, Wifi, Radio, Server, LayoutDashboard, Settings } from 'lucide-react';
+import { webSocketClient } from '../Service/webSocketClient';
+import { useEffect, useState } from 'react';
 
-const Header = ({ deviceId, deviceList, isConnected }) => {
-    // Status logic: green = connected, yellow = limited, red = disconnected
-    const wsStatus = isConnected ? 'green' : 'red';
-    const mqttStatus = isConnected ? 'green' : 'red';
-    const sysStatus = isConnected ? 'green' : 'yellow';
+const Header = ({ deviceId, deviceList, activeTab, setActiveTab, selectedDevice, setSelectedDevice, isConnected: propIsConnected, alertMessage }) => {
+  // Prefer connection state from App when provided; otherwise poll the shared client
+  const [connected, setConnected] = useState(() => {
+    if (typeof propIsConnected !== 'undefined') return !!propIsConnected;
+    try {
+      return !!webSocketClient.getConnectionStatus();
+    } catch (e) {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    if (typeof propIsConnected !== 'undefined') {
+      setConnected(!!propIsConnected);
+      return;
+    }
+
+    // Poll connection status periodically to avoid overwriting single-listener API
+    const id = setInterval(() => {
+      try {
+        const s = !!webSocketClient.getConnectionStatus();
+        setConnected(s);
+      } catch (e) {
+        setConnected(false);
+      }
+    }, 1000);
+    return () => clearInterval(id);
+  }, [propIsConnected]);
+
+  // Status logic: green = connected, yellow = limited, red = disconnected
+  const wsStatus = connected ? 'green' : 'red';
+  const mqttStatus = connected ? 'green' : 'red';
+  const sysStatus = connected ? 'green' : 'yellow';
 
     // Tooltip text for each status
     const statusText = {
@@ -26,65 +55,51 @@ const Header = ({ deviceId, deviceList, isConnected }) => {
           <Icon className={`w-5 h-5 ${color}`} />
           <span className="sr-only">{label}</span>
           {/* Tooltip */}
-          <div className="absolute left-1/2 -translate-x-1/2 mt-2 px-2 py-1 rounded bg-gray-800 text-white text-xs opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 shadow-lg transition-opacity duration-200">
+              <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-2 py-1 rounded bg-gray-800 text-white text-xs opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 shadow-lg transition-opacity duration-200">
             {label}: {statusText[status]}
           </div>
         </div>
       );
     };
   const { userId, logout } = useAuth();
-  const navigate = useNavigate();
-
-  const location = useLocation();
 
   // default device list (could be moved to a shared service)
   const deviceListLocal = deviceList || ['device9988', 'device0011233', 'device0000', 'device0001'];
 
-  // derive current deviceId from pathname (/dashboard/:id or /settings/:id)
-  const getDeviceFromPath = () => {
-    const parts = location.pathname.split('/').filter(Boolean);
-    // parts[0] === 'dashboard' or 'settings'
-    if (parts[0] === 'dashboard' && parts[1]) return parts[1];
-    if (parts[0] === 'settings' && parts[1]) return parts[1];
-    // fallback to saved selection or first device
-    return localStorage.getItem('selectedDevice') || deviceListLocal[0];
-  };
-
-  const currentDevice = getDeviceFromPath();
+  // Use controlled selection via props if provided
+  const currentDevice = selectedDevice || localStorage.getItem('selectedDevice') || deviceListLocal[0];
 
   const handleDeviceSelect = (e) => {
     const newDevice = e.target.value;
     // persist selection
     localStorage.setItem('selectedDevice', newDevice);
-    // navigate depending on current section
-    if (location.pathname.startsWith('/settings')) {
-      navigate(`/settings/${newDevice}`);
-    } else {
-      navigate(`/dashboard/${newDevice}`);
-    }
+    if (typeof setSelectedDevice === 'function') setSelectedDevice(newDevice);
   };
 
   return (
 
-    <header className="fixed top-4 left-1/2 transform -translate-x-1/2 w-[calc(100%-2rem)] max-w-7xl bg-white border-2 rounded-lg px-4 py-2 flex flex-col sm:flex-row justify-between items-center shadow-sm z-50">
+    <header className="fixed inset-x-0 top-4 flex justify-center z-50">
+      <div className="w-[calc(100%-2rem)] max-w-7xl bg-white border-2 rounded-lg px-4 py-2 flex flex-col sm:flex-row justify-between items-center shadow-sm">
       {/* Left: Navigation Icons + Logo + Auth */}
       <div className="flex items-center gap-4 mb-4 sm:mb-0">
         {/* Navigation icons */}
         <div className="flex items-center gap-2">
           <button
-            onClick={() => navigate('/dashboard')}
-            className={`flex items-center justify-center w-8 h-8 rounded-lg transition border-none focus:outline-none ${window.location.pathname.startsWith('/dashboard') ? 'bg-blue-50 text-blue-600 shadow-sm' : 'bg-transparent text-gray-500 hover:bg-gray-100'}`}
+            onClick={() => typeof setActiveTab === 'function' ? setActiveTab('dashboard') : null}
+            className={`flex items-center justify-center w-8 h-8 rounded-lg transition border-none focus:outline-none ${activeTab === 'dashboard' ? 'bg-blue-50 text-blue-600 shadow-sm' : 'bg-transparent text-gray-500 hover:bg-gray-100'}`}
             title="Dashboard"
             aria-label="Dashboard"
+            aria-current={activeTab === 'dashboard' ? 'page' : undefined}
           >
             <LayoutDashboard className="w-4 h-4" />
             <span className="sr-only">Dashboard</span>
           </button>
           <button
-            onClick={() => navigate('/settings')}
-            className={`flex items-center justify-center w-8 h-8 rounded-lg transition border-none focus:outline-none ${window.location.pathname.startsWith('/settings') ? 'bg-blue-50 text-blue-600 shadow-sm' : 'bg-transparent text-gray-500 hover:bg-gray-100'}`}
+            onClick={() => typeof setActiveTab === 'function' ? setActiveTab('settings') : null}
+            className={`flex items-center justify-center w-8 h-8 rounded-lg transition border-none focus:outline-none ${activeTab === 'settings' ? 'bg-blue-50 text-blue-600 shadow-sm' : 'bg-transparent text-gray-500 hover:bg-gray-100'}`}
             title="Device Settings"
             aria-label="Device Settings"
+            aria-current={activeTab === 'settings' ? 'page' : undefined}
           >
             <Settings className="w-4 h-4" />
             <span className="sr-only">Device Settings</span>
@@ -135,6 +150,7 @@ const Header = ({ deviceId, deviceList, isConnected }) => {
         <button className="relative group" title="View Alerts">
           <Bell className="w-6 h-6 text-gray-500 hover:text-yellow-500 transition" />
         </button>
+      </div>
       </div>
     </header>
   );

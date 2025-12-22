@@ -28,6 +28,8 @@ const ThresholdInput = ({
           error ? 'border-red-300' : 'border-gray-300'
         }`}
       />
+      {/* Helper text showing allowed input range */}
+      <p className="text-xs text-gray-500 mt-1">Valid Range: {min} - {max} {unit}</p>
       {error && (
         <p className="text-red-500 text-xs mt-1">{error}</p>
       )}

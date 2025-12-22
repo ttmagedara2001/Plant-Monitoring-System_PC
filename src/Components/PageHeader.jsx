@@ -24,7 +24,7 @@ const PageHeader = ({
   }, [showDate]);
 
   return (
-    <div className="w-full max-w-7xl px-4 mb-6 mx-auto">
+    <div className="mb-6 mx-auto justify-center z-50">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <div className="bg-indigo-50 text-indigo-600 rounded-lg p-3">
