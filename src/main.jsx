@@ -12,8 +12,8 @@ import { login } from "./Service/authService";
 
 // ✅ UPDATED: Real Protonest credentials
 // These are the actual credentials from the Protonest dashboard
-const email = "ratnaabinayansn@gmail.com";
-const password = "6M3@pwYvBGRVJLN"; // This is the secretKey from Protonest dashboard
+const email = import.meta.env.VITE_PROTONEST_USER_EMAIL; // || "ratnaabinayansn@gmail.com";
+const password = import.meta.env.VITE_PROTONEST_USER_SECRET ;//|| "6M3@pwYvBGRVJLN";
 
 const AutoLogin = ({ children }) => {
   const { setAuth } = useAuth();

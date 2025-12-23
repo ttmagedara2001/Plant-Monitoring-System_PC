@@ -7,7 +7,7 @@ const getApiUrl = () => {
   const envApi = import.meta.env.VITE_API_BASE_URL;
 
   // Dev + local override for running a local backend
-  if (isDev && useLocal) {
+  /*if (isDev && useLocal) {
     return "http://localhost:8091/api/v1/user";
   }
 
@@ -17,7 +17,7 @@ const getApiUrl = () => {
   }
 
   // Fallback to documented production API
-  return "https://api.protonestconnect.co/api/v1/user";
+  return "https://api.protonestconnect.co/api/v1/user";*/
 };
 
 const BASE_URL = getApiUrl();
