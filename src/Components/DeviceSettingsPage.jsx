@@ -354,7 +354,7 @@ const DeviceSettingsPage = ({ deviceId: propDeviceId }) => {
                 />
               </div>
 
-              <div className="col-span-2">
+              <div className="col-span-1">
                 <ThresholdSection
                   title="Battery Protection"
                   icon={Battery}

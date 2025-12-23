@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect, useState } from 'react';
 
 // Lightweight seasonal effects: snowfall and holiday wishes on Dec 24-25.
 // Renders absolutely positioned snowflake elements and a small greeting overlay.
@@ -26,6 +26,46 @@ const SeasonalEffects = ({ enabled = true }) => {
   }, []);
 
   if (!enabled || !isDecember) return null;
+
+  // Countdown state for Dec 24 and Dec 25
+  const [count24, setCount24] = useState('');
+  const [count25, setCount25] = useState('');
+
+  useEffect(() => {
+    const getTarget = (monthIndex, day) => {
+      const now = new Date();
+      let year = now.getFullYear();
+      const target = new Date(year, monthIndex, day, 0, 0, 0, 0);
+      if (now > target) {
+        // If already past this year's date, target next year
+        target.setFullYear(year + 1);
+      }
+      return target;
+    };
+
+    const fmt = (ms) => {
+      if (ms <= 0) return 'Today!';
+      const totalSec = Math.floor(ms / 1000);
+      const days = Math.floor(totalSec / (24 * 3600));
+      const hours = Math.floor((totalSec % (24 * 3600)) / 3600);
+      const mins = Math.floor((totalSec % 3600) / 60);
+      const secs = totalSec % 60;
+      return `${days}d ${String(hours).padStart(2, '0')}h ${String(mins).padStart(2, '0')}m ${String(secs).padStart(2, '0')}s`;
+    };
+
+    const t24 = getTarget(11, 24); // Dec 24
+    const t25 = getTarget(11, 25); // Dec 25
+
+    const tick = () => {
+      const now = new Date();
+      setCount24(fmt(t24 - now));
+      setCount25(fmt(t25 - now));
+    };
+
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, []);
 
   return (
     <div aria-hidden="true" className="pointer-events-none">
@@ -65,8 +105,8 @@ const SeasonalEffects = ({ enabled = true }) => {
 
       {/* Wish overlay on Dec 24 and 25 */}
       {showWish && (
-        <div style={{ position: 'fixed', inset: 0, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 50, pointerEvents: 'none' }}>
-          <div style={{ marginTop: 72, background: 'rgba(255,255,255,0.9)', color: '#1f2937', padding: '8px 14px', borderRadius: 12, boxShadow: '0 6px 20px rgba(0,0,0,0.12)', fontWeight: 600 }}>
+        <div style={{ position: 'fixed', inset: 0, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 51, pointerEvents: 'none' }}>
+          <div style={{ marginTop: 140, background: 'rgba(255,255,255,0.9)', color: '#1f2937', padding: '8px 14px', borderRadius: 12, boxShadow: '0 6px 20px rgba(0,0,0,0.12)', fontWeight: 600 }}>
             {date === 24 ? 'Warm wishes — Happy Christmas Eve! 🎄' : 'Merry Christmas! 🎅 Enjoy the holidays!'}
           </div>
         </div>

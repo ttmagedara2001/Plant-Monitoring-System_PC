@@ -1,6 +1,4 @@
 import React from 'react';
-import logo from '../assets/images/logo_title.png';
-import imageIcon from '../assets/images/logo_plant.png';
 import { useAuth } from '../Context/AuthContext';
 import { Sprout, LogOut, ChevronDown, Bell, Wifi, Radio, Server, LayoutDashboard, Settings, AlertTriangle, AlertCircle } from 'lucide-react';
 import { useNotifications } from '../Context/NotificationContext';
@@ -93,7 +91,7 @@ const Header = ({ deviceId, deviceList, activeTab, setActiveTab, selectedDevice,
   return (
 
     <header className="fixed inset-x-0 top-4 flex justify-center z-50">
-      <div className="w-[calc(100%-2rem)] max-w-7xl bg-white border-2 rounded-lg px-4 py-2 flex flex-col sm:flex-row justify-between items-center shadow-sm">
+      <div className="w-[calc(100%-2rem)] max-w-7xl px-7 bg-white border-2 rounded-lg py-2 flex flex-col sm:flex-row justify-between items-center shadow-sm">
       {/* Mobile bar (visible on small screens) */}
       <div className="w-full flex items-center justify-between sm:hidden mb-2">
         <div className="flex items-center gap-2">
@@ -139,43 +137,18 @@ const Header = ({ deviceId, deviceList, activeTab, setActiveTab, selectedDevice,
         </div>
       )}
 
-      {/* Left: Navigation Icons + Logo + Auth */}
+      {/* Left: Logo + Auth (desktop) */}
       <div className="hidden sm:flex items-center gap-4 mb-4 sm:mb-0">
-        {/* Navigation icons */}
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => typeof setActiveTab === 'function' ? setActiveTab('dashboard') : null}
-            className={`flex items-center justify-center w-8 h-8 rounded-lg transition border-none focus:outline-none ${activeTab === 'dashboard' ? 'bg-blue-50 text-blue-600 shadow-sm' : 'bg-transparent text-gray-500 hover:bg-gray-100'}`}
-            title="Dashboard"
-            aria-label="Dashboard"
-            aria-current={activeTab === 'dashboard' ? 'page' : undefined}
-          >
-            <LayoutDashboard className="w-4 h-4" />
-            <span className="sr-only">Dashboard</span>
-          </button>
-          <button
-            onClick={() => typeof setActiveTab === 'function' ? setActiveTab('settings') : null}
-            className={`flex items-center justify-center w-8 h-8 rounded-lg transition border-none focus:outline-none ${activeTab === 'settings' ? 'bg-blue-50 text-blue-600 shadow-sm' : 'bg-transparent text-gray-500 hover:bg-gray-100'}`}
-            title="Device Settings"
-            aria-label="Device Settings"
-            aria-current={activeTab === 'settings' ? 'page' : undefined}
-          >
-            <Settings className="w-4 h-4" />
-            <span className="sr-only">Device Settings</span>
-          </button>
-        </div>
-        {/* Logo and title */}
-        <div className="flex items-center gap-2 ml-2">
           <Sprout className="h-6 w-6 text-green-600" />
           <span className="text-2xl font-bold tracking-wide font-mono">
             Agri<span className="text-yellow-400">Cop</span>
           </span>
         </div>
-        {/* Auth details */}
         <div className="text-left text-xs ml-4">
           <div className="text-green-600 font-bold">Authentication: Successful</div>
           <div className="text-gray-600 font-mono">User: {userId}</div>
-          <button onClick={logout} className="text-red-500 hover:underline mt-1 flex items-center gap-1">
+          <button onClick={logout} className="text-red-500 mt-1 flex items-center gap-1">
             Logout <LogOut className="w-3 h-3" />
           </button>
         </div>

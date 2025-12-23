@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import ErrorBoundary from './Components/ErrorBoundary';
 import Header from './Components/Header';
+import StatusBar from './Components/StatusBar';
 import Dashboard from './Components/Dashboard';
 import DeviceSettingsPage from './Components/DeviceSettingsPage';
 import { useAuth } from './Context/AuthContext';
@@ -317,8 +318,10 @@ function App() {
           isConnected={isConnected}
         />
 
-        {/* space for fixed header */}
-        <div className="pt-24" />
+        <StatusBar activeTab={activeTab} setActiveTab={setActiveTab} />
+
+        {/* space for fixed header and status bar */}
+        <div className="pt-32" />
 
         {/* Main content area rendered by state (SPA) */}
         {activeTab === 'dashboard' ? (
