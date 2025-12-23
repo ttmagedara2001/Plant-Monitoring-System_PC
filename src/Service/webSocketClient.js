@@ -19,10 +19,15 @@ const buildWebSocketUrl = (jwtToken) => {
   // ✅ Encode the token for safe URL usage
   const encodedToken = encodeURIComponent(jwtToken);
 
-  // ✅ Pass the JWT as a query parameter
-  // const wsUrl = `ws://localhost:8091/ws?token=${encodedToken}`;
-  const wsUrl = `wss://api.protonestconnect.co/ws?token=${encodedToken}`;
-  // const wsUrl = `wss://protonest-connect-general-app.yellowsea-5dc9141a.westeurope.azurecontainerapps.io/ws?token=${encodedToken}`;
+  // Prefer runtime-configurable WebSocket URL via VITE_WS_URL.
+  // Fallback to the known production endpoint if not provided.
+  const envWs = import.meta.env.VITE_WS_URL;
+  const defaultWs = "wss://api.protonestconnect.co/ws";
+  const baseWs = envWs || defaultWs;
+
+  // If baseWs already contains query params, append with & otherwise ?
+  const separator = baseWs.includes("?") ? "&" : "?";
+  const wsUrl = `${baseWs}${separator}token=${encodedToken}`;
 
   console.log(
     "🔌 WebSocket URL built:",

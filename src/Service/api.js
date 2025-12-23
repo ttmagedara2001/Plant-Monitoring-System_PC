@@ -4,10 +4,19 @@ import axios from "axios";
 const getApiUrl = () => {
   const isDev = import.meta.env.DEV;
   const useLocal = import.meta.env.VITE_USE_LOCAL_API === "true";
+  const envApi = import.meta.env.VITE_API_BASE_URL;
 
+  // Dev + local override for running a local backend
   if (isDev && useLocal) {
     return "http://localhost:8091/api/v1/user";
   }
+
+  // If user provided an explicit API base via VITE_API_BASE_URL, use it
+  if (envApi) {
+    return envApi;
+  }
+
+  // Fallback to documented production API
   return "https://api.protonestconnect.co/api/v1/user";
 };
 
