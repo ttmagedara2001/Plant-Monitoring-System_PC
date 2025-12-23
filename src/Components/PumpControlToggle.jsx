@@ -32,7 +32,7 @@ const PumpControlToggle = ({
         <button
           onClick={onToggle}
           disabled={isLoading || isAutoMode}
-          className={`px-6 py-3 rounded-lg font-bold flex items-center gap-2 transition-all duration-300 min-w-[140px] justify-center ${
+          className={`px-6 py-3 md:py-2 md:px-4 rounded-lg font-bold flex items-center gap-2 transition-all duration-300 min-w-[120px] sm:min-w-[140px] justify-center ${
             pumpStatus === 'ON' 
               ? 'bg-red-600 hover:bg-red-700 text-white shadow-lg shadow-red-200' 
               : 'bg-green-600 hover:bg-green-700 text-white shadow-lg shadow-green-200'

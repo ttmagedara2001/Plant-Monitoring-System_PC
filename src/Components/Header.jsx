@@ -78,12 +78,69 @@ const Header = ({ deviceId, deviceList, activeTab, setActiveTab, selectedDevice,
     if (typeof setSelectedDevice === 'function') setSelectedDevice(newDevice);
   };
 
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const mobileRef = useRef();
+
+  React.useEffect(() => {
+    const onDoc = (e) => {
+      if (!mobileRef.current) return;
+      if (!mobileRef.current.contains(e.target)) setMobileOpen(false);
+    };
+    document.addEventListener('click', onDoc);
+    return () => document.removeEventListener('click', onDoc);
+  }, []);
+
   return (
 
     <header className="fixed inset-x-0 top-4 flex justify-center z-50">
       <div className="w-[calc(100%-2rem)] max-w-7xl bg-white border-2 rounded-lg px-4 py-2 flex flex-col sm:flex-row justify-between items-center shadow-sm">
+      {/* Mobile bar (visible on small screens) */}
+      <div className="w-full flex items-center justify-between sm:hidden mb-2">
+        <div className="flex items-center gap-2">
+          <button aria-label="Open menu" onClick={() => setMobileOpen(v => !v)} className="p-2 rounded-md hover:bg-gray-100">
+            <svg className="w-6 h-6 text-gray-700" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
+          </button>
+          <div className="flex items-center gap-2">
+            <Sprout className="h-6 w-6 text-green-600" />
+            <span className="text-lg font-bold tracking-wide font-mono">Agri<span className="text-yellow-400">Cop</span></span>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <NotificationsBell selectedDevice={currentDevice} />
+        </div>
+      </div>
+
+      {/* Mobile menu content */}
+      {mobileOpen && (
+        <div ref={mobileRef} className="sm:hidden absolute left-4 right-4 top-20 bg-white border rounded shadow-lg z-50 px-4 py-3">
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Sprout className="h-5 w-5 text-green-600" />
+                <div className="font-semibold">AgriCop</div>
+              </div>
+              <button onClick={() => setMobileOpen(false)} className="text-gray-500">Close</button>
+            </div>
+            <div className="flex items-center gap-2">
+              <button onClick={() => { setMobileOpen(false); typeof setActiveTab === 'function' ? setActiveTab('dashboard') : null; }} className="flex items-center gap-2 px-3 py-2 rounded hover:bg-gray-100"> <LayoutDashboard className="w-4 h-4"/> Dashboard</button>
+              <button onClick={() => { setMobileOpen(false); typeof setActiveTab === 'function' ? setActiveTab('settings') : null; }} className="flex items-center gap-2 px-3 py-2 rounded hover:bg-gray-100"> <Settings className="w-4 h-4"/> Settings</button>
+            </div>
+            <div className="mt-2">
+              <label className="text-sm font-medium text-gray-700">Select Device</label>
+              <select value={currentDevice || ''} onChange={handleDeviceSelect} className="w-full mt-1 bg-white border border-green-300 text-gray-700 py-2 px-3 rounded focus:ring-2 focus:ring-green-500 outline-none">
+                {deviceListLocal.map(dev => (<option key={dev} value={dev}>{dev}</option>))}
+              </select>
+            </div>
+            <div className="mt-2 flex items-center justify-between">
+              <div className="text-xs text-gray-600">User: {userId}</div>
+              <button onClick={logout} className="text-red-500 text-sm">Logout</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Left: Navigation Icons + Logo + Auth */}
-      <div className="flex items-center gap-4 mb-4 sm:mb-0">
+      <div className="hidden sm:flex items-center gap-4 mb-4 sm:mb-0">
         {/* Navigation icons */}
         <div className="flex items-center gap-2">
           <button
@@ -140,8 +197,8 @@ const Header = ({ deviceId, deviceList, activeTab, setActiveTab, selectedDevice,
         </div>
       </div>
 
-      {/* Connection Status Icons */}
-      <div className="flex items-center gap-4 ml-6">
+      {/* Connection Status Icons (hidden on mobile) */}
+      <div className="hidden sm:flex items-center gap-4 ml-6">
         {statusIcon(wsStatus, Wifi, 'WebSocket')}
         {statusIcon(mqttStatus, Radio, 'MQTT')}
         {statusIcon(sysStatus, Server, 'System')}
@@ -149,7 +206,8 @@ const Header = ({ deviceId, deviceList, activeTab, setActiveTab, selectedDevice,
 
       {/* Bell Icon for Alerts - rightmost */}
           <div className="flex items-center gap-4 ml-8">
-            <NotificationsBell selectedDevice={currentDevice} />
+            <div className="hidden sm:block"><NotificationsBell selectedDevice={currentDevice} /></div>
+            <div className="sm:hidden"><NotificationsBell selectedDevice={currentDevice} /></div>
           </div>
       </div>
     </header>
