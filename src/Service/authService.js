@@ -6,7 +6,7 @@ const getApiUrl = () => {
   const useLocal = import.meta.env.VITE_USE_LOCAL_API === "true";
   const envApi = import.meta.env.VITE_API_BASE_URL;
 
-  if (isDev && useLocal) {
+  /*if (isDev && useLocal) {
     return "http://localhost:8091/api/v1/user";
   }
 
@@ -14,7 +14,7 @@ const getApiUrl = () => {
     return envApi;
   }
 
-  return "https://api.protonestconnect.co/api/v1/user";
+  return "https://api.protonestconnect.co/api/v1/user";*/
 };
 
 const API_URL = getApiUrl();

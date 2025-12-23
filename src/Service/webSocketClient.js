@@ -22,8 +22,8 @@ const buildWebSocketUrl = (jwtToken) => {
   // Prefer runtime-configurable WebSocket URL via VITE_WS_URL.
   // Fallback to the known production endpoint if not provided.
   const envWs = import.meta.env.VITE_WS_URL;
-  const defaultWs = "wss://api.protonestconnect.co/ws";
-  const baseWs = envWs || defaultWs;
+  //const defaultWs = "wss://api.protonestconnect.co/ws";
+  const baseWs = envWs
 
   // If baseWs already contains query params, append with & otherwise ?
   const separator = baseWs.includes("?") ? "&" : "?";
