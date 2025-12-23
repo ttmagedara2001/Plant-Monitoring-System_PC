@@ -1,4 +1,5 @@
 import { Client } from "@stomp/stompjs";
+import { login as envLogin } from "./authService.js";
 
 // Get JWT token from localStorage (set by login process)
 const getJwtToken = () => {
@@ -23,7 +24,7 @@ const buildWebSocketUrl = (jwtToken) => {
   // Fallback to the known production endpoint if not provided.
   const envWs = import.meta.env.VITE_WS_URL;
   //const defaultWs = "wss://api.protonestconnect.co/ws";
-  const baseWs = envWs
+  const baseWs = envWs;
 
   // If baseWs already contains query params, append with & otherwise ?
   const separator = baseWs.includes("?") ? "&" : "?";
@@ -327,19 +328,46 @@ class WebSocketClient {
    * @param {string} token - JWT token
    */
   async connect(token) {
-    if (!token) {
+    // Prefer passed token, then localStorage, then try env-based login
+    let jwt = token || localStorage.getItem("jwtToken");
+
+    if (!jwt) {
+      const envEmail = import.meta.env.VITE_USER_EMAIL;
+      const envPass = import.meta.env.VITE_USER_PASSWORD;
+
+      if (envEmail && envPass) {
+        try {
+          console.log(
+            "🔐 No JWT found — attempting login for WebSocket using VITE_USER_EMAIL"
+          );
+          const resp = await envLogin(envEmail, envPass);
+          jwt = resp?.jwtToken;
+          const refreshToken = resp?.refreshToken;
+          if (jwt) {
+            localStorage.setItem("jwtToken", jwt);
+            if (refreshToken)
+              localStorage.setItem("refreshToken", refreshToken);
+            console.log("✅ Obtained JWT for WebSocket via env credentials");
+          }
+        } catch (e) {
+          console.error("❌ Env login for WebSocket failed:", e.message || e);
+        }
+      }
+    }
+
+    if (!jwt) {
       console.error(
-        "[WebSocketClient] ❌ Cannot connect: No JWT token provided"
+        "[WebSocketClient] ❌ Cannot connect: No JWT token available"
       );
       throw new Error("JWT token required for WebSocket connection");
     }
 
-    this.jwtToken = token;
+    this.jwtToken = jwt;
 
     // Initialize client if not already done
     if (!this.client) {
       console.log("[WebSocketClient] 🔄 Initializing STOMP client...");
-      this._initializeClient(token);
+      this._initializeClient(jwt);
     } else if (!this.isConnected) {
       // Client exists but disconnected - try to reconnect
       console.log("[WebSocketClient] 🔄 Reconnecting...");

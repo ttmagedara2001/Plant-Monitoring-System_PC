@@ -2,8 +2,6 @@ import axios from "axios";
 
 // Environment-based API URL selection
 const getApiUrl = () => {
-  const isDev = import.meta.env.DEV;
-  const useLocal = import.meta.env.VITE_USE_LOCAL_API === "true";
   const envApi = import.meta.env.VITE_API_BASE_URL;
 
   /*if (isDev && useLocal) {

@@ -1,9 +1,9 @@
 import axios from "axios";
+import { login as envLogin } from "./authService.js";
 
 // Environment-based API URL selection
 const getApiUrl = () => {
-  const isDev = import.meta.env.DEV;
-  const useLocal = import.meta.env.VITE_USE_LOCAL_API === "true";
+  //const isDev = import.meta.env.DEV;
   const envApi = import.meta.env.VITE_API_BASE_URL;
 
   // Dev + local override for running a local backend
@@ -34,8 +34,35 @@ const api = axios.create({
 
 // Request Interceptor: Adds X-Token header if available
 api.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem("jwtToken");
+  async (config) => {
+    let token = localStorage.getItem("jwtToken");
+
+    // If no token present, try to perform a token fetch using env credentials
+    if (!token || token === "MOCK_TOKEN_FOR_TESTING") {
+      const envEmail = import.meta.env.VITE_USER_EMAIL;
+      const envPass = import.meta.env.VITE_USER_PASSWORD;
+
+      if (envEmail && envPass) {
+        try {
+          console.log(
+            "🔐 No JWT found — attempting login using VITE_USER_EMAIL"
+          );
+          const resp = await envLogin(envEmail, envPass);
+          const jwtToken = resp?.jwtToken;
+          const refreshToken = resp?.refreshToken;
+          if (jwtToken) {
+            localStorage.setItem("jwtToken", jwtToken);
+            if (refreshToken)
+              localStorage.setItem("refreshToken", refreshToken);
+            token = jwtToken;
+            console.log("✅ Obtained JWT from /get-token via env credentials");
+          }
+        } catch (e) {
+          console.error("❌ Env login failed:", e.message || e);
+        }
+      }
+    }
+
     if (token && token !== "MOCK_TOKEN_FOR_TESTING") {
       config.headers["X-Token"] = token;
     }
