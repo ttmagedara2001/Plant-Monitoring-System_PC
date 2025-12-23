@@ -1,18 +1,14 @@
 import axios from "axios";
 
 // Environment-based API URL selection
+// NOTE: Do NOT hardcode production endpoints here — require VITE_API_BASE_URL.
+// Avoid relying on undefined env vars. If `VITE_API_BASE_URL` is set, use it.
+// Otherwise, automatically use a localhost URL when running in a browser
+// on `localhost` or `127.0.0.1`. If neither applies, return null so callers
+// can detect missing configuration.
 const getApiUrl = () => {
   const envApi = import.meta.env.VITE_API_BASE_URL;
-
-  /*if (isDev && useLocal) {
-    return "http://localhost:8091/api/v1/user";
-  }
-
-  if (envApi) {
-    return envApi;
-  }
-
-  return "https://api.protonestconnect.co/api/v1/user";*/
+  if (envApi) return envApi;
 };
 
 const API_URL = getApiUrl();
@@ -194,4 +190,39 @@ export const refreshToken = async (refreshToken) => {
     });
     throw error;
   }
+};
+
+// Ensure auth using VITE env credentials (singleton promise to avoid races)
+let __envAuthPromise = null;
+export const ensureAuthFromEnv = async () => {
+  // If we already have a JWT stored, return it
+  const existing =
+    typeof window !== "undefined" && localStorage.getItem("jwtToken");
+  if (existing) return existing;
+
+  const envEmail = import.meta.env.VITE_USER_EMAIL;
+  const envSecret = import.meta.env.VITE_USER_SECRET;
+
+  if (!envEmail || !envSecret) return null;
+
+  if (__envAuthPromise) return __envAuthPromise;
+
+  __envAuthPromise = (async () => {
+    try {
+      const resp = await login(envEmail, envSecret);
+      const jwt = resp?.jwtToken;
+      const refresh = resp?.refreshToken;
+      if (jwt && typeof window !== "undefined") {
+        localStorage.setItem("jwtToken", jwt);
+        if (refresh) localStorage.setItem("refreshToken", refresh);
+      }
+      return jwt;
+    } catch (e) {
+      throw e;
+    } finally {
+      __envAuthPromise = null;
+    }
+  })();
+
+  return __envAuthPromise;
 };

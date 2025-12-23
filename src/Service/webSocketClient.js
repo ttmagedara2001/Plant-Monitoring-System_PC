@@ -23,8 +23,8 @@ const buildWebSocketUrl = (jwtToken) => {
   // Prefer runtime-configurable WebSocket URL via VITE_WS_URL.
   // Fallback to the known production endpoint if not provided.
   const envWs = import.meta.env.VITE_WS_URL;
-  //const defaultWs = "wss://api.protonestconnect.co/ws";
-  const baseWs = envWs;
+  const defaultWs = "wss://api.protonestconnect.co/ws";
+  const baseWs = envWs || defaultWs;
 
   // If baseWs already contains query params, append with & otherwise ?
   const separator = baseWs.includes("?") ? "&" : "?";
@@ -333,7 +333,7 @@ class WebSocketClient {
 
     if (!jwt) {
       const envEmail = import.meta.env.VITE_USER_EMAIL;
-      const envPass = import.meta.env.VITE_USER_PASSWORD;
+      const envPass = import.meta.env.VITE_USER_SECRET
 
       if (envEmail && envPass) {
         try {

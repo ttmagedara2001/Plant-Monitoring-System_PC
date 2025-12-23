@@ -1,23 +1,10 @@
 import axios from "axios";
-import { login as envLogin } from "./authService.js";
+import { ensureAuthFromEnv } from "./authService.js";
 
 // Environment-based API URL selection
 const getApiUrl = () => {
-  //const isDev = import.meta.env.DEV;
   const envApi = import.meta.env.VITE_API_BASE_URL;
-
-  // Dev + local override for running a local backend
-  /*if (isDev && useLocal) {
-    return "http://localhost:8091/api/v1/user";
-  }
-
-  // If user provided an explicit API base via VITE_API_BASE_URL, use it
-  if (envApi) {
-    return envApi;
-  }
-
-  // Fallback to documented production API
-  return "https://api.protonestconnect.co/api/v1/user";*/
+  return envApi;
 };
 
 const BASE_URL = getApiUrl();
@@ -37,29 +24,13 @@ api.interceptors.request.use(
   async (config) => {
     let token = localStorage.getItem("jwtToken");
 
-    // If no token present, try to perform a token fetch using env credentials
+    // If no token present, attempt to ensure auth via VITE env creds
     if (!token || token === "MOCK_TOKEN_FOR_TESTING") {
-      const envEmail = import.meta.env.VITE_USER_EMAIL;
-      const envPass = import.meta.env.VITE_USER_PASSWORD;
-
-      if (envEmail && envPass) {
-        try {
-          console.log(
-            "🔐 No JWT found — attempting login using VITE_USER_EMAIL"
-          );
-          const resp = await envLogin(envEmail, envPass);
-          const jwtToken = resp?.jwtToken;
-          const refreshToken = resp?.refreshToken;
-          if (jwtToken) {
-            localStorage.setItem("jwtToken", jwtToken);
-            if (refreshToken)
-              localStorage.setItem("refreshToken", refreshToken);
-            token = jwtToken;
-            console.log("✅ Obtained JWT from /get-token via env credentials");
-          }
-        } catch (e) {
-          console.error("❌ Env login failed:", e.message || e);
-        }
+      try {
+        const jwt = await ensureAuthFromEnv();
+        if (jwt) token = jwt;
+      } catch (e) {
+        console.error("❌ Env auto-login failed:", e.message || e);
       }
     }
 
