@@ -90,23 +90,23 @@ const Header = ({ deviceId, deviceList, activeTab, setActiveTab, selectedDevice,
 
   return (
 
-    <header className="fixed inset-x-0 top-2 sm:top-4 flex justify-center z-50 px-2 sm:px-0">
-      <div className="w-full sm:w-[calc(100%-2rem)] max-w-7xl px-3 sm:px-7 bg-white border-2 rounded-lg py-2 flex flex-col sm:flex-row justify-between items-center shadow-sm">
+    <header className="fixed inset-x-0 top-1 sm:top-2 md:top-4 flex justify-center z-50 px-1 sm:px-2 md:px-0">
+      <div className="w-full sm:w-[calc(100%-1rem)] md:w-[calc(100%-2rem)] max-w-7xl px-2 sm:px-4 md:px-7 bg-white border-2 rounded-lg py-1.5 sm:py-2 flex flex-col sm:flex-row justify-between items-center shadow-sm">
       {/* Mobile bar (visible on small screens) */}
       <div className="w-full flex items-center justify-between sm:hidden">
-        <div className="flex items-center gap-2">
-          <button aria-label="Open menu" onClick={() => setMobileOpen(v => !v)} className="p-1.5 rounded-md hover:bg-gray-100">
+        <div className="flex items-center gap-1.5">
+          <button aria-label="Open menu" onClick={() => setMobileOpen(v => !v)} className="p-1 rounded-md hover:bg-gray-100">
             <svg className="w-5 h-5 text-gray-700" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
           </button>
-          <div className="flex items-center gap-1.5">
-            <Sprout className="h-5 w-5 text-green-600" />
-            <span className="text-base font-bold tracking-wide font-mono">Agri<span className="text-yellow-400">Cop</span></span>
+          <div className="flex items-center gap-1">
+            <Sprout className="h-4 w-4 sm:h-5 sm:w-5 text-green-600" />
+            <span className="text-sm sm:text-base font-bold tracking-wide font-mono">Agri<span className="text-yellow-400">Cop</span></span>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
           {/* Connection status mini indicators for mobile */}
-          <div className="flex items-center gap-1">
-            <Wifi className={`w-4 h-4 ${connected ? 'text-green-500' : 'text-red-500'}`} />
+          <div className="flex items-center gap-0.5">
+            <Wifi className={`w-3.5 h-3.5 ${connected ? 'text-green-500' : 'text-red-500'}`} />
           </div>
           <NotificationsBell selectedDevice={currentDevice} />
         </div>

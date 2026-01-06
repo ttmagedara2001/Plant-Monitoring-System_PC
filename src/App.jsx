@@ -344,15 +344,15 @@ function App() {
 
         <StatusBar activeTab={activeTab} setActiveTab={setActiveTab} />
 
-        {/* space for fixed header and status bar */}
-        <div className="pt-28" />
-
         {/* Main content area rendered by state (SPA) */}
-        {activeTab === 'dashboard' ? (
-          <Dashboard deviceId={selectedDevice} liveData={liveData} settings={settings} isConnected={isConnected} />
-        ) : (
-          <DeviceSettingsPage deviceId={selectedDevice} />
-        )}
+        {/* Padding top accounts for fixed header + status bar - responsive for all screen sizes */}
+        <main className="w-full pt-20 landscape:pt-28 sm:pt-32 md:pt-36">
+          {activeTab === 'dashboard' ? (
+            <Dashboard deviceId={selectedDevice} liveData={liveData} settings={settings} isConnected={isConnected} />
+          ) : (
+            <DeviceSettingsPage deviceId={selectedDevice} />
+          )}
+        </main>
       </div>
     </ErrorBoundary>
   );

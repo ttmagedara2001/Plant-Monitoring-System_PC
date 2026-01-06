@@ -4,10 +4,21 @@ export default {
   theme: {
     extend: {
       screens: {
-        // Add landscape orientation media query
-        landscape: { raw: "(orientation: landscape) and (max-height: 500px)" },
         // Small mobile in portrait
         xs: "375px",
+        // Standard breakpoints
+        sm: "640px",
+        md: "768px",
+        lg: "1024px",
+        xl: "1280px",
+        // Portrait orientation
+        portrait: { raw: "(orientation: portrait)" },
+        // Landscape orientation for mobile phones
+        landscape: { raw: "(orientation: landscape) and (max-height: 500px)" },
+        // Landscape for tablets
+        "landscape-md": {
+          raw: "(orientation: landscape) and (min-height: 501px) and (max-height: 800px)",
+        },
       },
       colors: {
         green: {

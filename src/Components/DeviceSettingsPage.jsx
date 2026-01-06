@@ -254,8 +254,7 @@ const DeviceSettingsPage = ({ deviceId: propDeviceId }) => {
 
   return (
     <>
-    <div className="min-h-screen bg-[#f0f4f8] p-2 sm:p-4 font-sans text-gray-800 overflow-x-hidden pt-1 sm:pt-2">
-    <div>
+    <div className="min-h-screen bg-[#f0f4f8] p-2 sm:p-4 font-sans text-gray-800 overflow-x-hidden">
       <div className="max-w-7xl mx-auto">
         <PageHeader
           title="Device Settings"
@@ -265,8 +264,8 @@ const DeviceSettingsPage = ({ deviceId: propDeviceId }) => {
           icon={<Settings className="w-5 h-5 sm:w-6 sm:h-6" />}
         />
 
-        <div className="p-3 sm:p-6 lg:p-8 mx-auto mt-4 sm:mt-6 bg-blue-100 rounded-lg shadow-md border-blue-50">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6 items-stretch">
+        <div className="p-3 sm:p-4 lg:p-6 mx-auto mt-3 sm:mt-4 bg-blue-100 rounded-lg shadow-md border-blue-50">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 sm:gap-4 lg:gap-6 items-stretch">
             {/* Left: form grid - 1 col on mobile, 2 cols on sm+ */}
             <div className="bg-white rounded-xl shadow-md border border-gray-200 p-3 sm:p-4 lg:p-6 w-full lg:col-span-8">
               <div className="bg-gray-50 rounded-lg p-2 sm:p-4 grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
@@ -536,7 +535,6 @@ const DeviceSettingsPage = ({ deviceId: propDeviceId }) => {
 
       
       </div>
-    </div>
     </div>
 
     <ValidationModal open={showModal} errors={modalErrors} onClose={() => setShowModal(false)} />

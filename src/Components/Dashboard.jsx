@@ -605,10 +605,10 @@ const Dashboard = ({ deviceId: propDeviceId, liveData: propLiveData, settings: p
   };
 
   return (
-    <div className="min-h-screen bg-[#f0f4f8] px-2 sm:px-4 py-2 sm:py-4 font-sans text-gray-800 overflow-x-hidden">
+    <div className="min-h-screen bg-[#f0f4f8] p-2 sm:p-4 font-sans text-gray-800 overflow-x-hidden">
       {/* Seasonal effects (snow/wishes) - only active in December */}
       <SeasonalEffects />
-      <div className="w-full sm:w-[calc(100%-2rem)] max-w-7xl mx-auto mb-4 sm:mb-6 pt-1 sm:pt-2">
+      <div className="max-w-7xl mx-auto">
       {/* Page heading */}
       <PageHeader
         title="Dashboard"
@@ -621,10 +621,12 @@ const Dashboard = ({ deviceId: propDeviceId, liveData: propLiveData, settings: p
         {/* Connection Status Panel (navigation and dark mode only) */}
 
         {/* Real-Time Cards + Pump Banner (centered, compact within main container) */}
-      <div className="w-full sm:w-[calc(100%-2rem)] mx-auto px-1 sm:px-4 mb-4 sm:mb-8">
+      <div className="w-full mx-auto px-1 sm:px-0 mb-4 sm:mb-6">
         <div className="max-w-7xl mx-auto">
-        {/* Mobile: 2 columns portrait, 3 columns landscape. Tablet+: 5 columns */}
-        <div className="grid grid-cols-2 landscape:grid-cols-3 sm:grid-cols-3 md:grid-cols-5 gap-2 sm:gap-4 mb-3 sm:mb-4">
+        {/* Mobile portrait: 2 cols, Mobile landscape: 3 cols, Tablet: 3 cols, Desktop: 5 cols */}
+        <div className="grid grid-cols-2 gap-2 sm:gap-3 md:gap-4 mb-3 sm:mb-4
+                        portrait:grid-cols-2 landscape:grid-cols-3 
+                        sm:grid-cols-3 md:grid-cols-5">
           <SensorStatusIndicator
             label="Soil Moisture"
             value={liveData?.moisture}
@@ -668,7 +670,7 @@ const Dashboard = ({ deviceId: propDeviceId, liveData: propLiveData, settings: p
         </div>
 
         {/* Pump Status Banner (aligned with cards) */}
-        <div className={`w-full sm:w-[calc(100%-2rem)] max-w-7xl mx-auto rounded-lg sm:rounded-xl py-2 sm:py-3 text-center border transition-colors duration-500 shadow-sm ${
+        <div className={`w-full max-w-7xl mx-auto rounded-lg sm:rounded-xl py-2 sm:py-3 text-center border transition-colors duration-500 shadow-sm ${
           pumpStatus === 'ON' ? 'bg-green-100 border-green-300 text-green-900' : 'bg-blue-100 border-blue-300 text-blue-900'
         }`}>
           <h2 className="text-base sm:text-lg font-semibold">
@@ -677,9 +679,9 @@ const Dashboard = ({ deviceId: propDeviceId, liveData: propLiveData, settings: p
         </div>
       </div>
 
-      <div className="w-full sm:w-[calc(100%-2rem)] mx-auto flex flex-col items-center justify-center px-1 sm:px-0">
+      <div className="w-full max-w-7xl mx-auto flex flex-col items-center justify-center px-1 sm:px-0">
         {/* Historical Chart Component - HTTP API Data Only */}
-        <div className="w-full">
+        <div className="w-full mt-2 sm:mt-4">
           <HistoricalChart 
               chartData={historicalData}
               isLoading={isLoadingChart}

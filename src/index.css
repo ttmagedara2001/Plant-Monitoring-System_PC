@@ -44,11 +44,43 @@ body {
   }
 }
 
-/* Landscape mode adjustments */
+/* Portrait mode mobile adjustments */
+@media (orientation: portrait) and (max-width: 640px) {
+  .portrait\:grid-cols-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Landscape mode adjustments for mobile */
 @media (orientation: landscape) and (max-height: 500px) {
   .landscape\:compact {
     padding-top: 0.5rem;
     padding-bottom: 0.5rem;
+  }
+  
+  .landscape\:grid-cols-3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  
+  .landscape\:grid-cols-5 {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
+/* Landscape mode for tablets and larger phones */
+@media (orientation: landscape) and (min-width: 640px) and (max-height: 600px) {
+  .landscape\:sm\:grid-cols-5 {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
+/* Safe area insets for notched devices */
+@supports (padding: env(safe-area-inset-top)) {
+  .safe-area-top {
+    padding-top: env(safe-area-inset-top);
+  }
+  .safe-area-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
   }
 }
 
