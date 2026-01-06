@@ -44,10 +44,12 @@ Based on the DEVICE_PAYLOAD_SPECIFICATION.md, the system subscribes to these top
 
 ✅ **Singleton Pattern** - One connection per application  
 ✅ **Auto-Reconnection** - Reconnects every 5 seconds on disconnect  
-✅ **Subscription Management** - Tracks and manages all active subscriptions  
-✅ **Message Parsing** - Handles different payload formats automatically  
+✅ **Subscription Management** - Tracks and manages all active subscriptions with duplicate prevention  
+✅ **Message Parsing** - Handles different payload formats with try-catch error handling  
 ✅ **Pump Control** - Send commands to control pump remotely  
-✅ **Event Callbacks** - Connect/disconnect event handlers
+✅ **Event Callbacks** - Connect/disconnect event handlers  
+✅ **Client Ready Check** - Verifies client is activated before subscribing  
+✅ **Improved Guards** - Prevents duplicate subscriptions using AND logic for existing checks
 
 ### API Reference
 
@@ -332,8 +334,10 @@ When device sends data:
 3. Connection status → `isConnected = false`
 4. STOMP client auto-reconnects after 5 seconds
 5. `onConnect` callback fires again
-6. Client automatically resubscribes to device topics
+6. Client automatically resubscribes to device topics using ref-based callbacks
 7. Connection status → `isConnected = true`
+
+**Note:** The App.jsx component uses `useRef` for stable callback references (`handleDataRef`, `subscriptionCleanupRef`) to prevent duplicate onConnect registrations and ensure consistent reconnection behavior.
 
 ## Error Handling
 
@@ -359,6 +363,8 @@ onStompError: (frame) => {
 
 ### Message Parsing Errors
 
+All message callbacks now include try-catch blocks to gracefully handle malformed JSON:
+
 ```javascript
 try {
   const body = JSON.parse(message.body);
@@ -366,6 +372,21 @@ try {
 } catch (error) {
   console.error("[WebSocketClient] ❌ Failed to parse message:", error);
   console.error("[WebSocketClient] Raw message:", message.body);
+}
+```
+
+### Subscription Guard Logic
+
+The client prevents duplicate subscriptions using AND logic:
+
+```javascript
+// Only skip if BOTH conditions are true (same device AND existing subscriptions)
+if (
+  this.currentDeviceId === deviceId &&
+  Object.keys(this.subscriptions).length > 0
+) {
+  console.log("[WebSocketClient] Already subscribed to device:", deviceId);
+  return true;
 }
 ```
 
@@ -427,6 +448,20 @@ try {
 3. ✅ Check browser console for JWT expiration
 4. ✅ Monitor server-side logs
 5. ✅ Adjust `reconnectDelay` if needed
+
+### Issue: Duplicate subscriptions or handlers
+
+**Symptoms:**
+
+- Multiple identical messages received
+- Callbacks firing multiple times
+
+**Solutions:**
+
+1. ✅ App.jsx now uses `useRef` for stable callback references
+2. ✅ Subscription cleanup stored in ref (`subscriptionCleanupRef`)
+3. ✅ Guard logic uses AND condition to check both deviceId AND existing subscriptions
+4. ✅ Client checks `this.client?.active` before subscribing
 
 ## Performance Considerations
 

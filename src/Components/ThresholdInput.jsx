@@ -14,7 +14,7 @@ const ThresholdInput = ({
 }) => {
   return (
     <div>
-      <label className="block text-sm font-medium text-gray-600 mb-1">
+      <label className="block text-xs sm:text-sm font-medium text-gray-600 mb-1">
         {label} {unit && `(${unit})`}
       </label>
       <input
@@ -24,14 +24,14 @@ const ThresholdInput = ({
         step={step}
         value={value}
         onChange={onChange}
-        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none ${
+        className={`w-full px-2 sm:px-3 py-1.5 sm:py-2 text-sm sm:text-base border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none ${
           error ? 'border-red-300' : 'border-gray-300'
         }`}
       />
       {/* Helper text showing allowed input range */}
-      <p className="text-xs text-gray-500 mt-1">Valid Range: {min} - {max} {unit}</p>
+      <p className="text-[10px] sm:text-xs text-gray-500 mt-1">Range: {min}-{max}{unit && ` ${unit}`}</p>
       {error && (
-        <p className="text-red-500 text-xs mt-1">{error}</p>
+        <p className="text-red-500 text-[10px] sm:text-xs mt-1">{error}</p>
       )}
     </div>
   );

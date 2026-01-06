@@ -21,14 +21,14 @@ const SensorStatusIndicator = ({ label, value, unit = '', status, decimals = 1 }
   };
 
   const { accent, bg, text, Icon, short } = getStatusProps(status);
-  const valueSizeClass = 'text-3xl lg:text-4xl';
+  const valueSizeClass = 'text-2xl sm:text-3xl lg:text-4xl';
   const valueColorClass = text || 'text-gray-800';
 
   return (
-    <div className={`flex flex-col items-center p-3 bg-white rounded-lg shadow-sm w-full ${accent}`}>
+    <div className={`flex flex-col items-center p-2 sm:p-3 bg-white rounded-lg shadow-sm w-full ${accent}`}>
       <div className="flex flex-col items-center justify-center w-full">
-        <div className="text-xs text-gray-500 uppercase tracking-wider mb-2">{label}</div>
-          <div className={`${valueSizeClass} font-semibold ${valueColorClass} text-center`}>{formatValue(value)}{unit}</div>
+        <div className="text-[10px] sm:text-xs text-gray-500 uppercase tracking-wider mb-1 sm:mb-2 truncate max-w-full">{label}</div>
+          <div className={`${valueSizeClass} font-semibold ${valueColorClass} text-center`}>{formatValue(value)}<span className="text-sm sm:text-base">{unit}</span></div>
       </div>
 
       {short ? (

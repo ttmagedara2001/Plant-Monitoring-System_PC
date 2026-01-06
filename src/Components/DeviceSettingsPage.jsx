@@ -50,10 +50,26 @@ const DeviceSettingsPage = ({ deviceId: propDeviceId }) => {
   const persistSettings = (partial = {}) => {
     if (!deviceId) return;
     const key = `settings_${deviceId}`;
+    
+    // Merge thresholds
+    const mergedThresholds = { ...thresholds, ...(partial.thresholds || {}) };
+    
+    // Create payload with both nested and flat structure for compatibility
     const payload = {
-      thresholds: { ...thresholds, ...(partial.thresholds || {}) },
+      // Nested structure for DeviceSettingsPage
+      thresholds: mergedThresholds,
       autoMode: typeof partial.autoMode === 'boolean' ? partial.autoMode : autoMode,
       pumpOn: typeof partial.pumpOn === 'boolean' ? partial.pumpOn : pumpOn,
+      // Flat structure for Dashboard compatibility
+      moistureMin: String(mergedThresholds.moisture?.min ?? 20),
+      moistureMax: String(mergedThresholds.moisture?.max ?? 70),
+      tempMin: String(mergedThresholds.temperature?.min ?? 10),
+      tempMax: String(mergedThresholds.temperature?.max ?? 35),
+      humidityMin: String(mergedThresholds.humidity?.min ?? 30),
+      humidityMax: String(mergedThresholds.humidity?.max ?? 80),
+      lightMin: String(mergedThresholds.light?.min ?? 200),
+      lightMax: String(mergedThresholds.light?.max ?? 1000),
+      batteryMin: String(mergedThresholds.battery?.min ?? 20),
     };
     localStorage.setItem(key, JSON.stringify(payload));
     window.dispatchEvent(new CustomEvent('settings:updated', { detail: { deviceId } }));
@@ -238,22 +254,22 @@ const DeviceSettingsPage = ({ deviceId: propDeviceId }) => {
 
   return (
     <>
-    <div className="min-h-screen bg-[#f0f4f8] p-4 font-sans text-gray-800 overflow-x-hidden">
+    <div className="min-h-screen bg-[#f0f4f8] p-2 sm:p-4 font-sans text-gray-800 overflow-x-hidden pt-1 sm:pt-2">
     <div>
       <div className="max-w-7xl mx-auto">
         <PageHeader
           title="Device Settings"
-          subtitle="Configure thresholds and pump"
+          subtitle="Configure thresholds"
           deviceId={deviceId}
           showDate
-          icon={<Settings className="w-6 h-6" />}
+          icon={<Settings className="w-5 h-5 sm:w-6 sm:h-6" />}
         />
 
-        <div className=" p-8 mx-auto mt-6 bg-blue-100 rounded-lg shadow-md border-blue-50">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
-            {/* Left: form grid 2x3 */}
-            <div className="bg-white rounded-xl shadow-md border border-gray-200 p-6 w-full lg:col-span-8">
-              <div className="bg-gray-50 rounded-lg p-4 grid grid-cols-2 grid-rows-3 gap-6">
+        <div className="p-3 sm:p-6 lg:p-8 mx-auto mt-4 sm:mt-6 bg-blue-100 rounded-lg shadow-md border-blue-50">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6 items-stretch">
+            {/* Left: form grid - 1 col on mobile, 2 cols on sm+ */}
+            <div className="bg-white rounded-xl shadow-md border border-gray-200 p-3 sm:p-4 lg:p-6 w-full lg:col-span-8">
+              <div className="bg-gray-50 rounded-lg p-2 sm:p-4 grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
               <div>
                 <ThresholdSection
                   title="Soil Moisture Thresholds"
@@ -373,15 +389,15 @@ const DeviceSettingsPage = ({ deviceId: propDeviceId }) => {
             </div>
 
             {/* Right column: status card above Pump Control */}
-            <div className="self-start lg:pl-4 lg:col-span-4 flex flex-col justify-between h-full space-y-4">
-              <div className="bg-white rounded-xl shadow-md border border-gray-200 p-4 ">
-                <div className="flex items-center justify-between mb-3">
+            <div className="self-start lg:pl-4 lg:col-span-4 flex flex-col justify-between h-full space-y-3 sm:space-y-4">
+              <div className="bg-white rounded-xl shadow-md border border-gray-200 p-3 sm:p-4">
+                <div className="flex items-center justify-between mb-2 sm:mb-3">
                   <div className="flex items-center gap-2">
-                    <span className=" ml-8 text-lg font-semibold text-gray-800">Current Status</span>
+                    <span className="ml-2 sm:ml-8 text-base sm:text-lg font-semibold text-gray-800">Current Status</span>
                   </div>
                 </div>
 
-                <div className="px-4 grid grid-cols-2 gap-3 text-sm text-gray-700">
+                <div className="px-2 sm:px-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-2 gap-2 sm:gap-3 text-sm text-gray-700">
                   {(() => {
                     const c = classesFor('moisture');
                     return (
@@ -465,24 +481,24 @@ const DeviceSettingsPage = ({ deviceId: propDeviceId }) => {
               </div>
 
               {/* Pump Control card */}
-              <div className="bg-white rounded-xl shadow-md border border-gray-200 p-6 h-full w-full lg:w-auto">
-                <div className="flex items-center gap-2 mb-4">
-                  <Gauge className="w-6 h-6 text-gray-600" />
-                  <span className="text-lg font-semibold text-gray-800">Pump Control</span>
+              <div className="bg-white rounded-xl shadow-md border border-gray-200 p-4 sm:p-6 h-full w-full lg:w-auto">
+                <div className="flex items-center gap-2 mb-3 sm:mb-4">
+                  <Gauge className="w-5 h-5 sm:w-6 sm:h-6 text-gray-600" />
+                  <span className="text-base sm:text-lg font-semibold text-gray-800">Pump Control</span>
                 </div>
 
-                <div className="bg-gray-50 rounded-lg p-4 flex flex-col gap-4">
-                  <div className="flex items-center justify-between mb-2">
+                <div className="bg-gray-50 rounded-lg p-3 sm:p-4 flex flex-col gap-3 sm:gap-4">
+                  <div className="flex items-center justify-between mb-1 sm:mb-2">
                     <AutoModeToggle enabled={autoMode} onToggle={handleAutoModeToggle} />
                   </div>
 
-                  <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
                     <div className="flex flex-col items-start">
-                      <div className="font-semibold text-gray-700">Manual Control</div>
+                      <div className="font-semibold text-gray-700 text-sm sm:text-base">Manual Control</div>
                       <div className="flex flex-col items-start gap-1 mt-1">
                         <div className="flex items-center gap-2">
-                          <span className="text-sm text-gray-600">Status:</span>
-                          <span className={`font-bold ${pumpOn ? 'text-green-600' : 'text-gray-700'}`}>{pumpOn ? 'ON' : 'OFF'}</span>
+                          <span className="text-xs sm:text-sm text-gray-600">Status:</span>
+                          <span className={`font-bold text-sm sm:text-base ${pumpOn ? 'text-green-600' : 'text-gray-700'}`}>{pumpOn ? 'ON' : 'OFF'}</span>
                         </div>
                         <div>
                           <span className={`${autoMode ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'} text-xs px-2 py-0.5 rounded`}>{autoMode ? 'auto' : 'manual'}</span>
@@ -494,9 +510,9 @@ const DeviceSettingsPage = ({ deviceId: propDeviceId }) => {
                       onClick={handlePumpToggle}
                       aria-pressed={pumpOn}
                       disabled={autoMode}
-                      className={`flex items-center gap-3 px-6 py-3 rounded-lg font-bold text-white shadow-md transition-all focus:outline-none ${pumpOn ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'} ${autoMode ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      className={`flex items-center gap-2 sm:gap-3 px-4 sm:px-6 py-2 sm:py-3 rounded-lg font-bold text-sm sm:text-base text-white shadow-md transition-all focus:outline-none ${pumpOn ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'} ${autoMode ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
-                      <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                      <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 sm:w-5 sm:h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M12 2v10" />
                         <path strokeLinecap="round" strokeLinejoin="round" d="M5.5 7.5a8.5 8.5 0 1013 0" />
                       </svg>
@@ -507,7 +523,7 @@ const DeviceSettingsPage = ({ deviceId: propDeviceId }) => {
 
               </div>
                {/* Centered Save Button and Status */}
-        <div className="flex flex-col items-center mt-6">
+        <div className="flex flex-col items-center mt-4 sm:mt-6">
           <ActionButton onClick={handleSave} className="w-full">
             Save Settings
           </ActionButton>

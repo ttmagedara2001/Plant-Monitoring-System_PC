@@ -2,8 +2,18 @@ import axios from "axios";
 import { ensureAuthFromEnv } from "./authService.js";
 
 // Environment-based API URL selection
+// In development, use the Vite proxy (/api) to bypass CORS
+// In production, use the full API URL from environment
 const getApiUrl = () => {
   const envApi = import.meta.env.VITE_API_BASE_URL;
+  
+  // Check if we're in development mode and should use proxy
+  if (import.meta.env.DEV) {
+    // Use relative path to go through Vite proxy
+    console.log("🔧 Dev mode detected - using Vite proxy for API calls");
+    return "/api";
+  }
+  
   return envApi;
 };
 

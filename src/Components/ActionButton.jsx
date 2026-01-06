@@ -11,7 +11,7 @@ const ActionButton = ({
   children,
   className = ''
 }) => {
-  const baseStyles = "flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center gap-2 transition";
+  const baseStyles = "flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-bold py-2.5 sm:py-3 px-3 sm:px-4 text-sm sm:text-base rounded-lg flex items-center justify-center gap-2 transition";
 
   return (
     <button

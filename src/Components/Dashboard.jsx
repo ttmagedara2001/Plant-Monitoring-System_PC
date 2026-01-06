@@ -605,14 +605,14 @@ const Dashboard = ({ deviceId: propDeviceId, liveData: propLiveData, settings: p
   };
 
   return (
-    <div className="min-h-screen bg-[#f0f4f8] p-4 font-sans text-gray-800 overflow-x-hidden">
+    <div className="min-h-screen bg-[#f0f4f8] px-2 sm:px-4 py-2 sm:py-4 font-sans text-gray-800 overflow-x-hidden">
       {/* Seasonal effects (snow/wishes) - only active in December */}
       <SeasonalEffects />
-      <div className="w-[calc(100%-2rem)] max-w-7xl justify-center mx-auto mb-6">
+      <div className="w-full sm:w-[calc(100%-2rem)] max-w-7xl mx-auto mb-4 sm:mb-6 pt-1 sm:pt-2">
       {/* Page heading */}
       <PageHeader
         title="Dashboard"
-        subtitle="Real-time sensor readings, charts, and controls for your device."
+        subtitle="Real-time sensor readings, charts, and controls."
         deviceId={deviceId}
       />
       </div>
@@ -621,9 +621,10 @@ const Dashboard = ({ deviceId: propDeviceId, liveData: propLiveData, settings: p
         {/* Connection Status Panel (navigation and dark mode only) */}
 
         {/* Real-Time Cards + Pump Banner (centered, compact within main container) */}
-      <div className="w-[calc(100%-2rem)] mx-auto px-4 mb-8">
+      <div className="w-full sm:w-[calc(100%-2rem)] mx-auto px-1 sm:px-4 mb-4 sm:mb-8">
         <div className="max-w-7xl mx-auto">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-4">
+        {/* Mobile: 2 columns portrait, 3 columns landscape. Tablet+: 5 columns */}
+        <div className="grid grid-cols-2 landscape:grid-cols-3 sm:grid-cols-3 md:grid-cols-5 gap-2 sm:gap-4 mb-3 sm:mb-4">
           <SensorStatusIndicator
             label="Soil Moisture"
             value={liveData?.moisture}
@@ -667,18 +668,16 @@ const Dashboard = ({ deviceId: propDeviceId, liveData: propLiveData, settings: p
         </div>
 
         {/* Pump Status Banner (aligned with cards) */}
-        <div className={`w-[calc(100%-2rem)] max-w-7xl mx-auto rounded-xl py-3 text-center border transition-colors duration-500 shadow-sm ${
+        <div className={`w-full sm:w-[calc(100%-2rem)] max-w-7xl mx-auto rounded-lg sm:rounded-xl py-2 sm:py-3 text-center border transition-colors duration-500 shadow-sm ${
           pumpStatus === 'ON' ? 'bg-green-100 border-green-300 text-green-900' : 'bg-blue-100 border-blue-300 text-blue-900'
         }`}>
-          <h2 className="text-lg font-semibold">
-            Pump : {pumpStatus} ({liveData?.pumpMode || 'Optimal'})
+          <h2 className="text-base sm:text-lg font-semibold">
+            Pump: {pumpStatus} <span className="text-sm font-normal">({liveData?.pumpMode || 'Optimal'})</span>
           </h2>
         </div>
       </div>
 
-     
-
-      <div className="w-[calc(100%-2rem)] mx-auto flex flex-col items-center justify-center">
+      <div className="w-full sm:w-[calc(100%-2rem)] mx-auto flex flex-col items-center justify-center px-1 sm:px-0">
         {/* Historical Chart Component - HTTP API Data Only */}
         <div className="w-full">
           <HistoricalChart 

@@ -8,6 +8,15 @@ export default defineConfig({
   server: {
     port: 3000,
     open: true,
+    proxy: {
+      // Proxy API requests to bypass CORS during development
+      "/api": {
+        target: "https://api.protonestconnect.co",
+        changeOrigin: true,
+        secure: true,
+        rewrite: (path) => path.replace(/^\/api/, "/api/v1/user"),
+      },
+    },
   },
   build: {
     outDir: "dist",

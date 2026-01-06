@@ -269,3 +269,20 @@ Use these logs together with MQTTX payloads to verify that:
 1. Auth → WebSocket connect → subscriptions work.
 2. MQTTX messages are reaching the broker and being forwarded to the dashboard.
 3. UI updates line up with your MQTT test scenarios.
+
+---
+
+## Updates (January 2025)
+
+### WebSocket Subscription Improvements
+
+- **Ref-based callbacks**: App.jsx now uses `useRef` for stable callback references to prevent duplicate handlers on reconnection
+- **Guard logic fix**: Subscription guard now uses AND condition (`currentDeviceId === deviceId && subscriptions.length > 0`) to properly handle device switching
+- **Client ready check**: Subscriptions verify `this.client?.active` before attempting to subscribe
+- **Try-catch parsing**: All message handlers include try-catch for JSON parsing errors
+
+### Settings Format Compatibility
+
+- DeviceSettingsPage now saves settings in **both** formats:
+  - Nested format: `{ thresholds: { moisture: { min, max } } }` (for DeviceSettingsPage)
+  - Flat format: `{ moistureMin, moistureMax, ... }` (for Dashboard compatibility)

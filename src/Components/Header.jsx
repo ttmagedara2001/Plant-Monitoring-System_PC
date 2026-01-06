@@ -90,48 +90,72 @@ const Header = ({ deviceId, deviceList, activeTab, setActiveTab, selectedDevice,
 
   return (
 
-    <header className="fixed inset-x-0 top-4 flex justify-center z-50">
-      <div className="w-[calc(100%-2rem)] max-w-7xl px-7 bg-white border-2 rounded-lg py-2 flex flex-col sm:flex-row justify-between items-center shadow-sm">
+    <header className="fixed inset-x-0 top-2 sm:top-4 flex justify-center z-50 px-2 sm:px-0">
+      <div className="w-full sm:w-[calc(100%-2rem)] max-w-7xl px-3 sm:px-7 bg-white border-2 rounded-lg py-2 flex flex-col sm:flex-row justify-between items-center shadow-sm">
       {/* Mobile bar (visible on small screens) */}
-      <div className="w-full flex items-center justify-between sm:hidden mb-2">
+      <div className="w-full flex items-center justify-between sm:hidden">
         <div className="flex items-center gap-2">
-          <button aria-label="Open menu" onClick={() => setMobileOpen(v => !v)} className="p-2 rounded-md hover:bg-gray-100">
-            <svg className="w-6 h-6 text-gray-700" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
+          <button aria-label="Open menu" onClick={() => setMobileOpen(v => !v)} className="p-1.5 rounded-md hover:bg-gray-100">
+            <svg className="w-5 h-5 text-gray-700" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
           </button>
-          <div className="flex items-center gap-2">
-            <Sprout className="h-6 w-6 text-green-600" />
-            <span className="text-lg font-bold tracking-wide font-mono">Agri<span className="text-yellow-400">Cop</span></span>
+          <div className="flex items-center gap-1.5">
+            <Sprout className="h-5 w-5 text-green-600" />
+            <span className="text-base font-bold tracking-wide font-mono">Agri<span className="text-yellow-400">Cop</span></span>
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {/* Connection status mini indicators for mobile */}
+          <div className="flex items-center gap-1">
+            <Wifi className={`w-4 h-4 ${connected ? 'text-green-500' : 'text-red-500'}`} />
+          </div>
           <NotificationsBell selectedDevice={currentDevice} />
         </div>
       </div>
 
       {/* Mobile menu content */}
       {mobileOpen && (
-        <div ref={mobileRef} className="sm:hidden absolute left-4 right-4 top-20 bg-white border rounded shadow-lg z-50 px-4 py-3">
+        <div ref={mobileRef} className="sm:hidden absolute left-2 right-2 top-14 bg-white border rounded-lg shadow-lg z-50 px-3 py-3 max-h-[80vh] overflow-y-auto">
           <div className="flex flex-col gap-3">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between pb-2 border-b">
               <div className="flex items-center gap-2">
                 <Sprout className="h-5 w-5 text-green-600" />
-                <div className="font-semibold">AgriCop</div>
+                <div className="font-semibold text-sm">AgriCop Menu</div>
               </div>
-              <button onClick={() => setMobileOpen(false)} className="text-gray-500">Close</button>
+              <button onClick={() => setMobileOpen(false)} className="text-gray-500 text-sm px-2 py-1 hover:bg-gray-100 rounded">✕</button>
             </div>
-            <div className="flex items-center gap-2">
-              <button onClick={() => { setMobileOpen(false); typeof setActiveTab === 'function' ? setActiveTab('dashboard') : null; }} className="flex items-center gap-2 px-3 py-2 rounded hover:bg-gray-100"> <LayoutDashboard className="w-4 h-4"/> Dashboard</button>
-              <button onClick={() => { setMobileOpen(false); typeof setActiveTab === 'function' ? setActiveTab('settings') : null; }} className="flex items-center gap-2 px-3 py-2 rounded hover:bg-gray-100"> <Settings className="w-4 h-4"/> Settings</button>
+            
+            {/* Navigation buttons */}
+            <div className="grid grid-cols-2 gap-2">
+              <button onClick={() => { setMobileOpen(false); typeof setActiveTab === 'function' && setActiveTab('dashboard'); }} className={`flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium transition ${activeTab === 'dashboard' ? 'bg-green-100 text-green-700' : 'bg-gray-50 hover:bg-gray-100'}`}>
+                <LayoutDashboard className="w-4 h-4"/> Dashboard
+              </button>
+              <button onClick={() => { setMobileOpen(false); typeof setActiveTab === 'function' && setActiveTab('settings'); }} className={`flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium transition ${activeTab === 'settings' ? 'bg-green-100 text-green-700' : 'bg-gray-50 hover:bg-gray-100'}`}>
+                <Settings className="w-4 h-4"/> Settings
+              </button>
             </div>
-            <div className="mt-2">
-              <label className="text-sm font-medium text-gray-700">Select Device</label>
-              <select value={currentDevice || ''} onChange={handleDeviceSelect} className="w-full mt-1 bg-white border border-green-300 text-gray-700 py-2 px-3 rounded focus:ring-2 focus:ring-green-500 outline-none">
+            
+            {/* Device selector */}
+            <div className="pt-2">
+              <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Select Device</label>
+              <select value={currentDevice || ''} onChange={handleDeviceSelect} className="w-full mt-1 bg-white border border-green-300 text-gray-700 py-2.5 px-3 rounded-lg focus:ring-2 focus:ring-green-500 outline-none text-sm">
                 {deviceListLocal.map(dev => (<option key={dev} value={dev}>{dev}</option>))}
               </select>
             </div>
-            <div className="mt-2 flex items-center justify-between">
-              <div className="text-xs text-gray-600">User: {userId}</div>
-              <button onClick={logout} className="text-red-500 text-sm">Logout</button>
+            
+            {/* Connection status */}
+            <div className="flex items-center justify-between pt-2 border-t">
+              <div className="flex items-center gap-2">
+                <div className={`w-2 h-2 rounded-full ${connected ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                <span className="text-xs text-gray-600">{connected ? 'Connected' : 'Disconnected'}</span>
+              </div>
+            </div>
+            
+            {/* User info and logout */}
+            <div className="flex items-center justify-between pt-2 border-t">
+              <div className="text-xs text-gray-600 truncate max-w-[60%]">User: {userId}</div>
+              <button onClick={logout} className="text-red-500 text-sm flex items-center gap-1 px-2 py-1 hover:bg-red-50 rounded">
+                <LogOut className="w-3 h-3" /> Logout
+              </button>
             </div>
           </div>
         </div>
@@ -154,14 +178,14 @@ const Header = ({ deviceId, deviceList, activeTab, setActiveTab, selectedDevice,
         </div>
       </div>
 
-      {/* Device Selector Dropdown - center aligned */}
-      <div className="flex-1 flex justify-center items-center mb-4 sm:mb-0">
+      {/* Device Selector Dropdown - center aligned (hidden on mobile) */}
+      <div className="hidden sm:flex flex-1 justify-center items-center">
         <div className="flex items-center gap-2">
           <span className="text-sm font-semibold text-gray-700">Select Device:</span>
           <select 
             value={currentDevice || ''} 
             onChange={handleDeviceSelect}
-            className="bg-white border border-green-300 text-gray-700 py-1 px-2 rounded focus:ring-2 focus:ring-green-500 outline-none font-medium"
+            className="bg-white border border-green-300 text-gray-700 py-1 px-2 rounded focus:ring-2 focus:ring-green-500 outline-none font-medium text-sm"
           >
             {deviceListLocal.map(dev => (
               <option key={dev} value={dev}>{dev}</option>
@@ -177,11 +201,10 @@ const Header = ({ deviceId, deviceList, activeTab, setActiveTab, selectedDevice,
         {statusIcon(sysStatus, Server, 'System')}
       </div>
 
-      {/* Bell Icon for Alerts - rightmost */}
-          <div className="flex items-center gap-4 ml-8">
-            <div className="hidden sm:block"><NotificationsBell selectedDevice={currentDevice} /></div>
-            <div className="sm:hidden"><NotificationsBell selectedDevice={currentDevice} /></div>
-          </div>
+      {/* Bell Icon for Alerts - rightmost (hidden on mobile, shown in mobile bar instead) */}
+      <div className="hidden sm:flex items-center gap-4 ml-8">
+        <NotificationsBell selectedDevice={currentDevice} />
+      </div>
       </div>
     </header>
   );

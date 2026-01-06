@@ -223,22 +223,14 @@ function App() {
     }
   }, [settings?.autoMode, liveData?.moisture, selectedDevice, liveData?.pumpStatus]);
 
+  // Store data handler in ref to ensure stable reference across reconnects
+  const handleDataRef = useRef(null);
+  const subscriptionCleanupRef = useRef(null);
+
   useEffect(() => {
     if (!jwtToken) return;
 
-    webSocketClient
-      .connect(jwtToken)
-      .then(() => console.log('[App] WebSocket connected (global)'))
-      .catch((e) => console.warn('[App] WebSocket connect failed', e));
-
-    // Register connect/disconnect callbacks and keep references so we can remove them later
-    const onConnect = () => setIsConnected(true);
-    const onDisconnect = () => setIsConnected(false);
-
-    webSocketClient.onConnect(onConnect);
-    webSocketClient.onDisconnect(onDisconnect);
-
-    // Data handler updates liveData
+    // Data handler updates liveData - stable reference
     const handleData = (data) => {
       setLiveData((prev) => {
         const updated = { ...prev };
@@ -279,30 +271,62 @@ function App() {
         return updated;
       });
     };
+    handleDataRef.current = handleData;
 
-    // Subscribe to selected device topics
-    const subscribeToDevice = () => {
+    // Register connect/disconnect callbacks with stable references
+    const onConnect = () => {
+      console.log('[App] WebSocket connected - subscribing to device:', selectedDevice);
+      setIsConnected(true);
+      // Subscribe when connected
       try {
-        webSocketClient.subscribeToDevice(selectedDevice, handleData);
+        if (selectedDevice && handleDataRef.current) {
+          webSocketClient.subscribeToDevice(selectedDevice, handleDataRef.current);
+        }
       } catch (e) {
-        console.warn('[App] subscribeToDevice failed', e);
+        console.warn('[App] subscribeToDevice on connect failed', e);
       }
     };
+    
+    const onDisconnect = () => {
+      console.log('[App] WebSocket disconnected');
+      setIsConnected(false);
+    };
 
-    try {
-      if (webSocketClient.getConnectionStatus()) subscribeToDevice();
-    } catch (e) {}
-
-    webSocketClient.onConnect(() => subscribeToDevice());
-
-    return () => {
-      // Clean up: remove connect/disconnect listeners and unsubscribe from device topics
+    // Store cleanup function for this effect
+    subscriptionCleanupRef.current = () => {
       try {
         webSocketClient.offConnect(onConnect);
         webSocketClient.offDisconnect(onDisconnect);
         webSocketClient.unsubscribeFromDevice(selectedDevice);
       } catch (e) {
         console.warn('[App] cleanup failed', e);
+      }
+    };
+
+    webSocketClient.onConnect(onConnect);
+    webSocketClient.onDisconnect(onDisconnect);
+
+    // Connect to WebSocket
+    webSocketClient
+      .connect(jwtToken)
+      .then(() => {
+        console.log('[App] WebSocket connect initiated');
+        // If already connected, subscribe immediately
+        if (webSocketClient.getConnectionStatus()) {
+          try {
+            webSocketClient.subscribeToDevice(selectedDevice, handleDataRef.current);
+            setIsConnected(true);
+          } catch (e) {
+            console.warn('[App] Initial subscription failed', e);
+          }
+        }
+      })
+      .catch((e) => console.warn('[App] WebSocket connect failed', e));
+
+    return () => {
+      // Clean up: remove listeners and unsubscribe
+      if (subscriptionCleanupRef.current) {
+        subscriptionCleanupRef.current();
       }
     };
   }, [jwtToken, selectedDevice]);
@@ -321,7 +345,7 @@ function App() {
         <StatusBar activeTab={activeTab} setActiveTab={setActiveTab} />
 
         {/* space for fixed header and status bar */}
-        <div className="pt-32" />
+        <div className="pt-28" />
 
         {/* Main content area rendered by state (SPA) */}
         {activeTab === 'dashboard' ? (

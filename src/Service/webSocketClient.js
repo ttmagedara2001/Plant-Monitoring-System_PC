@@ -83,9 +83,17 @@ class WebSocketClient {
         console.log("✅ WebSocket Connected:", frame);
         this.isReady = true;
 
+        // Clear stale subscription references on reconnect - STOMP client handles unsubscribe internally
+        this.subscriptions.clear();
+
         // If we have a device already set, subscribe to it
         if (this.currentDeviceId) {
-          this._subscribeToDeviceTopics(this.currentDeviceId);
+          // Add small delay to avoid overwhelming server immediately after connect
+          setTimeout(() => {
+            if (this.isReady && this.currentDeviceId) {
+              this._subscribeToDeviceTopics(this.currentDeviceId);
+            }
+          }, 100);
         }
 
         // Call user's connect callback
@@ -104,8 +112,18 @@ class WebSocketClient {
       },
 
       onStompError: (frame) => {
-        console.error("❌ Broker reported error:", frame.headers["message"]);
+        const errorMsg = frame.headers["message"] || "Unknown STOMP error";
+        console.error("❌ Broker reported error:", errorMsg);
         console.error("Details:", frame.body);
+
+        // Handle specific errors
+        if (errorMsg.includes("ExecutorSubscribableChannel")) {
+          console.warn(
+            "⚠️ Server subscription channel error - this may be a temporary server issue"
+          );
+          // Clear subscriptions so we can retry cleanly on next connect
+          this.subscriptions.clear();
+        }
       },
 
       onWebSocketError: (event) => {
@@ -144,95 +162,120 @@ class WebSocketClient {
   _subscribeToDeviceTopics(deviceId) {
     const self = this;
 
+    // Guard: Check if client is ready
+    if (!this.client || !this.isReady) {
+      console.log(
+        `[WebSocketClient] ⚠️ Client not ready, cannot subscribe to ${deviceId}`
+      );
+      return;
+    }
+
+    // Guard: Check if already subscribed to this device to prevent duplicates
+    const streamKey = `stream-${deviceId}`;
+    const stateKey = `state-${deviceId}`;
+    if (this.subscriptions.has(streamKey) && this.subscriptions.has(stateKey)) {
+      console.log(
+        `[WebSocketClient] ⚠️ Already subscribed to ${deviceId}, skipping duplicate subscription`
+      );
+      return;
+    }
+
     // Subscribe to stream topic - all sensor data comes through this topic
     const streamTopic = `/topic/stream/${deviceId}`;
     const streamSub = this.client.subscribe(streamTopic, (message) => {
-      const data = JSON.parse(message.body);
-      console.log(`📡 [${deviceId}] Received stream data:`, data);
+      try {
+        const data = JSON.parse(message.body);
+        console.log(`📡 [${deviceId}] Received stream data:`, data);
 
-      // Detect sensor type from message payload and call Dashboard callback
-      if (self.dataCallback) {
-        // Message structure: {payload: {temp: "55"}, topic: "temp", timestamp: "..."}
-        const payload = data.payload || data;
-        const topic = data.topic;
+        // Detect sensor type from message payload and call Dashboard callback
+        if (self.dataCallback) {
+          // Message structure: {payload: {temp: "55"}, topic: "temp", timestamp: "..."}
+          const payload = data.payload || data;
+          const topic = data.topic;
 
-        const sensorMap = {
-          temp: "temp",
-          temperature: "temp",
-          humidity: "humidity",
-          moisture: "moisture",
-          light: "light",
-          battery: "battery",
-        };
+          const sensorMap = {
+            temp: "temp",
+            temperature: "temp",
+            humidity: "humidity",
+            moisture: "moisture",
+            light: "light",
+            battery: "battery",
+          };
 
-        // Check if this is a batch state update (all sensors in one message)
-        const sensorKeys = Object.keys(sensorMap);
-        const foundSensors = sensorKeys.filter(
-          (key) => payload[key] !== undefined
-        );
-
-        if (foundSensors.length > 2) {
-          // This is a complete state update - send all at once
-          console.log(
-            `🎯 [${deviceId}] Received BATCH state update with ${foundSensors.length} sensors`
+          // Check if this is a batch state update (all sensors in one message)
+          const sensorKeys = Object.keys(sensorMap);
+          const foundSensors = sensorKeys.filter(
+            (key) => payload[key] !== undefined
           );
 
-          const stateUpdate = {};
-          foundSensors.forEach((key) => {
-            const sensorType = sensorMap[key];
-            stateUpdate[sensorType] = payload[key];
-            console.log(`   - ${sensorType}: ${payload[key]}`);
-          });
-
-          self.dataCallback({
-            sensorType: "batchUpdate",
-            value: stateUpdate,
-            timestamp: data.timestamp || new Date().toISOString(),
-          });
-        } else {
-          // Single sensor update (original logic)
-          let found = false;
-
-          // First, try to use the topic field if it exists and matches a sensor type
-          if (topic && payload[topic] !== undefined) {
-            const sensorType = sensorMap[topic] || topic;
+          if (foundSensors.length > 2) {
+            // This is a complete state update - send all at once
             console.log(
-              `🎯 [${deviceId}] Calling Dashboard callback: ${sensorType} = ${payload[topic]}`
+              `🎯 [${deviceId}] Received BATCH state update with ${foundSensors.length} sensors`
             );
+
+            const stateUpdate = {};
+            foundSensors.forEach((key) => {
+              const sensorType = sensorMap[key];
+              stateUpdate[sensorType] = payload[key];
+              console.log(`   - ${sensorType}: ${payload[key]}`);
+            });
+
             self.dataCallback({
-              sensorType: sensorType,
-              value: payload[topic],
+              sensorType: "batchUpdate",
+              value: stateUpdate,
               timestamp: data.timestamp || new Date().toISOString(),
             });
-            found = true;
           } else {
-            // Fallback: Check all possible sensor fields in payload
-            for (const [key, sensorType] of Object.entries(sensorMap)) {
-              if (payload[key] !== undefined) {
-                console.log(
-                  `🎯 [${deviceId}] Calling Dashboard callback: ${sensorType} = ${payload[key]}`
-                );
-                self.dataCallback({
-                  sensorType: sensorType,
-                  value: payload[key],
-                  timestamp: data.timestamp || new Date().toISOString(),
-                });
-                found = true;
+            // Single sensor update (original logic)
+            let found = false;
+
+            // First, try to use the topic field if it exists and matches a sensor type
+            if (topic && payload[topic] !== undefined) {
+              const sensorType = sensorMap[topic] || topic;
+              console.log(
+                `🎯 [${deviceId}] Calling Dashboard callback: ${sensorType} = ${payload[topic]}`
+              );
+              self.dataCallback({
+                sensorType: sensorType,
+                value: payload[topic],
+                timestamp: data.timestamp || new Date().toISOString(),
+              });
+              found = true;
+            } else {
+              // Fallback: Check all possible sensor fields in payload
+              for (const [key, sensorType] of Object.entries(sensorMap)) {
+                if (payload[key] !== undefined) {
+                  console.log(
+                    `🎯 [${deviceId}] Calling Dashboard callback: ${sensorType} = ${payload[key]}`
+                  );
+                  self.dataCallback({
+                    sensorType: sensorType,
+                    value: payload[key],
+                    timestamp: data.timestamp || new Date().toISOString(),
+                  });
+                  found = true;
+                }
               }
             }
-          }
 
-          if (!found) {
-            console.warn(
-              `⚠️ [${deviceId}] No recognized sensor field in message:`,
-              data
-            );
+            if (!found) {
+              console.warn(
+                `⚠️ [${deviceId}] No recognized sensor field in message:`,
+                data
+              );
+            }
           }
+        } else {
+          console.warn(
+            `⚠️ [${deviceId}] No callback registered yet - data will be lost:`,
+            data
+          );
         }
-      } else {
-        console.warn(
-          `⚠️ [${deviceId}] No callback registered yet - data will be lost:`,
-          data
+      } catch (parseError) {
+        console.error(
+          `❌ [${deviceId}] Failed to parse stream data:`,
+          parseError
         );
       }
     });
@@ -242,44 +285,54 @@ class WebSocketClient {
     // Subscribe to pump state topic
     const stateTopic = `/topic/state/${deviceId}`;
     const stateSub = this.client.subscribe(stateTopic, (message) => {
-      const data = JSON.parse(message.body);
-      console.log(`🔧 [${deviceId}] Pump state received:`, data);
+      try {
+        const data = JSON.parse(message.body);
+        console.log(`🔧 [${deviceId}] Pump state received:`, data);
 
-      // Extract payload (handle nested structure like sensor data)
-      const payload = data.payload || data;
+        // Extract payload (handle nested structure like sensor data)
+        const payload = data.payload || data;
 
-      // Call Dashboard callback for pump status
-      if (self.dataCallback) {
-        // Check for power/status in payload
-        const powerValue =
-          payload.power || payload.status || payload.pumpStatus;
-        if (powerValue !== undefined) {
-          // Normalize to uppercase: "on" -> "ON", "off" -> "OFF"
-          const normalizedPower = String(powerValue).toUpperCase();
-          console.log(
-            `🎯 [${deviceId}] Calling Dashboard callback: pumpStatus = ${normalizedPower}`
-          );
-          self.dataCallback({
-            sensorType: "pumpStatus",
-            value: normalizedPower,
-            timestamp: data.timestamp || new Date().toISOString(),
-          });
+        // Call Dashboard callback for pump status
+        if (self.dataCallback) {
+          // Check for power/status in payload
+          const powerValue =
+            payload.power ||
+            payload.status ||
+            payload.pumpStatus ||
+            payload.pump;
+          if (powerValue !== undefined) {
+            // Normalize to uppercase: "on" -> "ON", "off" -> "OFF"
+            const normalizedPower = String(powerValue).toUpperCase();
+            console.log(
+              `🎯 [${deviceId}] Calling Dashboard callback: pumpStatus = ${normalizedPower}`
+            );
+            self.dataCallback({
+              sensorType: "pumpStatus",
+              value: normalizedPower,
+              timestamp: data.timestamp || new Date().toISOString(),
+            });
+          }
+
+          // Check for mode in payload
+          const modeValue = payload.mode || payload.pumpMode;
+          if (modeValue !== undefined) {
+            // Normalize mode to lowercase: "MANUAL" -> "manual"
+            const normalizedMode = String(modeValue).toLowerCase();
+            console.log(
+              `🎯 [${deviceId}] Calling Dashboard callback: pumpMode = ${normalizedMode}`
+            );
+            self.dataCallback({
+              sensorType: "pumpMode",
+              value: normalizedMode,
+              timestamp: data.timestamp || new Date().toISOString(),
+            });
+          }
         }
-
-        // Check for mode in payload
-        const modeValue = payload.mode || payload.pumpMode;
-        if (modeValue !== undefined) {
-          // Normalize mode to lowercase: "MANUAL" -> "manual"
-          const normalizedMode = String(modeValue).toLowerCase();
-          console.log(
-            `🎯 [${deviceId}] Calling Dashboard callback: pumpMode = ${normalizedMode}`
-          );
-          self.dataCallback({
-            sensorType: "pumpMode",
-            value: normalizedMode,
-            timestamp: data.timestamp || new Date().toISOString(),
-          });
-        }
+      } catch (parseError) {
+        console.error(
+          `❌ [${deviceId}] Failed to parse pump state:`,
+          parseError
+        );
       }
     });
     this.subscriptions.set(`state-${deviceId}`, stateSub);
@@ -333,7 +386,7 @@ class WebSocketClient {
 
     if (!jwt) {
       const envEmail = import.meta.env.VITE_USER_EMAIL;
-      const envPass = import.meta.env.VITE_USER_SECRET
+      const envPass = import.meta.env.VITE_USER_SECRET;
 
       if (envEmail && envPass) {
         try {

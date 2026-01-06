@@ -322,6 +322,8 @@ reconnectDelay: 5000, // 5 seconds
 - Login again if token expired
 - Check browser console for connection errors
 - Verify WebSocket URL (must be `wss://` for HTTPS sites)
+- **Auto-reconnection**: Client automatically reconnects every 5 seconds
+- **Ref-based callbacks**: App.jsx uses refs for stable callback references to prevent duplicate handlers
 
 ### Pump Not Turning On (Auto Mode)
 
@@ -343,6 +345,9 @@ reconnectDelay: 5000, // 5 seconds
 1. Click "Save Settings" button (not just change values)
 2. Check localStorage: `console.log(localStorage.getItem('settings_device0011233'))`
 3. Clear localStorage and re-save if needed
+4. Settings are stored in two formats for compatibility:
+   - **Nested format** (for DeviceSettingsPage): `{ thresholds: { moisture: { min, max } } }`
+   - **Flat format** (for Dashboard): `{ moistureMin, moistureMax, tempMin, ... }`
 
 ## 🚀 Quick Deploy
 
@@ -363,13 +368,12 @@ docker run -p 80:80 plant-monitoring:latest
 ---
 
 **Status:** Production Ready  
-**Last Updated:** December 1, 2025  
-**Version:** 1.0.0
+**Last Updated:** January 2025  
+**Version:** 1.1.0
 
 ---
 
 ## 📞 Support & Contributing
 
 **Issues**: Open GitHub issue with detailed description and console logs  
-**Questions**: Use GitHub Discussions  
-
+**Questions**: Use GitHub Discussions

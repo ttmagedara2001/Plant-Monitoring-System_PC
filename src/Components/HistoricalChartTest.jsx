@@ -128,7 +128,7 @@ const HistoricalChart = ({
 
     const now = new Date();
     
-    // Handle custom ranges (format: custom_<ms>)
+    // Handle custom ranges (format: custom_ms)
     let rangeMs;
     if (timeRange.startsWith('custom_')) {
       rangeMs = parseInt(timeRange.replace('custom_', ''));
@@ -155,7 +155,7 @@ const HistoricalChart = ({
     if (dataInterval !== 'auto' && filtered.length > 0) {
       let intervalMs;
       
-      // Handle custom intervals (format: custom_interval_<ms>)
+      // Handle custom intervals (format: custom_interval_ms)
       if (dataInterval.startsWith('custom_interval_')) {
         intervalMs = parseInt(dataInterval.replace('custom_interval_', ''));
       } else {
@@ -282,56 +282,64 @@ const HistoricalChart = ({
     }`;
 
   return (
-   <div className="w-[calc(100%-2rem)] max-w-7xl mx-auto bg-white rounded-2xl p-4 shadow-sm flex flex-col border border-gray-200 px-6 py-6">
+   <div className="w-full sm:w-[calc(100%-2rem)] max-w-7xl mx-auto bg-white rounded-xl sm:rounded-2xl p-2 sm:p-4 shadow-sm flex flex-col border border-gray-200 sm:px-6 sm:py-6">
       {/* Header Section */}
-      <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
-        <div className="flex items-center gap-3">
-          <h3 className="text-xl font-bold text-gray-800">Historical Trends of the Sensors</h3>
-          <span className="text-xs bg-gray-100 text-gray-500 px-2 py-1 rounded-full flex items-center gap-1">
-            <Clock className="w-3 h-3" />
-            {timeRangeLabels[timeRange] || timeRange.replace('custom_', '').replace(/\d+/, (ms) => {
-              const val = parseInt(ms);
-              if (val >= 86400000) return `${(val / 86400000).toFixed(1)} Days`;
-              if (val >= 3600000) return `${(val / 3600000).toFixed(1)} Hours`;
-              if (val >= 60000) return `${(val / 60000).toFixed(1)} Minutes`;
-              return `${(val / 1000).toFixed(1)} Seconds`;
-            })}
-          </span>
-          {(dataInterval !== 'auto') && (
-            <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded-full border border-indigo-200">
-              {intervalLabels[dataInterval] || dataInterval.replace('custom_interval_', '').replace(/\d+/, (ms) => {
+      <div className="flex flex-col gap-3 sm:gap-4 mb-4 sm:mb-6">
+        {/* Title and badges row */}
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 sm:gap-4">
+          <h3 className="text-base sm:text-xl font-bold text-gray-800">Historical Trends</h3>
+          
+          {/* Badges - scrollable on mobile */}
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0 scrollbar-hide">
+            <span className="text-[10px] sm:text-xs bg-gray-100 text-gray-500 px-2 py-0.5 sm:py-1 rounded-full flex items-center gap-1 whitespace-nowrap">
+              <Clock className="w-3 h-3" />
+              {timeRangeLabels[timeRange] || timeRange.replace('custom_', '').replace(/\d+/, (ms) => {
                 const val = parseInt(ms);
-                if (val >= 3600000) return `${(val / 3600000).toFixed(1)} Hour Interval`;
-                if (val >= 60000) return `${(val / 60000).toFixed(1)} Min Interval`;
-                return `${(val / 1000).toFixed(1)}s Interval`;
+                if (val >= 86400000) return `${(val / 86400000).toFixed(1)} Days`;
+                if (val >= 3600000) return `${(val / 3600000).toFixed(1)} Hours`;
+                if (val >= 60000) return `${(val / 60000).toFixed(1)} Minutes`;
+                return `${(val / 1000).toFixed(1)} Seconds`;
               })}
             </span>
-          )}
-          {displayData.length > 0 && (
-            <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-full border border-purple-200">
-              {displayData.length} points
-            </span>
-          )}
-          {dataSource !== 'None' && (
-            <span className={`text-xs px-2 py-1 rounded-full flex items-center gap-1 ${
-              dataSource === 'API' 
-                ? 'bg-blue-100 text-blue-700 border border-blue-200' 
-                : 'bg-green-100 text-green-700 border border-green-200'
-            }`}>
-              {dataSource === 'API' ? <Database className="w-3 h-3" /> : <Wifi className="w-3 h-3" />}
-              {dataSource}
-            </span>
-          )}
+            {(dataInterval !== 'auto') && (
+              <span className="text-[10px] sm:text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 sm:py-1 rounded-full border border-indigo-200 whitespace-nowrap">
+                {intervalLabels[dataInterval] || dataInterval.replace('custom_interval_', '').replace(/\d+/, (ms) => {
+                  const val = parseInt(ms);
+                  if (val >= 3600000) return `${(val / 3600000).toFixed(1)}h`;
+                  if (val >= 60000) return `${(val / 60000).toFixed(1)}m`;
+                  return `${(val / 1000).toFixed(1)}s`;
+                })}
+              </span>
+            )}
+            {displayData.length > 0 && (
+              <span className="text-[10px] sm:text-xs bg-purple-100 text-purple-700 px-2 py-0.5 sm:py-1 rounded-full border border-purple-200 whitespace-nowrap">
+                {displayData.length} pts
+              </span>
+            )}
+            {dataSource !== 'None' && (
+              <span className={`text-[10px] sm:text-xs px-2 py-0.5 sm:py-1 rounded-full flex items-center gap-1 whitespace-nowrap ${
+                dataSource === 'API' 
+                  ? 'bg-blue-100 text-blue-700 border border-blue-200' 
+                  : 'bg-green-100 text-green-700 border border-green-200'
+              }`}>
+                {dataSource === 'API' ? <Database className="w-3 h-3" /> : <Wifi className="w-3 h-3" />}
+                {dataSource}
+              </span>
+            )}
+          </div>
         </div>
         
-        <div className="relative">
-          <button 
-            onClick={() => setShowExportMenu(!showExportMenu)}
-            disabled={isExporting || chartData.length === 0}
-            className="bg-yellow-50 hover:bg-yellow-100 text-yellow-700 border border-yellow-200 text-xs font-bold px-4 py-2 rounded-lg flex items-center gap-2 transition disabled:opacity-50">
-            {isExporting ? <Loader2 className="w-4 h-4 animate-spin"/> : <Download className="w-4 h-4" />}
-            <span>Export CSV</span>
-          </button>
+        {/* Export button */}
+        <div className="flex justify-end">
+          <div className="relative">
+            <button 
+              onClick={() => setShowExportMenu(!showExportMenu)}
+              disabled={isExporting || chartData.length === 0}
+              className="bg-yellow-50 hover:bg-yellow-100 text-yellow-700 border border-yellow-200 text-xs font-bold px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg flex items-center gap-1.5 sm:gap-2 transition disabled:opacity-50">
+              {isExporting ? <Loader2 className="w-4 h-4 animate-spin"/> : <Download className="w-4 h-4" />}
+              <span className="hidden xs:inline">Export CSV</span>
+              <span className="xs:hidden">CSV</span>
+            </button>
           
           {showExportMenu && !isExporting && chartData.length > 0 && (
             <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-xl border border-gray-200 z-50">
@@ -432,6 +440,7 @@ const HistoricalChart = ({
           )}
         </div>
       </div>
+      </div>
 
       {/* Click outside to close export menu */}
       {showExportMenu && (
@@ -452,10 +461,10 @@ const HistoricalChart = ({
       {/* Custom Range Dialog */}
       {showCustomDialog && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 max-w-md w-full mx- shadow-2xl">
+          <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4 shadow-2xl">
             <h3 className="text-lg font-bold text-gray-800 mb-4">Custom Time Range</h3>
             
-            <div className="space-y-10">
+            <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Time Range</label>
                 <div className="flex gap-2">
@@ -526,9 +535,10 @@ const HistoricalChart = ({
 
       {/* (Compact selectors moved to the visibility toolbar; large selector bar removed) */}
 
-      {/* Toggles Toolbar with compact Time Range + Interval selectors on the right */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex-1">
+      {/* Toggles Toolbar with compact Time Range + Interval selectors */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4 sm:mb-6">
+        {/* Sensor toggles - scrollable on mobile */}
+        <div className="flex-1 overflow-x-auto pb-2 sm:pb-0 scrollbar-hide">
           <SensorToggleToolbar
             visibleSeries={visibleSeries}
             toggleSeries={toggleSeries}
@@ -537,9 +547,11 @@ const HistoricalChart = ({
           />
         </div>
 
-        <div className="flex items-center gap-3 ml-4">
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-gray-600 hidden md:inline">Time Range</span>
+        {/* Time Range and Interval selectors */}
+        <div className="flex items-center gap-2 sm:gap-3 sm:ml-4">
+          <div className="flex items-center gap-1 sm:gap-2">
+            <span className="text-xs text-gray-500 sm:hidden">Range:</span>
+            <span className="text-sm text-gray-600 hidden sm:inline">Time Range</span>
             <select
               value={timeRange.startsWith('custom_') ? 'custom' : timeRange}
               onChange={e => {
@@ -549,7 +561,7 @@ const HistoricalChart = ({
                   onTimeRangeChange && onTimeRangeChange(e.target.value);
                 }
               }}
-              className="px-3 py-1 rounded-lg text-xs border border-gray-300 bg-white"
+              className="px-2 sm:px-3 py-1 rounded-lg text-xs border border-gray-300 bg-white"
             >
               <option value="1m">1m</option>
               <option value="5m">5m</option>
@@ -561,8 +573,9 @@ const HistoricalChart = ({
             </select>
           </div>
 
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-gray-600 hidden md:inline">Interval</span>
+          <div className="flex items-center gap-1 sm:gap-2">
+            <span className="text-xs text-gray-500 sm:hidden">Int:</span>
+            <span className="text-sm text-gray-600 hidden sm:inline">Interval</span>
             <select
               value={dataInterval.startsWith('custom_interval_') ? 'custom' : dataInterval}
               onChange={e => {
@@ -572,7 +585,7 @@ const HistoricalChart = ({
                   onDataIntervalChange && onDataIntervalChange(e.target.value);
                 }
               }}
-              className="px-3 py-1 rounded-lg text-xs border border-gray-300 bg-white"
+              className="px-2 sm:px-3 py-1 rounded-lg text-xs border border-gray-300 bg-white"
             >
               {['auto', '1s', '5s', '1m', '5m', '1h'].map(interval => (
                 <option key={interval} value={interval} disabled={!validIntervals.includes(interval)}>
@@ -585,61 +598,64 @@ const HistoricalChart = ({
         </div>
       </div>
       
-      {/* Chart Container - increase horizontal space */}
-      <div className="h-96 w-full flex-grow relative">
+      {/* Chart Container - responsive height */}
+      <div className="h-64 sm:h-80 md:h-96 w-full flex-grow relative">
         {isLoading ? (
            <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-400 bg-white/50 z-10">
-             <Loader2 className="animate-spin w-10 h-10 mb-3 text-blue-500" />
-             <span className="text-sm font-medium">Loading Data...</span>
+             <Loader2 className="animate-spin w-8 sm:w-10 h-8 sm:h-10 mb-2 sm:mb-3 text-blue-500" />
+             <span className="text-xs sm:text-sm font-medium">Loading Data...</span>
            </div>
         ) : displayData.length === 0 ? (
            <div className="absolute inset-0 flex items-center justify-center text-gray-400 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
-             <span className="text-sm">No data available for this period</span>
+             <span className="text-xs sm:text-sm">No data available for this period</span>
            </div>
         ) : (
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={displayData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+          <LineChart data={displayData} margin={{ top: 5, right: 5, left: -25, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
             <XAxis 
                 dataKey="time" 
-                tick={{ fontSize: 11, fill: '#9ca3af' }} 
+                tick={{ fontSize: 10, fill: '#9ca3af' }} 
                 tickLine={false}
                 axisLine={{ stroke: '#e5e7eb' }}
-                minTickGap={30}
+                minTickGap={20}
+                interval="preserveStartEnd"
             />
             
             {/* Left Axis for most metrics */}
             <YAxis 
                 yAxisId="left" 
-                tick={{ fontSize: 11, fill: '#9ca3af' }} 
+                tick={{ fontSize: 10, fill: '#9ca3af' }} 
                 tickLine={false}
                 axisLine={false}
                 domain={[0, 'auto']}
+                width={35}
             />
             
             {/* Right Axis specifically for Light (high values; eg 800/900 lux) */}
             <YAxis 
                 yAxisId="right" 
                 orientation="right" 
-                tick={{ fontSize: 11, fill: '#eab308' }} 
+                tick={{ fontSize: 10, fill: '#eab308' }} 
                 tickLine={false}
                 axisLine={false}
                 hide={!visibleSeries.light} // Hide axis if light is hidden
+                width={35}
             />
             
             <Tooltip 
-                contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }}
-                itemStyle={{ fontSize: '12px', fontWeight: 600 }}
+                contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', fontSize: '11px' }}
+                itemStyle={{ fontSize: '11px', fontWeight: 600 }}
             />
             
             {visibleSeries.moisture && (
-                <Line yAxisId="left" type="monotone" dataKey="moisture" name="Moisture (%)" stroke="#06b6d4" strokeWidth={3} dot={false} activeDot={{ r: 6 }} />
+                <Line yAxisId="left" type="monotone" dataKey="moisture" name="Moisture (%)" stroke="#06b6d4" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
             )}
             {visibleSeries.temperature && (
-                <Line yAxisId="left" type="monotone" dataKey="temperature" name="Temp (°C)" stroke="#22c55e" strokeWidth={3} dot={false} activeDot={{ r: 6 }} />
+                <Line yAxisId="left" type="monotone" dataKey="temperature" name="Temp (°C)" stroke="#22c55e" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
             )}
             {visibleSeries.humidity && (
-                <Line yAxisId="left" type="monotone" dataKey="humidity" name="Humidity (%)" stroke="#3b82f6" strokeWidth={3} dot={false} activeDot={{ r: 6 }} />
+                <Line yAxisId="left" type="monotone" dataKey="humidity" name="Humidity (%)" stroke="#3b82f6" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
             )}
             {visibleSeries.battery && (
                 <Line yAxisId="left" type="step" dataKey="battery" name="Battery (%)" stroke="#a855f7" strokeWidth={3} dot={false} />
