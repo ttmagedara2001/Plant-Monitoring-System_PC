@@ -24,7 +24,7 @@ const PageHeader = ({
   }, [showDate]);
 
   return (
-    <div className="mt-2 sm:mt-3 mb-2 sm:mb-3 mx-auto justify-center z-50">
+    <div className="mt-2 sm:mt-7 mb-2 sm:mb-3 mx-auto justify-center z-50">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-0">
         {/* Left: Icon and Title */}
         <div className="flex items-center gap-2 sm:gap-3 md:gap-4">

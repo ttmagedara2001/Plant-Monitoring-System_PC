@@ -14,7 +14,7 @@ import { login } from "./Service/authService";
 // These are the actual credentials from the Protonest dashboard
 // Using VITE_USER_SECRET for consistency with authService.js
 const email = import.meta.env.VITE_USER_EMAIL;
-const password = import.meta.env.VITE_USER_SECRET || import.meta.env.VITE_USER_PASSWORD;
+const password = import.meta.env.VITE_USER_PASSWORD;
 
 const AutoLogin = ({ children }) => {
   const { setAuth } = useAuth();

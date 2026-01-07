@@ -90,8 +90,8 @@ const Header = ({ deviceId, deviceList, activeTab, setActiveTab, selectedDevice,
 
   return (
 
-    <header className="fixed inset-x-0 top-1 sm:top-2 md:top-4 flex justify-center z-50 px-1 sm:px-2 md:px-0">
-      <div className="w-full sm:w-[calc(100%-1rem)] md:w-[calc(100%-2rem)] max-w-7xl px-2 sm:px-4 md:px-7 bg-white border-2 rounded-lg py-1.5 sm:py-2 flex flex-col sm:flex-row justify-between items-center shadow-sm">
+    <header className="fixed inset-x-0 top-0 flex justify-center z-50 px-1 sm:px-2 md:px-4 pt-1 sm:pt-2 md:pt-3">
+      <div className="w-full sm:w-[calc(100%-1rem)] md:w-[calc(100%-2rem)] max-w-7xl px-2 sm:px-4 md:px-7 bg-white border-2 rounded-lg py-1.5 sm:py-2 flex flex-col sm:flex-row justify-between items-center shadow-md">
       {/* Mobile bar (visible on small screens) */}
       <div className="w-full flex items-center justify-between sm:hidden">
         <div className="flex items-center gap-1.5">

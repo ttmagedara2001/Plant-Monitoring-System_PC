@@ -345,8 +345,8 @@ function App() {
         <StatusBar activeTab={activeTab} setActiveTab={setActiveTab} />
 
         {/* Main content area rendered by state (SPA) */}
-        {/* Padding top accounts for fixed header + status bar - responsive for all screen sizes */}
-        <main className="w-full pt-20 landscape:pt-28 sm:pt-32 md:pt-36">
+        {/* Padding top accounts for fixed Header + Navigation Bar - responsive for all screen sizes */}
+        <main className="w-full pt-[100px] landscape:pt-[104px] sm:pt-[116px] md:pt-[128px]">
           {activeTab === 'dashboard' ? (
             <Dashboard deviceId={selectedDevice} liveData={liveData} settings={settings} isConnected={isConnected} />
           ) : (
