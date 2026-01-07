@@ -623,10 +623,8 @@ const Dashboard = ({ deviceId: propDeviceId, liveData: propLiveData, settings: p
         {/* Real-Time Cards + Pump Banner (centered, compact within main container) */}
       <div className="w-full mx-auto px-1 sm:px-0 mb-4 sm:mb-6">
         <div className="max-w-7xl mx-auto">
-        {/* Mobile portrait: 2 cols, Mobile landscape: 3 cols, Tablet: 3 cols, Desktop: 5 cols */}
-        <div className="grid grid-cols-2 gap-2 sm:gap-3 md:gap-4 mb-3 sm:mb-4
-                        portrait:grid-cols-2 landscape:grid-cols-3 
-                        sm:grid-cols-3 md:grid-cols-5">
+        {/* All 5 sensor cards on one line - responsive sizing */}
+        <div className="grid grid-cols-5 gap-1.5 sm:gap-2 md:gap-3 lg:gap-4 mb-3 sm:mb-4">
           <SensorStatusIndicator
             label="Soil Moisture"
             value={liveData?.moisture}
