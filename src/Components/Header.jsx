@@ -64,7 +64,7 @@ const Header = ({ deviceId, deviceList, activeTab, setActiveTab, selectedDevice,
   const { userId, logout } = useAuth();
 
   // default device list (could be moved to a shared service)
-  const deviceListLocal = deviceList || ['device9988', 'device0011233', 'device0000', 'device0001'];
+  const deviceListLocal = deviceList || ['device9988', 'device0011233', 'device0000', 'device0001','deviceTestUC'];
 
   // Use controlled selection via props if provided
   const currentDevice = selectedDevice || localStorage.getItem('selectedDevice') || deviceListLocal[0];

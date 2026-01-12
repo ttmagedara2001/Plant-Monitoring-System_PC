@@ -25,7 +25,7 @@ const Dashboard = ({ deviceId: propDeviceId, liveData: propLiveData, settings: p
   const liveData = propLiveData || { moisture: 0, temperature: 0, humidity: 0, light: 0, battery: 0, pumpStatus: 'OFF', pumpMode: 'manual' };
   const isConnected = typeof propIsConnected !== 'undefined' ? propIsConnected : false;
   const settings = propSettings || { moistureMin: '20', moistureMax: '70', tempMin: '10', tempMax: '35', humidityMin: '30', humidityMax: '80', lightMin: '200', lightMax: '1000', batteryMin: '20', autoMode: false };
-  const [deviceList] = useState(['device9988', 'device0011233', 'device0000', 'device0001', 'device0002']);
+  const [deviceList] = useState(['device9988', 'device0011233', 'device0000', 'device0001', 'device0002','deviceTestUC']);
   
   // HTTP API for historical data visualization
   const [historicalData, setHistoricalData] = useState([]);
