@@ -386,7 +386,7 @@ class WebSocketClient {
 
     if (!jwt) {
       const envEmail = import.meta.env.VITE_USER_EMAIL;
-      const envPass = import.meta.env.VITE_USER_SECRET;
+      const envPass = import.meta.env.VITE_USER_PASSWORD;
 
       if (envEmail && envPass) {
         try {
