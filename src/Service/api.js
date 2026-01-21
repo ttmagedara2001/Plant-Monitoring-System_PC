@@ -1,58 +1,37 @@
 import axios from "axios";
-import { ensureAuthFromEnv } from "./authService.js";
 
-// Environment-based API URL selection
-// In development, use the Vite proxy (/api) to bypass CORS
-// In production, use the full API URL from environment
-const getApiUrl = () => {
-  const envApi = import.meta.env.VITE_API_BASE_URL;
-  
-  // Check if we're in development mode and should use proxy
-  if (import.meta.env.DEV) {
-    // Use relative path to go through Vite proxy
-    console.log("🔧 Dev mode detected - using Vite proxy for API calls");
-    return "/api";
-  }
-  
-  return envApi;
-};
-
-const BASE_URL = getApiUrl();
+// Use VITE_API_BASE_URL from environment
+// This should be the full API base path: https://api.protonestconnect.co/api/v1
+const BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 console.log("🔧 API Base URL:", BASE_URL);
 
+/**
+ * Axios API Client configured for Cookie-based Authentication (HttpOnly cookies)
+ * 
+ * Key changes from header-based auth:
+ * - withCredentials: true - sends cookies with every request
+ * - No X-Token header attachment
+ * - Token refresh uses GET /get-new-token with cookie-based refresh token
+ */
 const api = axios.create({
   baseURL: BASE_URL,
   headers: {
     "Content-Type": "application/json",
   },
   timeout: 15000, // 15 second timeout
+  // CRITICAL: Include credentials (cookies) with every request
+  withCredentials: true,
 });
 
-// Request Interceptor: Adds X-Token header if available
+// Request Interceptor: Logging only (no token header attachment needed with cookies)
 api.interceptors.request.use(
-  async (config) => {
-    let token = localStorage.getItem("jwtToken");
-
-    // If no token present, attempt to ensure auth via VITE env creds
-    if (!token || token === "MOCK_TOKEN_FOR_TESTING") {
-      try {
-        const jwt = await ensureAuthFromEnv();
-        if (jwt) token = jwt;
-      } catch (e) {
-        console.error("❌ Env auto-login failed:", e.message || e);
-      }
-    }
-
-    if (token && token !== "MOCK_TOKEN_FOR_TESTING") {
-      config.headers["X-Token"] = token;
-    }
-
+  (config) => {
     console.log("📤 API Request:", {
       method: config.method?.toUpperCase(),
       url: config.url,
       baseURL: config.baseURL,
-      hasToken: !!token && token !== "MOCK_TOKEN_FOR_TESTING",
+      withCredentials: config.withCredentials,
       payload: config.data || undefined,
     });
 
@@ -64,7 +43,7 @@ api.interceptors.request.use(
   }
 );
 
-// Response Interceptor: Handles Token Refresh and various errors
+// Response Interceptor: Handles Cookie-based Token Refresh and various errors
 api.interceptors.response.use(
   (response) => {
     console.log("📥 API Response:", {
@@ -151,43 +130,55 @@ api.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    // Handle token refresh for 400/401 errors (but not for auth endpoints)
+    // Handle token refresh for 400/401 errors with "Invalid token" message
+    // Uses cookie-based refresh - no manual headers needed
     if (
       (error.response?.status === 400 || error.response?.status === 401) &&
-      !originalRequest?.url?.includes("/get-token") && // Don't try refresh on login endpoints
-      (error.response?.data?.data === "Invalid token" ||
-        error.response?.data?.message?.includes("token")) &&
+      !originalRequest?.url?.includes("user/get-token") && // Don't try refresh on login endpoints
+      !originalRequest?.url?.includes("get-new-token") && // Don't try refresh on refresh endpoint
+      error.response?.data?.data === "Invalid token" &&
       !originalRequest._retry
     ) {
       originalRequest._retry = true;
 
       try {
-        const refreshToken = localStorage.getItem("refreshToken");
-        if (!refreshToken) throw new Error("No refresh token available");
+        console.log("🔄 Attempting cookie-based token refresh...");
 
-        console.log("🔄 Attempting token refresh...");
+        // Call GET /get-new-token - server uses refresh token from cookie
+        // No manual headers needed - cookies are sent automatically
+        const response = await axios.get(`${BASE_URL}/get-new-token`, {
+          withCredentials: true, // Include cookies
+          timeout: 10000,
+        });
 
-        const response = await axios.post(
-          `${BASE_URL}/get-new-token`,
-          {},
-          {
-            headers: { "X-Refresh-Token": refreshToken },
-            timeout: 10000,
-          }
-        );
-
-        if (response.data.status === "Success") {
-          const { jwtToken } = response.data.data;
-          localStorage.setItem("jwtToken", jwtToken);
-          originalRequest.headers["X-Token"] = jwtToken;
-
-          console.log("✅ Token refreshed successfully");
-          return api(originalRequest);
-        }
+        // If refresh succeeds (200 OK), new cookies are set automatically by server
+        console.log("✅ Token refreshed successfully via cookies");
+        
+        // Retry the original request with new cookies
+        return api(originalRequest);
       } catch (refreshError) {
-        console.error("❌ Token refresh failed:", refreshError.message);
+        const refreshErrorData = refreshError.response?.data?.data;
+        
+        // Check for specific refresh failure reasons
+        if (
+          refreshErrorData === "Refresh token is required" ||
+          refreshErrorData === "Invalid refresh token"
+        ) {
+          console.error("❌ Session expired - logging out:", refreshErrorData);
+        } else {
+          console.error("❌ Token refresh failed:", refreshError.message);
+        }
+        
+        // Clear any local state and redirect to login
         localStorage.clear();
+        
+        // Dispatch logout event for AuthContext to handle
+        window.dispatchEvent(new CustomEvent('auth:logout'));
+        
+        // Redirect to home/login
         window.location.href = "/";
+        
+        return Promise.reject(refreshError);
       }
     }
 

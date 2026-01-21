@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../Context/AuthContext';
-import { getAllStreamData, updatePumpStatus } from '../Service/deviceService'; 
+import { getAllStreamData, updatePumpStatus } from '../Service/deviceService';
 //import { AlertTriangle } from 'lucide-react';
 
 // Import Sub-Components
 import Header from './Header';
 import StatusCard from './StatusCard';
 import SensorStatusIndicator from './SensorStatusIndicator';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, LayoutDashboard } from 'lucide-react';
 import HistoricalChart from './HistoricalChartTest';
 import PageHeader from './PageHeader';
 import SeasonalEffects from './SeasonalEffects';
@@ -16,35 +16,35 @@ import SeasonalEffects from './SeasonalEffects';
 
 const Dashboard = ({ deviceId: propDeviceId, liveData: propLiveData, settings: propSettings, isConnected: propIsConnected, alertMessage: propAlertMessage }) => {
   //Change this to your actual device ID that belongs to your user account
-  const defaultDeviceId = 'device0011233'; //'device9988'
+  const defaultDeviceId = import.meta.env.VITE_DEVICE_ID || 'devicetestuc';
   const deviceId = propDeviceId || defaultDeviceId;
-  
-  const { jwtToken } = useAuth(); 
+
+  const { jwtToken } = useAuth();
 
   // liveData, settings, and connection are provided by App via props
   const liveData = propLiveData || { moisture: 0, temperature: 0, humidity: 0, light: 0, battery: 0, pumpStatus: 'OFF', pumpMode: 'manual' };
   const isConnected = typeof propIsConnected !== 'undefined' ? propIsConnected : false;
   const settings = propSettings || { moistureMin: '20', moistureMax: '70', tempMin: '10', tempMax: '35', humidityMin: '30', humidityMax: '80', lightMin: '200', lightMax: '1000', batteryMin: '20', autoMode: false };
-  const [deviceList] = useState(['device9988', 'device0011233', 'device0000', 'device0001', 'device0002','deviceTestUC','devicetestuC']);
-  
+  const [deviceList] = useState(['device9988', 'device0011233', 'device0000', 'device0001', 'device0002', 'deviceTestUC', 'devicetestuC']);
+
   // HTTP API for historical data visualization
   const [historicalData, setHistoricalData] = useState([]);
   const [filteredData, setFilteredData] = useState([]); // Data after time range and interval filtering
   const [isLoadingChart, setIsLoadingChart] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [dataFetchError, setDataFetchError] = useState(null);
-  
+
   // Time frame selection for historical chart: default to 1 hour
   const [timeRange, setTimeRange] = useState(() => {
     const saved = localStorage.getItem(`timeRange_${deviceId}`);
     return saved || '1h';
-  }); 
+  });
   const [dataInterval, setDataInterval] = useState(() => {
     const saved = localStorage.getItem(`dataInterval_${deviceId}`);
     return saved || 'auto';
-  }); 
+  });
   // header clock handled by PageHeader component
-  
+
   // alert states (computed here in Dashboard for every real-time update)
   const alertMessage = propAlertMessage || null;
   const [alertStates, setAlertStates] = useState({});
@@ -103,7 +103,7 @@ const Dashboard = ({ deviceId: propDeviceId, liveData: propLiveData, settings: p
       console.warn('[Dashboard] alertStates compute failed', e);
     }
   }, [propLiveData, settings]);
-  const [commandStatus, setCommandStatus] = useState(null); 
+  const [commandStatus, setCommandStatus] = useState(null);
   const [commandInProgress, setCommandInProgress] = useState(null);
 
   // Helper function to filter and downsample data based on time range and interval
@@ -112,7 +112,7 @@ const Dashboard = ({ deviceId: propDeviceId, liveData: propLiveData, settings: p
 
     // Calculate time range in ms
     const now = new Date();
-    
+
     // Handle custom ranges (format: custom_<ms>)
     let rangeMs;
     if (range.startsWith('custom_')) {
@@ -139,7 +139,7 @@ const Dashboard = ({ deviceId: propDeviceId, liveData: propLiveData, settings: p
     // Group by interval if not 'auto' - show readings at exact interval points
     if (interval !== 'auto' && filtered.length > 0) {
       let intervalMs;
-      
+
       // Handle custom intervals (format: custom_interval_<ms>)
       if (interval.startsWith('custom_interval_')) {
         intervalMs = parseInt(interval.replace('custom_interval_', ''));
@@ -156,12 +156,12 @@ const Dashboard = ({ deviceId: propDeviceId, liveData: propLiveData, settings: p
       if (intervalMs > 0) {
         // Group data into interval buckets and get one reading per interval
         const intervalBuckets = new Map();
-        
+
         filtered.forEach(record => {
           const recordTime = new Date(record.timestamp).getTime();
           // Calculate which interval bucket this record belongs to
           const bucketKey = Math.floor(recordTime / intervalMs) * intervalMs;
-          
+
           // Store the closest record to the bucket start time
           if (!intervalBuckets.has(bucketKey)) {
             intervalBuckets.set(bucketKey, record);
@@ -176,22 +176,22 @@ const Dashboard = ({ deviceId: propDeviceId, liveData: propLiveData, settings: p
         });
 
         // Convert back to array and sort by time
-        filtered = Array.from(intervalBuckets.values()).sort((a, b) => 
+        filtered = Array.from(intervalBuckets.values()).sort((a, b) =>
           new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
         );
       }
     }
 
     // Update time format based on interval - show seconds for granular intervals
-    const shouldShowSeconds = interval === '1s' || interval === '5s' || 
-                             (interval.startsWith('custom_interval_') && 
-                              parseInt(interval.replace('custom_interval_', '')) < 60000);
-    
+    const shouldShowSeconds = interval === '1s' || interval === '5s' ||
+      (interval.startsWith('custom_interval_') &&
+        parseInt(interval.replace('custom_interval_', '')) < 60000);
+
     // Format time field for display
     filtered = filtered.map(record => ({
       ...record,
-      time: new Date(record.timestamp).toLocaleTimeString([], 
-        shouldShowSeconds 
+      time: new Date(record.timestamp).toLocaleTimeString([],
+        shouldShowSeconds
           ? { hour: '2-digit', minute: '2-digit', second: '2-digit' }
           : { hour: '2-digit', minute: '2-digit' }
       )
@@ -218,7 +218,7 @@ const Dashboard = ({ deviceId: propDeviceId, liveData: propLiveData, settings: p
         console.log(`✅ [HTTP API] Historical data loaded: ${data.length} records`);
       } catch (error) {
         console.error("❌ [HTTP API] Failed to fetch historical data:", error);
-        
+
         // Check if it's a device ownership error
         if (error.response?.data?.data === "Device does not belong to the user") {
           setDataFetchError(
@@ -234,7 +234,7 @@ const Dashboard = ({ deviceId: propDeviceId, liveData: propLiveData, settings: p
     };
 
     fetchHistoricalData();
-    
+
     // Refresh historical data every 30s to show newly saved real-time data
     const refreshInterval = setInterval(() => {
       if (deviceId && jwtToken) {
@@ -270,28 +270,28 @@ const Dashboard = ({ deviceId: propDeviceId, liveData: propLiveData, settings: p
 
   // Alerts and automation are handled at the App level now.
   // Dashboard is a display-only component that receives `propAlertMessage` and `propLiveData` from App.
-  
+
   // Data Export Function - Export from HTTP API historical data only
   const handleExportCSV = async (selectedSensors = null) => {
     setIsExporting(true);
     try {
       // Use filtered data if available, otherwise fall back to all historical data
       const dataToExport = filteredData.length > 0 ? filteredData : historicalData;
-      
+
       if (dataToExport.length === 0) {
         alert("No data available to export. Please wait for data to accumulate.");
         return;
       }
-      
+
       // If selectedSensors is provided, filter columns; otherwise export all
       const allSensors = ["moisture", "temperature", "humidity", "light", "battery"];
-      const sensorsToExport = selectedSensors && selectedSensors.length > 0 
+      const sensorsToExport = selectedSensors && selectedSensors.length > 0
         ? selectedSensors.filter(s => allSensors.includes(s))
         : allSensors;
-      
+
       // Build headers dynamically based on selected sensors
       const headers = ["time", ...sensorsToExport].join(',');
-      
+
       // Build rows with only selected sensor data
       const rows = dataToExport.map(d => {
         const rowData = [d.time];
@@ -300,7 +300,7 @@ const Dashboard = ({ deviceId: propDeviceId, liveData: propLiveData, settings: p
         });
         return rowData.join(',');
       }).join('\n');
-      
+
       const csvContent = `${headers}\n${rows}`;
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
@@ -319,7 +319,7 @@ const Dashboard = ({ deviceId: propDeviceId, liveData: propLiveData, settings: p
       setIsExporting(false);
     }
   };
-  
+
   // Control Handlers
   const handleSaveSettings = () => {
     setCommandInProgress('settings');
@@ -328,7 +328,7 @@ const Dashboard = ({ deviceId: propDeviceId, liveData: propLiveData, settings: p
       // Save settings to localStorage (frontend only - no backend API available)
       localStorage.setItem(`settings_${deviceId}`, JSON.stringify(settings));
       console.log('💾 Settings saved to localStorage:', settings);
-      
+
       // Log auto mode status
       if (settings.autoMode) {
         console.log('🤖 AUTO MODE ENABLED - System will automatically control pump based on moisture levels');
@@ -338,11 +338,11 @@ const Dashboard = ({ deviceId: propDeviceId, liveData: propLiveData, settings: p
       } else {
         console.log('👤 MANUAL MODE - User has full control of pump');
       }
-      
-      setCommandStatus({ 
-        type: 'success', 
-        message: settings.autoMode 
-          ? 'Settings saved! Auto mode is now ACTIVE.' 
+
+      setCommandStatus({
+        type: 'success',
+        message: settings.autoMode
+          ? 'Settings saved! Auto mode is now ACTIVE.'
           : 'Settings saved! Manual control mode is active.'
       });
     } catch (error) {
@@ -353,13 +353,13 @@ const Dashboard = ({ deviceId: propDeviceId, liveData: propLiveData, settings: p
       setTimeout(() => setCommandStatus(null), 5000);
     }
   };
-  
+
   // Handle time range change
   const handleTimeRangeChange = (newRange) => {
     console.log(`📊 Changing time range to: ${newRange}`);
     setTimeRange(newRange);
     localStorage.setItem(`timeRange_${deviceId}`, newRange);
-    
+
     // Auto-adjust interval based on time range for optimal display
     let newInterval = 'auto';
     if (newRange === '1m') {
@@ -389,17 +389,21 @@ const Dashboard = ({ deviceId: propDeviceId, liveData: propLiveData, settings: p
     setCommandInProgress('pump');
     const currentStatus = liveData?.pumpStatus === 'ON';
     const newStatus = currentStatus ? 'OFF' : 'ON';
-    
+    const currentMoisture = liveData?.moisture;
+
     console.log(`🔄 [HTTP API] Toggling pump from ${liveData?.pumpStatus} to ${newStatus}`);
-    
+    console.log(`   📊 Current moisture: ${currentMoisture}`);
+
     try {
-      // Use HTTP API to send pump command (backend forwards to MQTT)
-      await updatePumpStatus(deviceId, newStatus, 'pump', 'manual');
-      
+      // Use HTTP API to send pump command with current moisture value
+      // API: POST /update-state-details
+      // Payload: { deviceId, topic: "pump", payload: { moisture: <value>, pump: "on"|"off" } }
+      await updatePumpStatus(deviceId, newStatus, 'pump', 'manual', currentMoisture);
+
       console.log(`✅ [HTTP API] Pump command sent: ${newStatus}`);
       console.log(`📡 Waiting for backend to publish to MQTT and device confirmation...`);
       setCommandStatus({ type: 'success', message: `Pump command sent: ${newStatus}` });
-      
+
       // Device will respond with actual pump status via WebSocket
       // The status will update automatically when we receive the confirmation
     } catch (error) {
@@ -419,15 +423,15 @@ const Dashboard = ({ deviceId: propDeviceId, liveData: propLiveData, settings: p
     if (!isFinite(num)) return '--';
     return `${num.toFixed(decimals)}${unit}`;
   };
-  
+
   const pumpStatus = liveData?.pumpStatus || 'OFF';
-  
+
   const getBorderColor = (key, min, max) => {
     const raw = liveData?.[key];
     // Debug: show incoming value and provided bounds
     console.debug(`[Dashboard][getBorderColor] key=${key} raw=${raw} min=${min} max=${max}`);
     if (raw === undefined || raw === null || raw === '') {
-      return (function(){
+      return (function () {
         switch (key) {
           case 'moisture': return 'border-cyan-500';
           case 'temperature': return 'border-green-500';
@@ -457,11 +461,11 @@ const Dashboard = ({ deviceId: propDeviceId, liveData: propLiveData, settings: p
 
     // Check if value is critical (outside bounds)
     const isCritical = (!isNaN(min) && val < min) || (!isNaN(max) && val > max);
-    
+
     if (isCritical) {
       return 'border-red-500 bg-red-50'; // Red border and light red background for critical
     }
-    
+
     // Return original colors when not critical
     switch (key) {
       case 'moisture': return 'border-cyan-500';
@@ -608,69 +612,69 @@ const Dashboard = ({ deviceId: propDeviceId, liveData: propLiveData, settings: p
     <div className="min-h-screen bg-[#f0f4f8] p-2 sm:p-4 font-sans text-gray-800 overflow-x-hidden">
       {/* Seasonal effects (snow/wishes) - only active in December */}
       <SeasonalEffects />
-      <div className="max-w-7xl mx-auto">
-      {/* Page heading */}
-      <PageHeader
-        title="Dashboard"
-        subtitle="Real-time sensor readings, charts, and controls."
-        deviceId={deviceId}
-      />
+      <div className="max-w-7xl mx-auto mb-6 sm:mb-8">
+        {/* Page heading */}
+        <PageHeader
+          title="Dashboard"
+          subtitle="Real-time sensor readings, charts, and controls."
+          deviceId={deviceId}
+          icon={<LayoutDashboard className="w-5 h-5 sm:w-6 sm:h-6" />}
+        />
       </div>
 
 
-        {/* Connection Status Panel (navigation and dark mode only) */}
+      {/* Connection Status Panel (navigation and dark mode only) */}
 
-        {/* Real-Time Cards + Pump Banner (centered, compact within main container) */}
+      {/* Real-Time Cards + Pump Banner (centered, compact within main container) */}
       <div className="w-full mx-auto px-1 sm:px-0 mb-4 sm:mb-6">
         <div className="max-w-7xl mx-auto">
-        {/* All 5 sensor cards on one line - responsive sizing */}
-        <div className="grid grid-cols-5 gap-1.5 sm:gap-2 md:gap-3 lg:gap-4 mb-3 sm:mb-4">
-          <SensorStatusIndicator
-            label="Soil Moisture"
-            value={liveData?.moisture}
-            unit="%"
-            decimals={1}
-            status={getSensorStatus('moisture')}
-          />
+          {/* All 5 sensor cards on one line - responsive sizing */}
+          <div className="grid grid-cols-5 gap-1.5 sm:gap-2 md:gap-3 lg:gap-4 mb-3 sm:mb-4">
+            <SensorStatusIndicator
+              label="Soil Moisture"
+              value={liveData?.moisture}
+              unit="%"
+              decimals={1}
+              status={getSensorStatus('moisture')}
+            />
 
-          <SensorStatusIndicator
-            label="Temperature"
-            value={liveData?.temperature}
-            unit="°C"
-            decimals={1}
-            status={getSensorStatus('temperature')}
-          />
+            <SensorStatusIndicator
+              label="Temperature"
+              value={liveData?.temperature}
+              unit="°C"
+              decimals={1}
+              status={getSensorStatus('temperature')}
+            />
 
-          <SensorStatusIndicator
-            label="Humidity"
-            value={liveData?.humidity}
-            unit="%"
-            decimals={1}
-            status={getSensorStatus('humidity')}
-          />
+            <SensorStatusIndicator
+              label="Humidity"
+              value={liveData?.humidity}
+              unit="%"
+              decimals={1}
+              status={getSensorStatus('humidity')}
+            />
 
-          <SensorStatusIndicator
-            label="Light"
-            value={liveData?.light}
-            unit=" lux"
-            decimals={0}
-            status={getSensorStatus('light')}
-          />
+            <SensorStatusIndicator
+              label="Light"
+              value={liveData?.light}
+              unit=" lux"
+              decimals={0}
+              status={getSensorStatus('light')}
+            />
 
-          <SensorStatusIndicator
-            label="Battery"
-            value={liveData?.battery}
-            unit="%"
-            decimals={0}
-            status={getSensorStatus('battery')}
-          />
-        </div>
+            <SensorStatusIndicator
+              label="Battery"
+              value={liveData?.battery}
+              unit="%"
+              decimals={0}
+              status={getSensorStatus('battery')}
+            />
+          </div>
         </div>
 
         {/* Pump Status Banner (aligned with cards) */}
-        <div className={`w-full max-w-7xl mx-auto rounded-lg sm:rounded-xl py-2 sm:py-3 text-center border transition-colors duration-500 shadow-sm ${
-          pumpStatus === 'ON' ? 'bg-green-100 border-green-300 text-green-900' : 'bg-blue-100 border-blue-300 text-blue-900'
-        }`}>
+        <div className={`w-full max-w-7xl mx-auto rounded-lg sm:rounded-xl py-2 sm:py-3 text-center border transition-colors duration-500 shadow-sm ${pumpStatus === 'ON' ? 'bg-green-100 border-green-300 text-green-900' : 'bg-blue-100 border-blue-300 text-blue-900'
+          }`}>
           <h2 className="text-base sm:text-lg font-semibold">
             Pump: {pumpStatus} <span className="text-sm font-normal">({liveData?.pumpMode || 'Optimal'})</span>
           </h2>
@@ -678,21 +682,36 @@ const Dashboard = ({ deviceId: propDeviceId, liveData: propLiveData, settings: p
       </div>
 
       <div className="w-full max-w-7xl mx-auto flex flex-col items-center justify-center px-1 sm:px-0">
+        {/* Historical Trends Section Header - Matching PageHeader style */}
+        <div className="w-full flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
+          <div className="bg-indigo-50 text-indigo-600 rounded-lg p-1.5 sm:p-2 md:p-3">
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 sm:w-6 sm:h-6" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 3v18h18" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 17V9m6 8V5m-3 12V13" />
+            </svg>
+          </div>
+          <div>
+            <h2 className="text-lg sm:text-xl md:text-2xl font-semibold text-gray-800">Historical Trends</h2>
+            <p className="text-xs sm:text-sm text-gray-500 hidden sm:block">Visualize sensor data over time</p>
+          </div>
+        </div>
+
         {/* Historical Chart Component - HTTP API Data Only */}
-        <div className="w-full mt-2 sm:mt-4">
-          <HistoricalChart 
-              chartData={historicalData}
-              isLoading={isLoadingChart}
-              onExportCSV={handleExportCSV}
-              isExporting={isExporting}
-              dataSource="HTTP API"
-              error={dataFetchError}
-              timeRange={timeRange}
-              dataInterval={dataInterval}
-              onTimeRangeChange={handleTimeRangeChange}
-              onDataIntervalChange={handleDataIntervalChange}
-              allData={historicalData}
-              onFilteredDataChange={setFilteredData}
+        <div className="w-full">
+          <HistoricalChart
+            chartData={historicalData}
+            isLoading={isLoadingChart}
+            onExportCSV={handleExportCSV}
+            isExporting={isExporting}
+            dataSource="HTTP API"
+            error={dataFetchError}
+            timeRange={timeRange}
+            dataInterval={dataInterval}
+            onTimeRangeChange={handleTimeRangeChange}
+            onDataIntervalChange={handleDataIntervalChange}
+            allData={historicalData}
+            onFilteredDataChange={setFilteredData}
+            hideTitle={true}
           />
         </div>
       </div>

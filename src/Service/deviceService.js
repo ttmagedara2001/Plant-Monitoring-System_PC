@@ -2,7 +2,7 @@ import api from "./api";
 
 /**
  * Fetch Historical Stream Data for a specific topic
- * POST /get-stream-data/device/topic
+ * POST user/get-stream-data/device/topic
  * Topics: temp4/new, moisture, humidity, battery, light, etc.
  * Requires: deviceId, topic, startTime, endTime, pagination, pageSize
  */
@@ -62,7 +62,7 @@ export const getStreamDataByTopic = async (
       )
     );
 
-    const response = await api.post(`/get-stream-data/device/topic`, payload);
+    const response = await api.post(`user/get-stream-data/device/topic`, payload);
 
     console.log(`📥 [HTTP] Response for ${topic}:`, {
       status: response.data.status,
@@ -362,7 +362,7 @@ export const getAllStreamData = async (
 
 /*
  Fetch Historical Stream Data for CSV Export (Legacy endpoint)
- Retrieve data via /get-stream-data/device API
+ Retrieve data via user/get-stream-data/device API
  */
 export const getHistoricalData = async (deviceId) => {
   try {
@@ -371,7 +371,7 @@ export const getHistoricalData = async (deviceId) => {
     const startTime = new Date();
     startTime.setDate(startTime.getDate() - 1);
 
-    const response = await api.get("/get-stream-data/device", {
+    const response = await api.get("/user/get-stream-data/device", {
       params: {
         deviceId: deviceId,
         startTime: startTime.toISOString(),
@@ -464,33 +464,54 @@ export const updateDeviceState = async (deviceId, topic, payload = {}) => {
 /**
  * Helper function for updating pump status via HTTP API
  * The backend will receive this and forward to MQTT broker
+ * 
+ * API: POST /update-state-details
+ * Payload format:
+ * {
+ *   "deviceId": "deviceid",
+ *   "topic": "pump",
+ *   "payload": {
+ *     "moisture": <value>,
+ *     "pump": "on" | "off"
+ *   }
+ * }
+ * 
  * @param {string} deviceId - Device ID
  * @param {string} status - Pump status ('ON' or 'OFF')
  * @param {string} topic - Topic to update (default: 'pump')
  * @param {string} mode - Control mode ('auto' or 'manual', default: 'auto')
+ * @param {number|null} moistureValue - Current moisture reading (optional, for context)
  */
 export const updatePumpStatus = async (
   deviceId,
   status,
   topic = "pump",
-  mode = "auto"
+  mode = "auto",
+  moistureValue = null
 ) => {
   // Convert status to lowercase for MQTT compatibility
   const pumpValue = status.toLowerCase(); // "ON" -> "on", "OFF" -> "off"
 
+  // Build payload with pump state and optional moisture value
+  const payload = {
+    pump: pumpValue, // "on" or "off"
+  };
+
+  // Include moisture value if provided (for auto mode context)
+  if (moistureValue !== null && moistureValue !== undefined) {
+    payload.moisture = moistureValue;
+  }
+
   console.log(`📤 Sending pump command via HTTP API:`, {
     deviceId,
     topic,
-    pump: pumpValue,
-    mode: mode,
+    payload,
+    mode,
   });
 
-  // Send to HTTP API with MQTT-compatible payload
+  // Send to HTTP API - /update-state-details
   // Backend should forward this to: protonest/<deviceId>/state/<topic>
-  return updateDeviceState(deviceId, topic, {
-    pump: pumpValue, // "on" or "off"
-    mode: mode, // "auto" (automation triggered) or "manual" (user button)
-  });
+  return updateDeviceState(deviceId, topic, payload);
 };
 
 // Note: Device settings (thresholds) are managed in frontend localStorage only

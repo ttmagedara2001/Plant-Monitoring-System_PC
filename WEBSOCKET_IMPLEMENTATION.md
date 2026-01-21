@@ -2,63 +2,79 @@
 
 ## Overview
 
-This Plant Monitoring System uses **STOMP over WebSocket** to receive real-time sensor data and pump status updates from IoT devices via the ProtoNest platform.
+This Plant Monitoring System uses **STOMP over WebSocket** with **Cookie-Based Authentication** to receive real-time sensor data and pump status updates from IoT devices via the ProtoNest platform.
 
 ## Architecture
 
 ```
 IoT Device → MQTT Broker (ProtoNest) → STOMP/WebSocket → React Dashboard
+                                         (Cookie Auth)
 ```
+
+## Authentication Method
+
+**Cookie-Based HttpOnly Authentication:**
+
+- WebSocket connection is established AFTER successful login to `/user/get-token`
+- Login sets HttpOnly cookies that browser sends automatically with WebSocket handshake
+- No token query parameter in WebSocket URL
+- No Authorization headers needed
 
 ## Files
 
 ### Core Service Files
 
-- **`src/Service/webSocketClient.js`** - Production WebSocket client service (singleton)
-- **`src/Service/websocket_test.js`** - Standalone testing utility
-- **`src/Hook/useWebSocketClient.js`** - React hook for WebSocket integration
+- **`src/Service/webSocketClient.js`** - WebSocket client service (cookie-based auth)
+- **`src/Service/authService.js`** - Authentication service with login
+- **`src/Context/AuthContext.jsx`** - React context for auth state
 
 ## Topics Structure
 
-Based on the DEVICE_PAYLOAD_SPECIFICATION.md, the system subscribes to these topics:
-
 ### Sensor Stream Topics (Real-time Data)
 
-| Topic Pattern                       | Data Type   | Example Payload        |
-| ----------------------------------- | ----------- | ---------------------- |
-| `/topic/stream/{deviceId}/temp`     | Temperature | `{"temp": "25.5"}`     |
-| `/topic/stream/{deviceId}/humidity` | Humidity    | `{"humidity": "68.0"}` |
-| `/topic/stream/{deviceId}/moisture` | Moisture    | `{"moisture": "45.2"}` |
-| `/topic/stream/{deviceId}/light`    | Light       | `{"light": "850.0"}`   |
-| `/topic/stream/{deviceId}/battery`  | Battery     | `{"battery": "87.5"}`  |
+| Topic Pattern | Data Type | Example Payload |
+|--------------|-----------|-----------------|
+| `/topic/stream/{deviceId}/temp` | Temperature | `{"temp": "25.5"}` |
+| `/topic/stream/{deviceId}/humidity` | Humidity | `{"humidity": "68.0"}` |
+| `/topic/stream/{deviceId}/moisture` | Moisture | `{"moisture": "45.2"}` |
+| `/topic/stream/{deviceId}/light` | Light | `{"light": "850.0"}` |
+| `/topic/stream/{deviceId}/battery` | Battery | `{"battery": "87.5"}` |
 
 ### State Topics (Pump Control)
 
-| Topic Pattern                         | Data Type   | Example Payload                     |
-| ------------------------------------- | ----------- | ----------------------------------- |
-| `/topic/state/{deviceId}/motor/paddy` | Pump Status | `{"power": "on", "mode": "manual"}` |
+| Topic Pattern | Data Type | Example Payload |
+|--------------|-----------|-----------------|
+| `/topic/state/{deviceId}/pump` | Pump Status | `{"power": "ON", "mode": "auto"}` |
 
 ## WebSocket Client Service (`webSocketClient.js`)
 
 ### Features
 
+✅ **Cookie-Based Auth** - No token URL parameter needed  
 ✅ **Singleton Pattern** - One connection per application  
-✅ **Auto-Reconnection** - Reconnects every 5 seconds on disconnect  
-✅ **Subscription Management** - Tracks and manages all active subscriptions with duplicate prevention  
-✅ **Message Parsing** - Handles different payload formats with try-catch error handling  
-✅ **Pump Control** - Send commands to control pump remotely  
-✅ **Event Callbacks** - Connect/disconnect event handlers  
-✅ **Client Ready Check** - Verifies client is activated before subscribing  
-✅ **Improved Guards** - Prevents duplicate subscriptions using AND logic for existing checks
+✅ **Auto-Reconnection** - Reconnects automatically on disconnect  
+✅ **Subscription Management** - Tracks active subscriptions  
+✅ **Message Parsing** - Handles different payload formats  
+✅ **Pump Control** - Send commands to control pump  
+✅ **Event Callbacks** - Connect/disconnect handlers  
 
 ### API Reference
 
-#### `connect(jwtToken)`
+#### `connect()`
 
-Establishes WebSocket connection with JWT authentication.
+Establishes WebSocket connection using browser cookies for authentication.
 
 ```javascript
-await webSocketClient.connect("your-jwt-token-here");
+// Must be called AFTER successful login
+await webSocketClient.connect();
+```
+
+#### `connectWithAutoLogin()`
+
+Attempts auto-login from environment variables, then connects.
+
+```javascript
+await webSocketClient.connectWithAutoLogin();
 ```
 
 #### `subscribeToDevice(deviceId, callback)`
@@ -66,16 +82,23 @@ await webSocketClient.connect("your-jwt-token-here");
 Subscribes to all topics for a specific device.
 
 ```javascript
-const success = webSocketClient.subscribeToDevice("device9988", (data) => {
+webSocketClient.subscribeToDevice("device9988", (data) => {
   console.log("Received:", data);
   // data structure:
   // {
   //   sensorType: 'temp' | 'humidity' | 'moisture' | 'light' | 'battery' | 'pumpStatus' | 'pumpMode',
   //   value: string,
-  //   rawValue: object,
   //   timestamp: ISO string
   // }
 });
+```
+
+#### `unsubscribeFromDevice(deviceId)`
+
+Unsubscribes from all topics for a device.
+
+```javascript
+webSocketClient.unsubscribeFromDevice("device9988");
 ```
 
 #### `sendPumpCommand(deviceId, power, mode)`
@@ -83,239 +106,77 @@ const success = webSocketClient.subscribeToDevice("device9988", (data) => {
 Sends pump control command.
 
 ```javascript
-// Turn pump ON
-webSocketClient.sendPumpCommand("device9988", "ON");
-
-// Turn pump OFF
-webSocketClient.sendPumpCommand("device9988", "OFF");
-
-// Turn pump ON with manual mode
 webSocketClient.sendPumpCommand("device9988", "ON", "manual");
 ```
 
 #### `disconnect()`
 
-Closes WebSocket connection and unsubscribes from all topics.
+Closes WebSocket connection.
 
 ```javascript
 webSocketClient.disconnect();
 ```
 
-#### `onConnect(callback)` / `onDisconnect(callback)`
-
-Register event handlers for connection state changes.
+#### Event Handlers
 
 ```javascript
-webSocketClient.onConnect(() => {
-  console.log("Connected!");
-});
+// Connection events
+webSocketClient.onConnect(() => console.log("Connected!"));
+webSocketClient.onDisconnect(() => console.log("Disconnected!"));
 
-webSocketClient.onDisconnect(() => {
-  console.log("Disconnected!");
-});
-```
+// Remove handlers
+webSocketClient.offConnect(handler);
+webSocketClient.offDisconnect(handler);
 
-#### `getConnectionStatus()`
-
-Returns current connection status.
-
-```javascript
+// Check status
 const isConnected = webSocketClient.getConnectionStatus();
 ```
 
-## React Hook (`useWebSocketClient.js`)
-
-### Usage in Components
+## React Integration (App.jsx)
 
 ```javascript
-import { useWebSocketClient } from "../Hook/useWebSocketClient";
+import { webSocketClient } from './Service/webSocketClient';
+import { useAuth } from './Context/AuthContext';
 
-function Dashboard() {
-  const deviceId = "device9988";
-  const jwtToken = "your-jwt-token";
-
-  const { liveData, isConnected, connectionStatus } = useWebSocketClient(
-    deviceId,
-    jwtToken
-  );
-
-  return (
-    <div>
-      <p>Status: {isConnected ? "Connected" : "Disconnected"}</p>
-      <p>Temperature: {liveData.temperature}°C</p>
-      <p>Moisture: {liveData.moisture}%</p>
-      <p>Humidity: {liveData.humidity}%</p>
-      <p>Light: {liveData.light} lux</p>
-      <p>Battery: {liveData.battery}%</p>
-      <p>Pump: {liveData.pumpStatus}</p>
-      <p>Mode: {liveData.pumpMode}</p>
-    </div>
-  );
+function App() {
+  const { isAuthenticated, isLoading } = useAuth();
+  
+  useEffect(() => {
+    // Wait for auth to complete
+    if (isLoading) return;
+    if (!isAuthenticated) return;
+    
+    const handleData = (data) => {
+      // Process incoming sensor data
+    };
+    
+    const onConnect = () => {
+      webSocketClient.subscribeToDevice(deviceId, handleData);
+    };
+    
+    webSocketClient.onConnect(onConnect);
+    
+    // Connect using cookies set by login
+    webSocketClient.connect();
+    
+    return () => {
+      webSocketClient.offConnect(onConnect);
+      webSocketClient.unsubscribeFromDevice(deviceId);
+    };
+  }, [isAuthenticated, isLoading, deviceId]);
 }
-```
-
-### Returned Data Structure
-
-```javascript
-{
-  liveData: {
-    temperature: number,  // °C
-    humidity: number,     // %
-    moisture: number,     // %
-    light: number,        // lux
-    battery: number,      // %
-    pumpStatus: string,   // "ON" | "OFF"
-    pumpMode: string      // "Manual" | "Automatic" | "Optimal"
-  },
-  isConnected: boolean,
-  connectionStatus: {
-    websocket: boolean,
-    mqtt: boolean,
-    type: string  // "websocket" | "none"
-  }
-}
-```
-
-## Testing Utility (`websocket_test.js`)
-
-### Configuration
-
-Before running tests, update these constants:
-
-```javascript
-const JWT_TOKEN = "your-jwt-token-here";
-const DEVICE_ID = "your-device-id";
-```
-
-### Running the Test
-
-1. **Import in your app** (e.g., `main.jsx` or `App.jsx`):
-
-```javascript
-import "./Service/websocket_test.js";
-```
-
-2. **Open browser console** (F12)
-
-3. **Watch for connection logs**:
-
-```
-🔌 WebSocket Test Utility Starting...
-📍 Device ID: device9988
-🌐 Connecting to: wss://api.protonestconnect.co/ws?token=...
-✅ WebSocket Connected Successfully!
-🔔 Subscribing to all device topics...
-   ✓ Subscribed to Temperature
-   ✓ Subscribed to Humidity
-   ✓ Subscribed to Moisture
-   ✓ Subscribed to Light
-   ✓ Subscribed to Battery
-   ✓ Subscribed to Pump Status
-✨ All subscriptions active! Waiting for messages...
-```
-
-### Browser Console Commands
-
-Once connected, use these commands in the browser console:
-
-```javascript
-// Control pump
-sendPumpCommand("on"); // Turn ON
-sendPumpCommand("off"); // Turn OFF
-sendPumpCommand("on", "manual"); // Turn ON with manual mode
-
-// Simulate sensor data (testing only)
-simulateSensorData("temp", 25.5);
-simulateSensorData("moisture", 42.0);
-simulateSensorData("humidity", 68.0);
-simulateSensorData("light", 850.0);
-simulateSensorData("battery", 87.5);
-
-// Disconnect
-wsTestClient.deactivate();
-```
-
-### Expected Console Output
-
-When device sends data:
-
-```
-📡 [Temperature] Received: { temp: "25.5" }
-📡 [Moisture] Received: { moisture: "42.0" }
-🚰 [Pump Status] Received: { power: "on", mode: "manual" }
-   • Power: ON
-   • Mode: manual
-```
-
-## Message Flow Diagram
-
-```
-┌─────────────────┐
-│   IoT Device    │
-│   (ESP32/etc)   │
-└────────┬────────┘
-         │
-         │ MQTT Publish
-         │ Topic: protonest/device9988/stream/temp
-         │ Payload: {"temp": "25.5"}
-         │
-         ▼
-┌─────────────────────────────────────┐
-│    ProtoNest MQTT Broker            │
-│    (wss://api.protonestconnect.co)  │
-└────────┬────────────────────────────┘
-         │
-         │ STOMP Frame
-         │ Destination: /topic/stream/device9988/temp
-         │ Body: {"temp": "25.5"}
-         │
-         ▼
-┌─────────────────────────────────────┐
-│    webSocketClient.js               │
-│    - Receives STOMP message         │
-│    - Parses JSON body               │
-│    - Extracts sensorType & value    │
-└────────┬────────────────────────────┘
-         │
-         │ Callback with parsed data:
-         │ {
-         │   sensorType: 'temp',
-         │   value: '25.5',
-         │   rawValue: {temp: '25.5'},
-         │   timestamp: '2025-11-28T...'
-         │ }
-         │
-         ▼
-┌─────────────────────────────────────┐
-│    useWebSocketClient.js            │
-│    - handleData() function          │
-│    - Updates liveData state         │
-│    - setLiveData({...prev,          │
-│        temperature: 25.5 })         │
-└────────┬────────────────────────────┘
-         │
-         │ React state update
-         │
-         ▼
-┌─────────────────────────────────────┐
-│    Dashboard Component              │
-│    - Receives updated liveData      │
-│    - Renders: "Temperature: 25.5°C" │
-└─────────────────────────────────────┘
 ```
 
 ## Connection Lifecycle
 
-### Initial Connection
+### Initial Connection (Cookie-Based)
 
-1. User opens dashboard → `useWebSocketClient` hook initializes
-2. Hook calls `webSocketClient.connect(jwtToken)`
-3. WebSocket connects to `wss://api.protonestconnect.co/ws?token=...`
+1. User logs in via `/user/get-token` → HttpOnly cookies set
+2. App calls `webSocketClient.connect()` (no token parameter)
+3. Browser establishes WebSocket with cookies
 4. STOMP handshake completes
-5. `onConnect` callback fires
-6. Hook calls `subscribeToDevice(deviceId, handleData)`
-7. Client subscribes to all 6 topics
-8. Connection status → `isConnected = true`
+5. `onConnect` callbacks fire
+6. App subscribes to device topics
 
 ### Receiving Data
 
@@ -323,205 +184,96 @@ When device sends data:
 2. ProtoNest broker forwards to STOMP topic
 3. `webSocketClient` receives message
 4. Message parsed and callback invoked
-5. Hook's `handleData()` processes data
-6. `liveData` state updated
-7. React components re-render with new data
+5. React state updated
 
 ### Reconnection
 
-1. Connection lost (network issue, server restart, etc.)
+1. Connection lost
 2. `onWebSocketClose` callback fires
-3. Connection status → `isConnected = false`
-4. STOMP client auto-reconnects after 5 seconds
-5. `onConnect` callback fires again
-6. Client automatically resubscribes to device topics using ref-based callbacks
-7. Connection status → `isConnected = true`
+3. STOMP client auto-reconnects (cookies still valid)
+4. `onConnect` fires again
+5. Subscriptions re-established
 
-**Note:** The App.jsx component uses `useRef` for stable callback references (`handleDataRef`, `subscriptionCleanupRef`) to prevent duplicate onConnect registrations and ensure consistent reconnection behavior.
+### Session Expiry
+
+1. Cookie expires or becomes invalid
+2. WebSocket receives authentication error
+3. `auth:logout` event dispatched
+4. AuthContext handles logout
+5. User redirected to login
 
 ## Error Handling
 
-### Connection Errors
-
-```javascript
-// In webSocketClient.js
-onWebSocketError: (event) => {
-  console.error("[WebSocketClient] 🚫 WebSocket error:", event);
-  this.isConnected = false;
-};
-```
-
-### STOMP Errors
+### Authentication Errors
 
 ```javascript
 onStompError: (frame) => {
-  console.error("[WebSocketClient] ❌ STOMP error:", frame.headers["message"]);
-  console.error("[WebSocketClient] Error details:", frame.body);
-  this.isConnected = false;
+  const errorMsg = frame.headers["message"];
+  if (errorMsg.includes("Unauthorized") || errorMsg.includes("401")) {
+    // Cookie auth failed
+    window.dispatchEvent(new CustomEvent('auth:logout'));
+  }
 };
 ```
 
-### Message Parsing Errors
-
-All message callbacks now include try-catch blocks to gracefully handle malformed JSON:
+### Message Parsing
 
 ```javascript
 try {
-  const body = JSON.parse(message.body);
-  // Process message...
+  const data = JSON.parse(message.body);
+  // Process...
 } catch (error) {
-  console.error("[WebSocketClient] ❌ Failed to parse message:", error);
-  console.error("[WebSocketClient] Raw message:", message.body);
-}
-```
-
-### Subscription Guard Logic
-
-The client prevents duplicate subscriptions using AND logic:
-
-```javascript
-// Only skip if BOTH conditions are true (same device AND existing subscriptions)
-if (
-  this.currentDeviceId === deviceId &&
-  Object.keys(this.subscriptions).length > 0
-) {
-  console.log("[WebSocketClient] Already subscribed to device:", deviceId);
-  return true;
+  console.error("Failed to parse message:", error);
 }
 ```
 
 ## Troubleshooting
 
-### Issue: WebSocket not connecting
+### WebSocket Not Connecting
 
-**Symptoms:**
+1. ✅ Verify login succeeded (cookies set)
+2. ✅ Check browser DevTools → Application → Cookies
+3. ✅ Ensure WebSocket URL is correct
+4. ✅ Check for CORS issues
 
-- Console shows: `🚫 WebSocket error`
-- `isConnected` stays `false`
+### No Data Received
 
-**Solutions:**
+1. ✅ Verify deviceId matches actual device
+2. ✅ Check if device is publishing to MQTT
+3. ✅ Verify subscription topics
 
-1. ✅ Verify JWT token is valid (check expiration)
-2. ✅ Test connection with `websocket_test.js`
-3. ✅ Check browser console for CORS errors
-4. ✅ Verify WebSocket URL: `wss://api.protonestconnect.co/ws`
-5. ✅ Try regenerating JWT token via `/get-token` API
+### Authentication Failures
 
-### Issue: No data received
-
-**Symptoms:**
-
-- WebSocket connected but no sensor data
-
-**Solutions:**
-
-1. ✅ Verify deviceId matches the actual device
-2. ✅ Check if device is publishing to MQTT topics
-3. ✅ Use `websocket_test.js` to confirm subscriptions
-4. ✅ Check topic format: `/topic/stream/{deviceId}/{sensorType}`
-5. ✅ Verify device payload format matches specification
-
-### Issue: Pump control not working
-
-**Symptoms:**
-
-- Pump commands sent but no response
-
-**Solutions:**
-
-1. ✅ Verify device is subscribed to pump control topic
-2. ✅ Check device logs for received commands
-3. ✅ Ensure payload format: `{"power": "on"}` (lowercase)
-4. ✅ Test with `sendPumpCommand()` in browser console
-5. ✅ Check if device is responding with status confirmation
-
-### Issue: Frequent disconnections
-
-**Symptoms:**
-
-- Connection drops every few minutes
-
-**Solutions:**
-
-1. ✅ Check network stability
-2. ✅ Verify heartbeat settings (default: 4000ms)
-3. ✅ Check browser console for JWT expiration
-4. ✅ Monitor server-side logs
-5. ✅ Adjust `reconnectDelay` if needed
-
-### Issue: Duplicate subscriptions or handlers
-
-**Symptoms:**
-
-- Multiple identical messages received
-- Callbacks firing multiple times
-
-**Solutions:**
-
-1. ✅ App.jsx now uses `useRef` for stable callback references
-2. ✅ Subscription cleanup stored in ref (`subscriptionCleanupRef`)
-3. ✅ Guard logic uses AND condition to check both deviceId AND existing subscriptions
-4. ✅ Client checks `this.client?.active` before subscribing
-
-## Performance Considerations
-
-### Memory Management
-
-- WebSocket client uses singleton pattern (one connection)
-- Subscriptions are tracked in `Map` for efficient cleanup
-- Auto-unsubscribe when component unmounts or device changes
-
-### Network Efficiency
-
-- Heartbeat every 4 seconds keeps connection alive
-- Auto-reconnect prevents excessive connection attempts
-- Message parsing happens once per message
-
-### React State Updates
-
-- Data updates are batched by React
-- Only changed values trigger re-renders
-- Status cards re-render independently
+1. ✅ Re-login to get fresh cookies
+2. ✅ Check cookie expiration
+3. ✅ Verify credentials are correct
 
 ## Security
 
-### JWT Authentication
+### Cookie-Based Auth Benefits
 
-- Token passed in WebSocket URL query parameter
-- Token is URL-encoded for safety
-- Verify token validity before connection
+- **HttpOnly Cookies** - Not accessible from JavaScript (XSS protection)
+- **Automatic Handling** - Browser manages cookie sending
+- **Server-Controlled** - Token lifecycle managed by server
+- **No localStorage Exposure** - Tokens not stored in vulnerable locations
 
 ### HTTPS/WSS
 
 - All connections use secure WebSocket (`wss://`)
+- Cookies marked Secure (HTTPS only)
 - TLS encryption for all messages
-- No plain-text transmission
 
-## Production Checklist
+## Environment Variables
 
-Before deploying:
-
-- [ ] Replace test JWT token in `websocket_test.js`
-- [ ] Remove or comment out `websocket_test.js` import in production
-- [ ] Disable debug logs (`client.debug`)
-- [ ] Verify all topic patterns match backend
-- [ ] Test reconnection behavior
-- [ ] Test pump control commands
-- [ ] Verify error handling for all scenarios
-- [ ] Add error boundaries in React components
-- [ ] Monitor connection stability in production
-- [ ] Set up alerts for connection failures
-
-## Additional Resources
-
-- **STOMP Documentation:** https://stomp.github.io/
-- **@stomp/stompjs GitHub:** https://github.com/stomp-js/stompjs
-- **DEVICE_PAYLOAD_SPECIFICATION.md** - Complete payload format reference
-- **WEBSOCKET_INTEGRATION_GUIDE.md** - Step-by-step integration guide
-- **DATA_FLOW_ARCHITECTURE.md** - System architecture overview
+```env
+VITE_API_BASE_URL=https://api.protonestconnect.co/api/v1
+VITE_WS_URL=wss://api.protonestconnect.co/ws
+VITE_USER_EMAIL=your-email@example.com
+VITE_USER_SECRET=your-secretKey
+```
 
 ---
 
-**Last Updated:** November 28, 2025  
-**Version:** 1.0.0  
-**Compatible with:** Plant Monitoring System PC v1.0
+**Last Updated:** January 2026  
+**Version:** 2.0.0 (Cookie-Based Auth)  
+**Auth Method:** HttpOnly Cookies

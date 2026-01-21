@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import ErrorBoundary from './Components/ErrorBoundary';
 import Header from './Components/Header';
 import StatusBar from './Components/StatusBar';
@@ -10,7 +10,8 @@ import { updatePumpStatus } from './Service/deviceService';
 import { useNotifications } from './Context/NotificationContext';
 
 function App() {
-  const { jwtToken } = useAuth();
+  // Use isAuthenticated instead of jwtToken for cookie-based auth
+  const { isAuthenticated, isLoading } = useAuth();
   const { addNotification } = useNotifications();
 
   // SPA navigation state
@@ -18,9 +19,20 @@ function App() {
     return localStorage.getItem('activeTab') || 'dashboard';
   });
 
-  const defaultDevice = 'device0011233';
+  // Use VITE_DEVICE_ID from .env or fallback to hardcoded default
+  // IMPORTANT: Device IDs are case-sensitive in WebSocket topics, so normalize to lowercase
+  const defaultDevice = (import.meta.env.VITE_DEVICE_ID);
+
+  // Clear localStorage cache if stored device differs from env
+  const storedDevice = localStorage.getItem('selectedDevice');
+  if (storedDevice && defaultDevice && storedDevice !== defaultDevice) {
+    console.log(`🔄 Device ID changed: ${storedDevice} → ${defaultDevice}, clearing cache`);
+    localStorage.removeItem('selectedDevice');
+  }
+
   const [selectedDevice, setSelectedDevice] = useState(() => {
-    return localStorage.getItem('selectedDevice') || defaultDevice;
+    const stored = localStorage.getItem('selectedDevice');
+    return stored || defaultDevice;
   });
 
   // Live data and connection state lifted to App so monitoring continues while navigating
@@ -42,17 +54,17 @@ function App() {
       return raw
         ? JSON.parse(raw)
         : {
-            moistureMin: '20',
-            moistureMax: '70',
-            tempMin: '10',
-            tempMax: '35',
-            humidityMin: '30',
-            humidityMax: '80',
-            lightMin: '200',
-            lightMax: '1000',
-            batteryMin: '20',
-            autoMode: false,
-          };
+          moistureMin: '20',
+          moistureMax: '70',
+          tempMin: '10',
+          tempMax: '35',
+          humidityMin: '30',
+          humidityMax: '80',
+          lightMin: '200',
+          lightMax: '1000',
+          batteryMin: '20',
+          autoMode: false,
+        };
     } catch (e) {
       return {
         moistureMin: '20',
@@ -79,7 +91,8 @@ function App() {
     }
   }, [liveData]);
 
-  // Watch for critical sensor transitions and pump status changes to emit notifications
+  // Watch for critical sensor transitions to emit notifications
+  // Only critical sensor states trigger notifications (pump status changes are not notified)
   const _prevLive = React.useRef(null);
   React.useEffect(() => {
     try {
@@ -91,13 +104,13 @@ function App() {
       try {
         const raw = localStorage.getItem(`settings_${selectedDevice}`);
         if (raw) persisted = JSON.parse(raw).thresholds || null;
-      } catch (e) {}
+      } catch (e) { }
 
-      const sensors = ['moisture','temperature','humidity','light','battery'];
+      const sensors = ['moisture', 'temperature', 'humidity', 'light', 'battery'];
       const isCritical = (key, value) => {
-        if (value === undefined || value === null || String(value) === 'unknown') return true;
+        if (value === undefined || value === null || String(value) === 'unknown') return false; // Don't treat missing as critical for notifications
         const num = Number(value);
-        if (Number.isNaN(num)) return true;
+        if (Number.isNaN(num)) return false;
         const group = (persisted && persisted[key]) || null;
         const min = group && typeof group.min !== 'undefined' ? Number(group.min) : undefined;
         const max = group && typeof group.max !== 'undefined' ? Number(group.max) : undefined;
@@ -109,21 +122,20 @@ function App() {
       sensors.forEach((s) => {
         const prevCritical = isCritical(s, prev[s]);
         const currCritical = isCritical(s, curr[s]);
-        // if previously unknown (first run) treat as non-critical so we produce notifications for current criticals
-        if (!prevCritical && currCritical) {
+        // Only notify when transitioning INTO critical state (not during first load)
+        if (!prevCritical && currCritical && _prevLive.current !== null) {
           try {
-            addNotification({ type: 'critical', message: `Critical: ${s}=${curr[s]}`, timestamp: new Date().toISOString(), meta: { deviceId: selectedDevice, sensor: s, value: curr[s] } });
-          } catch (e) {}
+            addNotification({
+              type: 'critical',
+              message: `⚠️ Critical: ${s.charAt(0).toUpperCase() + s.slice(1)} = ${curr[s]}`,
+              timestamp: new Date().toISOString(),
+              meta: { deviceId: selectedDevice, sensor: s, value: curr[s] }
+            });
+          } catch (e) { }
         }
       });
 
-      // pump status changed
-      if ((prev.pumpStatus || '') !== (curr.pumpStatus || '')) {
-        const mode = curr.pumpMode || (settings && settings.autoMode ? 'auto' : 'manual') || 'manual';
-        try {
-          addNotification({ type: 'pump:status', message: `Pump ${curr.pumpStatus} (${mode})`, timestamp: new Date().toISOString(), meta: { deviceId: selectedDevice, mode } });
-        } catch (e) {}
-      }
+      // Pump status changes are NOT notified (removed per user request)
     } catch (e) {
       // ignore
     } finally {
@@ -131,14 +143,12 @@ function App() {
     }
   }, [liveData, selectedDevice, addNotification, settings]);
 
-  
+
   useEffect(() => {
     localStorage.setItem('activeTab', activeTab);
   }, [activeTab]);
 
-  useEffect(() => {
-    localStorage.setItem('selectedDevice', selectedDevice);
-  }, [selectedDevice]);
+
 
   // Reload settings when selected device changes or on external update
   useEffect(() => {
@@ -210,7 +220,8 @@ function App() {
       if ((liveData?.pumpStatus || '').toUpperCase() === desired) return;
 
       console.log('[App] AUTO MODE: sending pump command', { device: selectedDevice, desired, moisture: val, min });
-      updatePumpStatus(selectedDevice, desired, 'pump', 'auto')
+      // Pass moisture value to include in the payload
+      updatePumpStatus(selectedDevice, desired, 'pump', 'auto', val)
         .then((res) => {
           _lastAuto.current = { cmd: desired, ts: Date.now() };
           console.log('[App] AUTO MODE: pump command response', res);
@@ -223,113 +234,121 @@ function App() {
     }
   }, [settings?.autoMode, liveData?.moisture, selectedDevice, liveData?.pumpStatus]);
 
-  // Store data handler in ref to ensure stable reference across reconnects
+  // Store data handler in ref to ensure compatibility with webSocketClient
   const handleDataRef = useRef(null);
-  const subscriptionCleanupRef = useRef(null);
 
+  // Stable data handler
+  const handleData = useCallback((data) => {
+    setLiveData((prev) => {
+      const updated = { ...prev };
+      if (data.sensorType === 'batchUpdate') {
+        const v = data.value || {};
+        if (v.temp !== undefined) updated.temperature = parseFloat(v.temp);
+        if (v.humidity !== undefined) updated.humidity = parseFloat(v.humidity);
+        if (v.battery !== undefined) updated.battery = parseFloat(v.battery);
+        if (v.light !== undefined) updated.light = parseFloat(v.light);
+        if (v.moisture !== undefined) updated.moisture = parseFloat(v.moisture);
+      } else {
+        switch (data.sensorType) {
+          case 'temp':
+            updated.temperature = parseFloat(data.value);
+            break;
+          case 'humidity':
+            updated.humidity = parseFloat(data.value);
+            break;
+          case 'battery':
+            updated.battery = parseFloat(data.value);
+            break;
+          case 'light':
+            updated.light = parseFloat(data.value);
+            break;
+          case 'moisture':
+            updated.moisture = parseFloat(data.value);
+            break;
+          case 'pumpStatus':
+            updated.pumpStatus = data.value;
+            break;
+          case 'pumpMode':
+            updated.pumpMode = data.value;
+            break;
+          default:
+            break;
+        }
+      }
+      return updated;
+    });
+  }, []);
+
+  // Update ref when handler changes (stable, so runs once)
   useEffect(() => {
-    if (!jwtToken) return;
-
-    // Data handler updates liveData - stable reference
-    const handleData = (data) => {
-      setLiveData((prev) => {
-        const updated = { ...prev };
-        if (data.sensorType === 'batchUpdate') {
-          const v = data.value || {};
-          if (v.temp !== undefined) updated.temperature = parseFloat(v.temp);
-          if (v.humidity !== undefined) updated.humidity = parseFloat(v.humidity);
-          if (v.battery !== undefined) updated.battery = parseFloat(v.battery);
-          if (v.light !== undefined) updated.light = parseFloat(v.light);
-          if (v.moisture !== undefined) updated.moisture = parseFloat(v.moisture);
-        } else {
-          switch (data.sensorType) {
-            case 'temp':
-              updated.temperature = parseFloat(data.value);
-              break;
-            case 'humidity':
-              updated.humidity = parseFloat(data.value);
-              break;
-            case 'battery':
-              updated.battery = parseFloat(data.value);
-              break;
-            case 'light':
-              updated.light = parseFloat(data.value);
-              break;
-            case 'moisture':
-              updated.moisture = parseFloat(data.value);
-              break;
-            case 'pumpStatus':
-              updated.pumpStatus = data.value;
-              break;
-            case 'pumpMode':
-              updated.pumpMode = data.value;
-              break;
-            default:
-              break;
-          }
-        }
-        return updated;
-      });
-    };
     handleDataRef.current = handleData;
+  }, [handleData]);
 
-    // Register connect/disconnect callbacks with stable references
-    const onConnect = () => {
-      console.log('[App] WebSocket connected - subscribing to device:', selectedDevice);
-      setIsConnected(true);
-      // Subscribe when connected
-      try {
-        if (selectedDevice && handleDataRef.current) {
-          webSocketClient.subscribeToDevice(selectedDevice, handleDataRef.current);
-        }
-      } catch (e) {
-        console.warn('[App] subscribeToDevice on connect failed', e);
-      }
-    };
-    
-    const onDisconnect = () => {
-      console.log('[App] WebSocket disconnected');
-      setIsConnected(false);
-    };
+  // 1. Connection Effect - Connects when authenticated
+  useEffect(() => {
+    if (isLoading || !isAuthenticated) return;
 
-    // Store cleanup function for this effect
-    subscriptionCleanupRef.current = () => {
-      try {
-        webSocketClient.offConnect(onConnect);
-        webSocketClient.offDisconnect(onDisconnect);
-        webSocketClient.unsubscribeFromDevice(selectedDevice);
-      } catch (e) {
-        console.warn('[App] cleanup failed', e);
-      }
-    };
+    console.log('[App] Authenticated - Connecting WebSocket');
+    webSocketClient.connect()
+      .then(() => setIsConnected(true))
+      .catch(e => console.warn('[App] WS Connect failed', e));
 
-    webSocketClient.onConnect(onConnect);
+    const onDisconnect = () => setIsConnected(false);
+    const onConnect = () => setIsConnected(true);
+
     webSocketClient.onDisconnect(onDisconnect);
-
-    // Connect to WebSocket
-    webSocketClient
-      .connect(jwtToken)
-      .then(() => {
-        console.log('[App] WebSocket connect initiated');
-        // If already connected, subscribe immediately
-        if (webSocketClient.getConnectionStatus()) {
-          try {
-            webSocketClient.subscribeToDevice(selectedDevice, handleDataRef.current);
-            setIsConnected(true);
-          } catch (e) {
-            console.warn('[App] Initial subscription failed', e);
-          }
-        }
-      })
-      .catch((e) => console.warn('[App] WebSocket connect failed', e));
+    webSocketClient.onConnect(onConnect);
 
     return () => {
-      // Clean up: remove listeners and unsubscribe
-      if (subscriptionCleanupRef.current) {
-        subscriptionCleanupRef.current();
-      }
+      webSocketClient.offDisconnect(onDisconnect);
+      webSocketClient.offConnect(onConnect);
     };
-  }, [jwtToken, selectedDevice]);
+  }, [isAuthenticated, isLoading]);
+
+  // 2. Subscription & Device Change Effect
+  // Handles switching devices and resetting data
+  useEffect(() => {
+    if (!selectedDevice) return;
+
+    // Persist selection
+    localStorage.setItem('selectedDevice', selectedDevice);
+
+    // Reset UI state for new device
+    console.log(`[App] 🔄 Device changed to: ${selectedDevice} - Resetting live data`);
+    setLiveData({
+      moisture: undefined,
+      temperature: undefined,
+      humidity: undefined,
+      light: undefined,
+      battery: undefined,
+      pumpStatus: 'OFF',
+      pumpMode: 'manual',
+    });
+
+    // Valid handler required
+    if (!handleDataRef.current) return;
+
+    // Subscribe (webSocketClient handles unsubscribing from old device automatically)
+    try {
+      console.log(`[App] 📡 Subscribing to device: ${selectedDevice}`);
+      webSocketClient.subscribeToDevice(selectedDevice, handleDataRef.current);
+    } catch (e) {
+      console.warn('[App] Subscription failed', e);
+    }
+
+  }, [selectedDevice, handleData]);
+
+  // Show loading state while auth is initializing
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-900">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-500 mx-auto mb-4"></div>
+          <p className="text-gray-400">Initializing...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <ErrorBoundary>
@@ -359,4 +378,3 @@ function App() {
 }
 
 export default App;
-

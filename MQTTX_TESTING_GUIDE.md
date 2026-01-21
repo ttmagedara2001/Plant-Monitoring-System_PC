@@ -22,12 +22,12 @@
 - **Broker Host:** `mqtt.protonest.co`
 - **Port:** `8883` (secure MQTT over TLS)
 - **Protocol:** `mqtts://`
-- **Username/Password:** Not required (authentication via JWT over HTTPS)
+- **Username/Password:** Not required (authentication via cookies over HTTPS)
 
 **API Endpoints:**
 
-- **Base URL:** `https://api.protonestconnect.co/api/v1/user`
-- **WebSocket:** `wss://api.protonestconnect.co/ws?token={JWT_TOKEN}`
+- **Base URL:** `https://api.protonestconnect.co/api/v1`
+- **WebSocket:** `wss://api.protonestconnect.co/ws` (cookie-based auth)
 
 ---
 
@@ -42,22 +42,21 @@ Download from: https://mqttx.app/
 - **Host:** mqtt.protonest.co
 - **Port:** 8883
 - **Protocol:** mqtts://
-- **Client ID:** (auto-generated or custom) -> `device0011233` (recommended: use your actual device ID)
-- **Username / Password:** _leave empty_ (Dashboard authentication is done over HTTPS, not MQTT)
+- **Client ID:** `device0011233` (recommended: use your actual device ID)
+- **Username / Password:** _leave empty_
 - **TLS / SSL:**
   - Enable TLS
   - Use system CA (no client certificate)
-  - Allow self‑signed: optional (only if you see TLS validation errors)
+  - Allow self‑signed: optional
 
 > In MQTTX:
->
-> - Click “+ New Connection”
+> - Click "+ New Connection"
 > - Select `MQTTS/TLS`
-> - Fill host/port, set Client ID, enable TLS, then “Connect”
+> - Fill host/port, set Client ID, enable TLS, then "Connect"
 
 ---
 
-## Step 3: Subscribe to Topics (to Observe Dashboard Traffic)
+## Step 3: Subscribe to Topics
 
 Create a new **tab** in MQTTX and subscribe to:
 
@@ -67,13 +66,13 @@ Create a new **tab** in MQTTX and subscribe to:
 This allows you to:
 
 - See all sensor messages the dashboard would consume
-- See any state / pump messages the device is expected to react to
+- See any state/pump messages
 
 ---
 
 ## Step 4: Publish Sensor Data
 
-> All payloads are JSON, UTF‑8 encoded. The dashboard expects **string values** that can be parsed as numbers.
+> All payloads are JSON, UTF‑8 encoded. Dashboard expects **string values** that can be parsed as numbers.
 
 ### Temperature Data
 
@@ -110,9 +109,7 @@ Topic: protonest/device0011233/stream/battery
 Payload: {"battery":"87.5"}
 ```
 
-### Combined Sensor Packet (optional)
-
-If the device/bridge supports a single multiplexed topic:
+### Combined Sensor Packet
 
 ```text
 Topic: protonest/device0011233/stream/all
@@ -121,19 +118,13 @@ Payload: {
   "moisture": "45.2",
   "humidity": "65.8",
   "light": "850",
-  "battery": "87.5",
-  "pumpStatus": "OFF",
-  "pumpMode": "Optimal"
+  "battery": "87.5"
 }
 ```
-
-> Whether `stream/all` is used depends on the backend bridge. The React dashboard is tolerant as long as the final data structure it receives over WebSocket/MQTT contains numeric `moisture/temperature/humidity/light/battery` fields.
 
 ---
 
 ## Step 5: Pump Control via MQTT
-
-The dashboard (through the MQTT/WebSocket bridge) expects pump commands in the following shape:
 
 ```text
 Topic: protonest/device0011233/state/pump
@@ -145,144 +136,108 @@ Topic: protonest/device0011233/state/pump
 Payload: {"power":"OFF"}
 ```
 
-Recommended:
-
-- Use **non‑retained** (`retain = false`) for control commands.
-- QoS 0 or 1 is fine; 0 is usually enough on LAN.
-
-If your device reports pump feedback, it should publish:
+Device feedback:
 
 ```text
 Topic: protonest/device0011233/state/pump
 Payload: {"power":"on","mode":"manual"}
 ```
 
-or
-
-```text
-Topic: protonest/device0011233/state/pump
-Payload: {"power":"off","mode":"auto"}
-```
-
 ---
 
 ## Step 6: Mapping MQTT Messages to Dashboard UI
 
-When you publish the payloads above (and the backend forwards them to the WebSocket that `UseMqttWebSocket` / `useWebSocket` listens to), you should see:
+When you publish payloads and they're forwarded to WebSocket:
 
 1. **Status Cards (top metrics)**
-
-   - `protonest/device0011233/stream/moisture` → "Soil Moisture" card
-   - `protonest/device0011233/stream/temp` → "Temperature" card
-   - `protonest/device0011233/stream/humidity`→ "Humidity" card
-   - `protonest/device0011233/stream/light` → "Light" card
-   - `protonest/device0011233/stream/battery` → "Battery" card
+   - `stream/moisture` → "Soil Moisture" card
+   - `stream/temp` → "Temperature" card
+   - `stream/humidity` → "Humidity" card
+   - `stream/light` → "Light" card
+   - `stream/battery` → "Battery" card
 
 2. **Pump Banner**
+   - `state/pump` with `"power":"ON"` → Green "Pump: ON" banner
+   - `state/pump` with `"power":"OFF"` → Blue "Pump: OFF" banner
 
-   - `protonest/device0011233/state/pump` with `"pumpStatus":"ON"` → Green "Pump : ON" banner
-   - `"pumpStatus":"OFF"` → Blue "Pump : OFF" banner
-
-3. **Historical Chart**
-
-   - Any sensor message that the backend converts into `history_batch` or `historical_data` will appear as a new point in:
-     - Moisture
-     - Temperature
-     - Humidity
-     - Light
-     - Battery
-   - You can toggle each metric in the chart toolbar (Moisture/Temp/Humidity/Light/Battery).
-
-4. **Alert Banner**
-   - If `moisture` < `moistureMin` in the dashboard settings → red “CRITICAL: Soil Moisture…” banner.
-   - If `temperature` > `tempMax` → red “WARNING: Temperature…” banner.
+3. **Alert Banner**
+   - If `moisture` < `moistureMin` → red critical alert
+   - If `temperature` > `tempMax` → red warning alert
 
 ---
 
-## Step 7: Recommended Test Sequences
+## Step 7: Test Sequences
 
 ### A. Basic Sensor Flow
 
-1. Connect MQTTX to `mqtt.protonest.co:8883` using `mqtts://`.
-2. Subscribe to `protonest/device200300/stream/#`.
-3. From MQTTX, publish:
+1. Connect MQTTX to `mqtt.protonest.co:8883`
+2. Subscribe to `protonest/device0011233/stream/#`
+3. Publish:
    ```text
-   Topic: protonest/device200300/stream/moisture
+   Topic: protonest/device0011233/stream/moisture
    Payload: {"moisture":"15.0"}
    ```
-4. Watch the dashboard:
-   - “Soil Moisture” card should show `15.0%`.
-   - Alert banner should show a **critical** moisture alert (below default min 20).
+4. Watch dashboard:
+   - "Soil Moisture" card shows `15.0%`
+   - Critical moisture alert appears
 
 ### B. Pump Control Round‑Trip
 
-1. In the dashboard, click the **Pump** toggle (in `SettingsPanel`).
-2. Observe what topic/payload the backend publishes by watching MQTTX subscriptions (if you have visibility on that bridge).
-3. Manually simulate device feedback in MQTTX:
+1. In dashboard, click **Pump** toggle in Settings
+2. Observe API request to `/update-state-details`
+3. Simulate device feedback in MQTTX:
    ```text
-   Topic: protonest/device200300/state/pump
+   Topic: protonest/device0011233/state/pump
    Payload: {"power":"ON","mode":"manual"}
    ```
-4. Dashboard pump banner should change to **ON**.
-
-### C. Historical Trend
-
-1. Publish a series of values (with a few seconds between them) for moisture & temperature:
-   ```text
-   Topic: protonest/device200300/stream/moisture
-   Payload: {"moisture":"30.0"}
-   ```
-   ```text
-   Topic: protonest/device200300/stream/temp
-   Payload: {"temp":"22.0"}
-   ```
-2. Ensure backend pushes them as history to the WebSocket.
-3. On the “Historical Trends” chart:
-   - Enable Moisture and Temp toggles.
-   - You should see one or more points over the “Last 24h” window.
+4. Dashboard shows pump ON
 
 ---
 
-## Step 8: Retained Messages & QoS Notes
+## Step 8: Dashboard Authentication
 
-- **Retained sensor data** (retain = true) is useful so that new subscribers immediately get last known readings.
-- **Retained control commands** are usually **not recommended** (device might restart and immediately act on a stale `ON`).
-- Typical setup:
-  - Sensor topics: QoS 0/1, retain = true (optional).
-  - State/control topics: QoS 0/1, retain = false.
+The dashboard uses **Cookie-Based Authentication**:
 
----
+1. Login via `/user/get-token` sets HttpOnly cookies
+2. WebSocket connects to `wss://api.protonestconnect.co/ws`
+3. Browser sends cookies automatically (no token URL param)
+4. All API requests include `withCredentials: true`
 
-## Expected Dashboard Console Logs (for debugging)
+### Console Logs to Expect
 
-From the browser DevTools console you may see logs such as:
-
-- `🔄 Making secure authentication request to: https://api.protonestconnect.co/api/v1/user`
-- `📡 API Response from /get-token (Success): ...`
-- `[WS] Connecting to: wss://api.protonestconnect.co/ws`
-- `[WS] Received data: { ... }`
-- `✅ Pump control sent via MQTT: ON`
-- `Error fetching history for export: ...` (if historical API is misconfigured)
-
-Use these logs together with MQTTX payloads to verify that:
-
-1. Auth → WebSocket connect → subscriptions work.
-2. MQTTX messages are reaching the broker and being forwarded to the dashboard.
-3. UI updates line up with your MQTT test scenarios.
+```
+✅ Login successful - cookies set by server
+🔌 Initializing WebSocket with cookie-based auth: wss://...
+✅ WebSocket Connected (cookie-based auth)
+🔔 Subscribed to /topic/stream/device0011233
+📡 [device0011233] Stream data received: {"moisture":"45.2"}
+```
 
 ---
 
-## Updates (January 2025)
+## Troubleshooting
 
-### WebSocket Subscription Improvements
+### Dashboard Not Receiving Data
 
-- **Ref-based callbacks**: App.jsx now uses `useRef` for stable callback references to prevent duplicate handlers on reconnection
-- **Guard logic fix**: Subscription guard now uses AND condition (`currentDeviceId === deviceId && subscriptions.length > 0`) to properly handle device switching
-- **Client ready check**: Subscriptions verify `this.client?.active` before attempting to subscribe
-- **Try-catch parsing**: All message handlers include try-catch for JSON parsing errors
+1. Verify MQTTX connected to broker
+2. Check topic format matches exactly
+3. Verify device ID ownership
+4. Check dashboard WebSocket connected (green indicator)
 
-### Settings Format Compatibility
+### Authentication Issues
 
-- DeviceSettingsPage now saves settings in **both** formats:
-  - Nested format: `{ thresholds: { moisture: { min, max } } }` (for DeviceSettingsPage)
-  - Flat format: `{ moistureMin, moistureMax, ... }` (for Dashboard compatibility)
+1. Cookie-based auth requires login first
+2. Check browser DevTools → Application → Cookies
+3. Verify `jwt` cookie exists after login
+4. If expired, refresh or re-login
+
+### Pump Commands Not Working
+
+1. Check device subscribed to `protonest/{deviceId}/state/#`
+2. Verify payload format: `{"power":"ON"}` (uppercase)
+3. Check dashboard has WebSocket connection
+
+---
+
+**Last Updated:** January 2026  
+**Version:** 2.0.0 (Cookie-Based Auth)

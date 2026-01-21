@@ -14,7 +14,7 @@ export default defineConfig({
         target: "https://api.protonestconnect.co",
         changeOrigin: true,
         secure: true,
-        rewrite: (path) => path.replace(/^\/api/, "/api/v1/user"),
+        rewrite: (path) => path.replace(/^\/api/, "/api/v1"),
       },
     },
   },

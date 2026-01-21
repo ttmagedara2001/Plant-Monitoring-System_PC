@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import { useNotifications } from '../Context/NotificationContext';
 import ThresholdSection from './ThresholdSection';
 import { Droplet, Thermometer, Cloud, Sun, Battery, Power, Settings, Gauge } from 'lucide-react';
 import ActionButton from './ActionButton';
@@ -23,7 +22,6 @@ const DeviceSettingsPage = ({ deviceId: propDeviceId }) => {
   const [saveStatus, setSaveStatus] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [modalErrors, setModalErrors] = useState([]);
-  const { addNotification } = useNotifications();
 
   useEffect(() => {
     if (!deviceId) return;
@@ -50,10 +48,10 @@ const DeviceSettingsPage = ({ deviceId: propDeviceId }) => {
   const persistSettings = (partial = {}) => {
     if (!deviceId) return;
     const key = `settings_${deviceId}`;
-    
+
     // Merge thresholds
     const mergedThresholds = { ...thresholds, ...(partial.thresholds || {}) };
-    
+
     // Create payload with both nested and flat structure for compatibility
     const payload = {
       // Nested structure for DeviceSettingsPage
@@ -90,13 +88,7 @@ const DeviceSettingsPage = ({ deviceId: propDeviceId }) => {
 
   const handleAutoModeToggle = () => {
     // Toggle local UI state only; persist on Save so user can review changes before applying
-    setAutoMode(prev => {
-      const next = !prev;
-      try {
-        addNotification({ type: 'pump:mode', message: `Pump mode set to ${next ? 'auto' : 'manual'}`, timestamp: new Date().toISOString(), meta: { deviceId } });
-      } catch (e) {}
-      return next;
-    });
+    setAutoMode(prev => !prev);
   };
 
   const handlePumpToggle = () => {
@@ -104,10 +96,7 @@ const DeviceSettingsPage = ({ deviceId: propDeviceId }) => {
       const next = !prev;
       // persist immediately so dashboard or other tabs can react
       persistSettings({ pumpOn: next });
-      try {
-        const mode = autoMode ? 'auto' : 'manual';
-        addNotification({ type: 'pump:status', message: `Pump turned ${next ? 'ON' : 'OFF'} (${mode})`, timestamp: new Date().toISOString(), meta: { deviceId, mode } });
-      } catch (e) {}
+      // Pump status changes are NOT notified (only critical sensor alerts trigger notifications)
       return next;
     });
   };
@@ -136,7 +125,7 @@ const DeviceSettingsPage = ({ deviceId: propDeviceId }) => {
         if (typeof snap.pumpStatus !== 'undefined') setPumpOn(String(snap.pumpStatus).toUpperCase() === 'ON');
         if (typeof snap.pumpMode !== 'undefined') setAutoMode(String(snap.pumpMode).toLowerCase() === 'auto');
       }
-    } catch (e) {}
+    } catch (e) { }
 
     const handler = (e) => {
       const d = e && e.detail ? e.detail : e;
@@ -157,7 +146,7 @@ const DeviceSettingsPage = ({ deviceId: propDeviceId }) => {
         if (typeof d.pumpMode !== 'undefined') {
           setAutoMode(String(d.pumpMode).toLowerCase() === 'auto');
         }
-      } catch (e) {}
+      } catch (e) { }
     };
 
     window.addEventListener('live:update', handler);
@@ -254,292 +243,292 @@ const DeviceSettingsPage = ({ deviceId: propDeviceId }) => {
 
   return (
     <>
-    <div className="min-h-screen bg-[#f0f4f8] p-2 sm:p-4 font-sans text-gray-800 overflow-x-hidden">
-      <div className="max-w-7xl mx-auto">
-        <PageHeader
-          title="Device Settings"
-          subtitle="Configure thresholds"
-          deviceId={deviceId}
-          showDate
-          icon={<Settings className="w-5 h-5 sm:w-6 sm:h-6" />}
-        />
+      <div className="min-h-screen bg-[#f0f4f8] p-2 sm:p-4 font-sans text-gray-800 overflow-x-hidden">
+        <div className="max-w-7xl mx-auto">
+          <PageHeader
+            title="Device Settings"
+            subtitle="Configure thresholds"
+            deviceId={deviceId}
+            showDate
+            icon={<Settings className="w-5 h-5 sm:w-6 sm:h-6" />}
+          />
 
-        <div className="p-3 sm:p-4 lg:p-6 mx-auto mt-3 sm:mt-4 bg-blue-100 rounded-lg shadow-md border-blue-50">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 sm:gap-4 lg:gap-6 items-stretch">
-            {/* Left: form grid - 1 col on mobile, 2 cols on sm+ */}
-            <div className="bg-white rounded-xl shadow-md border border-gray-200 p-3 sm:p-4 lg:p-6 w-full lg:col-span-8">
-              <div className="bg-gray-50 rounded-lg p-2 sm:p-4 grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
-              <div>
-                <ThresholdSection
-                  title="Soil Moisture Thresholds"
-                  icon={Droplet}
-                  minConfig={{
-                    label: 'Min',
-                    unit: '%',
-                    value: (thresholds && thresholds.moisture && typeof thresholds.moisture.min !== 'undefined') ? thresholds.moisture.min : DEFAULT_THRESHOLDS.moisture.min,
-                    onChange: (e) => handleChange('moisture', 'min', e.target.value),
-                    min: 0,
-                    max: 100,
-                    step: 1,
-                  }}
-                  maxConfig={{
-                    label: 'Max',
-                    unit: '%',
-                    value: (thresholds && thresholds.moisture && typeof thresholds.moisture.max !== 'undefined') ? thresholds.moisture.max : DEFAULT_THRESHOLDS.moisture.max,
-                    onChange: (e) => handleChange('moisture', 'max', e.target.value),
-                    min: 0,
-                    max: 100,
-                    step: 1,
-                  }}
-                />
+          <div className="p-3 sm:p-4 lg:p-6 mx-auto mt-3 sm:mt-4 bg-blue-100 rounded-lg shadow-md border-blue-50">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 sm:gap-4 lg:gap-6 items-stretch">
+              {/* Left: form grid - 1 col on mobile, 2 cols on sm+ */}
+              <div className="bg-white rounded-xl shadow-md border border-gray-200 p-3 sm:p-4 lg:p-6 w-full lg:col-span-8">
+                <div className="bg-gray-50 rounded-lg p-2 sm:p-4 grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+                  <div>
+                    <ThresholdSection
+                      title="Soil Moisture Thresholds"
+                      icon={Droplet}
+                      minConfig={{
+                        label: 'Min',
+                        unit: '%',
+                        value: (thresholds && thresholds.moisture && typeof thresholds.moisture.min !== 'undefined') ? thresholds.moisture.min : DEFAULT_THRESHOLDS.moisture.min,
+                        onChange: (e) => handleChange('moisture', 'min', e.target.value),
+                        min: 0,
+                        max: 100,
+                        step: 1,
+                      }}
+                      maxConfig={{
+                        label: 'Max',
+                        unit: '%',
+                        value: (thresholds && thresholds.moisture && typeof thresholds.moisture.max !== 'undefined') ? thresholds.moisture.max : DEFAULT_THRESHOLDS.moisture.max,
+                        onChange: (e) => handleChange('moisture', 'max', e.target.value),
+                        min: 0,
+                        max: 100,
+                        step: 1,
+                      }}
+                    />
+                  </div>
+
+                  <div>
+                    <ThresholdSection
+                      title="Temperature Thresholds"
+                      icon={Thermometer}
+                      minConfig={{
+                        label: 'Min',
+                        unit: '°C',
+                        value: (thresholds && thresholds.temperature && typeof thresholds.temperature.min !== 'undefined') ? thresholds.temperature.min : DEFAULT_THRESHOLDS.temperature.min,
+                        onChange: (e) => handleChange('temperature', 'min', e.target.value),
+                        min: -10,
+                        max: 50,
+                        step: 0.5,
+                      }}
+                      maxConfig={{
+                        label: 'Max',
+                        unit: '°C',
+                        value: (thresholds && thresholds.temperature && typeof thresholds.temperature.max !== 'undefined') ? thresholds.temperature.max : DEFAULT_THRESHOLDS.temperature.max,
+                        onChange: (e) => handleChange('temperature', 'max', e.target.value),
+                        min: 0,
+                        max: 60,
+                        step: 0.5,
+                      }}
+                    />
+                  </div>
+
+                  <div>
+                    <ThresholdSection
+                      title="Humidity Thresholds"
+                      icon={Cloud}
+                      minConfig={{
+                        label: 'Min',
+                        unit: '%',
+                        value: (thresholds && thresholds.humidity && typeof thresholds.humidity.min !== 'undefined') ? thresholds.humidity.min : DEFAULT_THRESHOLDS.humidity.min,
+                        onChange: (e) => handleChange('humidity', 'min', e.target.value),
+                        min: 0,
+                        max: 100,
+                        step: 1,
+                      }}
+                      maxConfig={{
+                        label: 'Max',
+                        unit: '%',
+                        value: (thresholds && thresholds.humidity && typeof thresholds.humidity.max !== 'undefined') ? thresholds.humidity.max : DEFAULT_THRESHOLDS.humidity.max,
+                        onChange: (e) => handleChange('humidity', 'max', e.target.value),
+                        min: 0,
+                        max: 100,
+                        step: 1,
+                      }}
+                    />
+                  </div>
+
+                  <div>
+                    <ThresholdSection
+                      title="Light Intensity Thresholds"
+                      icon={Sun}
+                      minConfig={{
+                        label: 'Min',
+                        unit: 'lux',
+                        value: (thresholds && thresholds.light && typeof thresholds.light.min !== 'undefined') ? thresholds.light.min : DEFAULT_THRESHOLDS.light.min,
+                        onChange: (e) => handleChange('light', 'min', e.target.value),
+                        min: 0,
+                        max: 2000,
+                        step: 10,
+                      }}
+                      maxConfig={{
+                        label: 'Max',
+                        unit: 'lux',
+                        value: (thresholds && thresholds.light && typeof thresholds.light.max !== 'undefined') ? thresholds.light.max : DEFAULT_THRESHOLDS.light.max,
+                        onChange: (e) => handleChange('light', 'max', e.target.value),
+                        min: 0,
+                        max: 2000,
+                        step: 10,
+                      }}
+                    />
+                  </div>
+
+                  <div className="col-span-1">
+                    <ThresholdSection
+                      title="Battery Protection"
+                      icon={Battery}
+                      minConfig={{
+                        label: 'Min',
+                        unit: '%',
+                        value: (thresholds && thresholds.battery && typeof thresholds.battery.min !== 'undefined') ? thresholds.battery.min : DEFAULT_THRESHOLDS.battery.min,
+                        onChange: (e) => handleChange('battery', 'min', e.target.value),
+                        min: 0,
+                        max: 100,
+                        step: 1,
+                      }}
+                    />
+                  </div>
+                </div>
               </div>
 
-              <div>
-                <ThresholdSection
-                  title="Temperature Thresholds"
-                  icon={Thermometer}
-                  minConfig={{
-                    label: 'Min',
-                    unit: '°C',
-                    value: (thresholds && thresholds.temperature && typeof thresholds.temperature.min !== 'undefined') ? thresholds.temperature.min : DEFAULT_THRESHOLDS.temperature.min,
-                    onChange: (e) => handleChange('temperature', 'min', e.target.value),
-                    min: -10,
-                    max: 50,
-                    step: 0.5,
-                  }}
-                  maxConfig={{
-                    label: 'Max',
-                    unit: '°C',
-                    value: (thresholds && thresholds.temperature && typeof thresholds.temperature.max !== 'undefined') ? thresholds.temperature.max : DEFAULT_THRESHOLDS.temperature.max,
-                    onChange: (e) => handleChange('temperature', 'max', e.target.value),
-                    min: 0,
-                    max: 60,
-                    step: 0.5,
-                  }}
-                />
-              </div>
+              {/* Right column: status card above Pump Control */}
+              <div className="self-start lg:pl-4 lg:col-span-4 flex flex-col justify-between h-full space-y-3 sm:space-y-4">
+                <div className="bg-white rounded-xl shadow-md border border-gray-200 p-3 sm:p-4">
+                  <div className="flex items-center justify-between mb-2 sm:mb-3">
+                    <div className="flex items-center gap-2">
+                      <span className="ml-2 sm:ml-8 text-base sm:text-lg font-semibold text-gray-800">Current Status</span>
+                    </div>
+                  </div>
 
-              <div>
-                <ThresholdSection
-                  title="Humidity Thresholds"
-                  icon={Cloud}
-                  minConfig={{
-                    label: 'Min',
-                    unit: '%',
-                    value: (thresholds && thresholds.humidity && typeof thresholds.humidity.min !== 'undefined') ? thresholds.humidity.min : DEFAULT_THRESHOLDS.humidity.min,
-                    onChange: (e) => handleChange('humidity', 'min', e.target.value),
-                    min: 0,
-                    max: 100,
-                    step: 1,
-                  }}
-                  maxConfig={{
-                    label: 'Max',
-                    unit: '%',
-                    value: (thresholds && thresholds.humidity && typeof thresholds.humidity.max !== 'undefined') ? thresholds.humidity.max : DEFAULT_THRESHOLDS.humidity.max,
-                    onChange: (e) => handleChange('humidity', 'max', e.target.value),
-                    min: 0,
-                    max: 100,
-                    step: 1,
-                  }}
-                />
-              </div>
+                  <div className="px-2 sm:px-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-2 gap-2 sm:gap-3 text-sm text-gray-700">
+                    {(() => {
+                      const c = classesFor('moisture');
+                      return (
+                        <div className={`flex items-center gap-2 ${c.container}`}>
+                          <Droplet className={`w-4 h-4 ${c.icon}`} />
+                          <div>
+                            <div className="text-xs text-gray-500">Moisture</div>
+                            <div className={`font-medium ${c.value}`}>{String(statusValues.moisture)}%</div>
+                          </div>
+                        </div>
+                      );
+                    })()}
 
-              <div>
-                <ThresholdSection
-                  title="Light Intensity Thresholds"
-                  icon={Sun}
-                  minConfig={{
-                    label: 'Min',
-                    unit: 'lux',
-                    value: (thresholds && thresholds.light && typeof thresholds.light.min !== 'undefined') ? thresholds.light.min : DEFAULT_THRESHOLDS.light.min,
-                    onChange: (e) => handleChange('light', 'min', e.target.value),
-                    min: 0,
-                    max: 2000,
-                    step: 10,
-                  }}
-                  maxConfig={{
-                    label: 'Max',
-                    unit: 'lux',
-                    value: (thresholds && thresholds.light && typeof thresholds.light.max !== 'undefined') ? thresholds.light.max : DEFAULT_THRESHOLDS.light.max,
-                    onChange: (e) => handleChange('light', 'max', e.target.value),
-                    min: 0,
-                    max: 2000,
-                    step: 10,
-                  }}
-                />
-              </div>
+                    {(() => {
+                      const c = classesFor('temperature');
+                      return (
+                        <div className={`flex items-center gap-2 ${c.container}`}>
+                          <Thermometer className={`w-4 h-4 ${c.icon}`} />
+                          <div>
+                            <div className="text-xs text-gray-500">Temperature</div>
+                            <div className={`font-medium ${c.value}`}>{String(statusValues.temperature)}°C</div>
+                          </div>
+                        </div>
+                      );
+                    })()}
 
-              <div className="col-span-1">
-                <ThresholdSection
-                  title="Battery Protection"
-                  icon={Battery}
-                  minConfig={{
-                    label: 'Min',
-                    unit: '%',
-                    value: (thresholds && thresholds.battery && typeof thresholds.battery.min !== 'undefined') ? thresholds.battery.min : DEFAULT_THRESHOLDS.battery.min,
-                    onChange: (e) => handleChange('battery', 'min', e.target.value),
-                    min: 0,
-                    max: 100,
-                    step: 1,
-                  }}
-                />
-              </div>
-              </div>
-            </div>
+                    {(() => {
+                      const c = classesFor('humidity');
+                      return (
+                        <div className={`flex items-center gap-2 ${c.container}`}>
+                          <Cloud className={`w-4 h-4 ${c.icon}`} />
+                          <div>
+                            <div className="text-xs text-gray-500">Humidity</div>
+                            <div className={`font-medium ${c.value}`}>{String(statusValues.humidity)}%</div>
+                          </div>
+                        </div>
+                      );
+                    })()}
 
-            {/* Right column: status card above Pump Control */}
-            <div className="self-start lg:pl-4 lg:col-span-4 flex flex-col justify-between h-full space-y-3 sm:space-y-4">
-              <div className="bg-white rounded-xl shadow-md border border-gray-200 p-3 sm:p-4">
-                <div className="flex items-center justify-between mb-2 sm:mb-3">
-                  <div className="flex items-center gap-2">
-                    <span className="ml-2 sm:ml-8 text-base sm:text-lg font-semibold text-gray-800">Current Status</span>
+                    {(() => {
+                      const c = classesFor('light');
+                      return (
+                        <div className={`flex items-center gap-2 ${c.container}`}>
+                          <Sun className={`w-4 h-4 ${c.icon}`} />
+                          <div>
+                            <div className="text-xs text-gray-500">Light</div>
+                            <div className={`font-medium ${c.value}`}>{String(statusValues.light)} lux</div>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    {(() => {
+                      const c = classesFor('battery');
+                      return (
+                        <div className={`flex items-center gap-2 ${c.container}`}>
+                          <Battery className={`w-4 h-4 ${c.icon}`} />
+                          <div>
+                            <div className="text-xs text-gray-500">Battery</div>
+                            <div className={`font-medium ${c.value}`}>{String(statusValues.battery)}%</div>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    {(() => {
+                      // pump status: show green when ON, gray when OFF
+                      const pIcon = pumpOn ? 'text-green-600' : 'text-gray-600';
+                      const pValue = pumpOn ? 'text-green-600' : 'text-gray-700';
+                      return (
+                        <div className={`flex items-center gap-2 ${pumpOn ? 'bg-green-50 rounded p-2' : ''}`}>
+                          <Power className={`w-4 h-4 ${pIcon}`} />
+                          <div>
+                            <div className="text-xs text-gray-500">Pump</div>
+                            <div className={`font-medium ${pValue}`}>{pumpOn ? 'ON' : 'OFF'}</div>
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
 
-                <div className="px-2 sm:px-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-2 gap-2 sm:gap-3 text-sm text-gray-700">
-                  {(() => {
-                    const c = classesFor('moisture');
-                    return (
-                      <div className={`flex items-center gap-2 ${c.container}`}>
-                        <Droplet className={`w-4 h-4 ${c.icon}`} />
-                        <div>
-                          <div className="text-xs text-gray-500">Moisture</div>
-                          <div className={`font-medium ${c.value}`}>{String(statusValues.moisture)}%</div>
-                        </div>
-                      </div>
-                    );
-                  })()}
-
-                  {(() => {
-                    const c = classesFor('temperature');
-                    return (
-                      <div className={`flex items-center gap-2 ${c.container}`}>
-                        <Thermometer className={`w-4 h-4 ${c.icon}`} />
-                        <div>
-                          <div className="text-xs text-gray-500">Temperature</div>
-                          <div className={`font-medium ${c.value}`}>{String(statusValues.temperature)}°C</div>
-                        </div>
-                      </div>
-                    );
-                  })()}
-
-                  {(() => {
-                    const c = classesFor('humidity');
-                    return (
-                      <div className={`flex items-center gap-2 ${c.container}`}>
-                        <Cloud className={`w-4 h-4 ${c.icon}`} />
-                        <div>
-                          <div className="text-xs text-gray-500">Humidity</div>
-                          <div className={`font-medium ${c.value}`}>{String(statusValues.humidity)}%</div>
-                        </div>
-                      </div>
-                    );
-                  })()}
-
-                  {(() => {
-                    const c = classesFor('light');
-                    return (
-                      <div className={`flex items-center gap-2 ${c.container}`}>
-                        <Sun className={`w-4 h-4 ${c.icon}`} />
-                        <div>
-                          <div className="text-xs text-gray-500">Light</div>
-                          <div className={`font-medium ${c.value}`}>{String(statusValues.light)} lux</div>
-                        </div>
-                      </div>
-                    );
-                  })()}
-
-                  {(() => {
-                    const c = classesFor('battery');
-                    return (
-                      <div className={`flex items-center gap-2 ${c.container}`}>
-                        <Battery className={`w-4 h-4 ${c.icon}`} />
-                        <div>
-                          <div className="text-xs text-gray-500">Battery</div>
-                          <div className={`font-medium ${c.value}`}>{String(statusValues.battery)}%</div>
-                        </div>
-                      </div>
-                    );
-                  })()}
-
-                  {(() => {
-                    // pump status: show green when ON, gray when OFF
-                    const pIcon = pumpOn ? 'text-green-600' : 'text-gray-600';
-                    const pValue = pumpOn ? 'text-green-600' : 'text-gray-700';
-                    return (
-                      <div className={`flex items-center gap-2 ${pumpOn ? 'bg-green-50 rounded p-2' : ''}`}>
-                        <Power className={`w-4 h-4 ${pIcon}`} />
-                        <div>
-                          <div className="text-xs text-gray-500">Pump</div>
-                          <div className={`font-medium ${pValue}`}>{pumpOn ? 'ON' : 'OFF'}</div>
-                        </div>
-                      </div>
-                    );
-                  })()}
-                </div>
-              </div>
-
-              {/* Pump Control card */}
-              <div className="bg-white rounded-xl shadow-md border border-gray-200 p-4 sm:p-6 h-full w-full lg:w-auto">
-                <div className="flex items-center gap-2 mb-3 sm:mb-4">
-                  <Gauge className="w-5 h-5 sm:w-6 sm:h-6 text-gray-600" />
-                  <span className="text-base sm:text-lg font-semibold text-gray-800">Pump Control</span>
-                </div>
-
-                <div className="bg-gray-50 rounded-lg p-3 sm:p-4 flex flex-col gap-3 sm:gap-4">
-                  <div className="flex items-center justify-between mb-1 sm:mb-2">
-                    <AutoModeToggle enabled={autoMode} onToggle={handleAutoModeToggle} />
+                {/* Pump Control card */}
+                <div className="bg-white rounded-xl shadow-md border border-gray-200 p-4 sm:p-6 h-full w-full lg:w-auto">
+                  <div className="flex items-center gap-2 mb-3 sm:mb-4">
+                    <Gauge className="w-5 h-5 sm:w-6 sm:h-6 text-gray-600" />
+                    <span className="text-base sm:text-lg font-semibold text-gray-800">Pump Control</span>
                   </div>
 
-                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
-                    <div className="flex flex-col items-start">
-                      <div className="font-semibold text-gray-700 text-sm sm:text-base">Manual Control</div>
-                      <div className="flex flex-col items-start gap-1 mt-1">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs sm:text-sm text-gray-600">Status:</span>
-                          <span className={`font-bold text-sm sm:text-base ${pumpOn ? 'text-green-600' : 'text-gray-700'}`}>{pumpOn ? 'ON' : 'OFF'}</span>
-                        </div>
-                        <div>
-                          <span className={`${autoMode ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'} text-xs px-2 py-0.5 rounded`}>{autoMode ? 'auto' : 'manual'}</span>
-                        </div>
-                      </div>
+                  <div className="bg-gray-50 rounded-lg p-3 sm:p-4 flex flex-col gap-3 sm:gap-4">
+                    <div className="flex items-center justify-between mb-1 sm:mb-2">
+                      <AutoModeToggle enabled={autoMode} onToggle={handleAutoModeToggle} />
                     </div>
 
-                    <button
-                      onClick={handlePumpToggle}
-                      aria-pressed={pumpOn}
-                      disabled={autoMode}
-                      className={`flex items-center gap-2 sm:gap-3 px-4 sm:px-6 py-2 sm:py-3 rounded-lg font-bold text-sm sm:text-base text-white shadow-md transition-all focus:outline-none ${pumpOn ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'} ${autoMode ? 'opacity-50 cursor-not-allowed' : ''}`}
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 sm:w-5 sm:h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 2v10" />
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M5.5 7.5a8.5 8.5 0 1013 0" />
-                      </svg>
-                      {pumpOn ? 'Turn OFF' : 'Turn ON'}
-                    </button>
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
+                      <div className="flex flex-col items-start">
+                        <div className="font-semibold text-gray-700 text-sm sm:text-base">Manual Control</div>
+                        <div className="flex flex-col items-start gap-1 mt-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs sm:text-sm text-gray-600">Status:</span>
+                            <span className={`font-bold text-sm sm:text-base ${pumpOn ? 'text-green-600' : 'text-gray-700'}`}>{pumpOn ? 'ON' : 'OFF'}</span>
+                          </div>
+                          <div>
+                            <span className={`${autoMode ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'} text-xs px-2 py-0.5 rounded`}>{autoMode ? 'auto' : 'manual'}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={handlePumpToggle}
+                        aria-pressed={pumpOn}
+                        disabled={autoMode}
+                        className={`flex items-center gap-2 sm:gap-3 px-4 sm:px-6 py-2 sm:py-3 rounded-lg font-bold text-sm sm:text-base text-white shadow-md transition-all focus:outline-none ${pumpOn ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'} ${autoMode ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 sm:w-5 sm:h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 2v10" />
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M5.5 7.5a8.5 8.5 0 1013 0" />
+                        </svg>
+                        {pumpOn ? 'Turn OFF' : 'Turn ON'}
+                      </button>
+                    </div>
                   </div>
+
                 </div>
-
+                {/* Centered Save Button and Status */}
+                <div className="flex flex-col items-center mt-4 sm:mt-6">
+                  <ActionButton onClick={handleSave} className="w-full">
+                    Save Settings
+                  </ActionButton>
+                  {saveStatus && (
+                    <div className="text-center text-sm text-green-600 mt-4">{saveStatus}</div>
+                  )}
+                </div>
               </div>
-               {/* Centered Save Button and Status */}
-        <div className="flex flex-col items-center mt-4 sm:mt-6">
-          <ActionButton onClick={handleSave} className="w-full">
-            Save Settings
-          </ActionButton>
-          {saveStatus && (
-            <div className="text-center text-sm text-green-600 mt-4">{saveStatus}</div>
-          )}
             </div>
-            </div>
+
+
           </div>
+        </div>
 
-      
+        <ValidationModal open={showModal} errors={modalErrors} onClose={() => setShowModal(false)} />
       </div>
-    </div>
-
-    <ValidationModal open={showModal} errors={modalErrors} onClose={() => setShowModal(false)} />
-  </div>
-  </>
+    </>
   );
 };
 

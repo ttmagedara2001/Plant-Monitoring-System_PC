@@ -1,6 +1,6 @@
 # Plant Monitoring System - PC Dashboard
 
-A real-time, interactive React dashboard for monitoring plant sensor data with WebSocket integration and intelligent fallback mode.
+A real-time, interactive React dashboard for monitoring plant sensor data with WebSocket integration and cookie-based authentication.
 
 ## 🌱 Overview
 
@@ -9,6 +9,7 @@ The Plant Monitoring System PC Dashboard displays live sensor data (moisture, te
 **Key Features:**
 
 - ✅ Real-time sensor data updates via WebSocket
+- ✅ Cookie-based HttpOnly authentication (secure)
 - ✅ Multiple simultaneous alerts with configurable thresholds
 - ✅ Interactive charts with historical trending
 - ✅ Responsive design (desktop, tablet, mobile)
@@ -16,6 +17,7 @@ The Plant Monitoring System PC Dashboard displays live sensor data (moisture, te
 - ✅ Threshold configuration panel
 - ✅ CSV export for analysis
 - ✅ Graceful fallback with mock data when API unavailable
+- ✅ Seasonal visual effects
 
 ---
 
@@ -47,6 +49,48 @@ npm run preview  # Preview production build locally
 
 ---
 
+## 🔐 Authentication
+
+The application uses **Cookie-Based HttpOnly Authentication** for enhanced security.
+
+### How It Works
+
+1. **Login** (`POST /user/get-token`)
+   - Send email and secretKey in request body
+   - Server returns 200 OK with **no response body**
+   - JWT and Refresh Token are set as **HttpOnly cookies** automatically
+
+2. **API Requests**
+   - All requests include `withCredentials: true`
+   - Browser automatically sends cookies with each request
+   - No manual token attachment needed
+
+3. **Token Refresh** (`GET /get-new-token`)
+   - Server uses Refresh Token from cookie
+   - New tokens set as cookies automatically
+   - Transparent to the application
+
+4. **WebSocket Connection**
+   - Connect to `wss://api.protonestconnect.co/ws`
+   - No token query parameter needed
+   - Browser sends cookies with WebSocket handshake
+
+### Environment Variables
+
+```env
+# API Configuration
+VITE_API_BASE_URL=https://api.protonestconnect.co/api/v1
+
+# WebSocket Configuration  
+VITE_WS_URL=wss://api.protonestconnect.co/ws
+
+# Auto-login credentials (optional)
+VITE_USER_EMAIL=your-email@example.com
+VITE_USER_SECRET=your-secretKey
+```
+
+---
+
 ## 📊 Core Features
 
 ### 1. Real-Time Sensor Monitoring
@@ -64,8 +108,8 @@ Live WebSocket updates for 6 key metrics:
 
 Intelligent pump control based on configurable moisture thresholds:
 
-- **Auto Mode** - Automatically turns pump ON when moisture < minimum threshold (default: 20%)
-- **Auto Mode** - Automatically turns pump OFF when moisture > maximum threshold (default: 70%)
+- **Auto Mode** - Automatically turns pump ON when moisture ≤ minimum threshold (default: 20%)
+- **Auto Mode** - Pump turns OFF when moisture > minimum threshold
 - **Mode Tracking** - Device receives mode information (auto/manual) with each command
 - **HTTP API Flow** - PC → `/update-state-details` → Backend → MQTT → Device → Confirmation → WebSocket → UI Update
 
@@ -77,17 +121,15 @@ User-controlled pump operation with instant feedback:
 - **Mode Tracking** - Commands sent with `mode: "manual"` to distinguish from automation
 - **Status Display** - Real-time pump status with color coding (green=ON, red=OFF)
 - **Loading States** - Visual feedback during command processing
-- **Unified Flow** - Same HTTP API flow as auto mode for consistency
 
 ### 4. Historical Data Visualization
 
 Interactive charts showing sensor trends over time:
 
-- **24-Hour Data** - Default view of last 24 hours with auto-refresh every 30 seconds
+- **24-Hour Data** - Default view of last 24 hours with configurable time ranges
 - **Multi-Line Chart** - All sensors on one graph with Recharts
 - **CSV Export** - Download data for external analysis
 - **Responsive Design** - Zoom, pan, and tooltip interactions
-- **Error Handling** - Graceful fallback with clear error messages
 
 ### 5. Threshold Configuration
 
@@ -99,19 +141,9 @@ Fully customizable alert and automation thresholds:
 - **Light Thresholds** - Min/max for light alerts (default: 200-1000 lux)
 - **Battery Threshold** - Minimum battery level alert (default: 20%)
 - **Auto Mode Toggle** - Enable/disable automated pump control
-- **LocalStorage Persistence** - Settings saved per device for quick access
+- **LocalStorage Persistence** - Settings saved per device
 
-### 6. Component-Based Architecture
-
-Modular, reusable components for maintainability:
-
-- **7 Reusable Components** - ThresholdInput, ThresholdSection, SensorStatusIndicator, CommandStatusMessage, ActionButton, AutoModeToggle, PumpControlToggle
-- **71% Code Reduction** - Settings panel reduced from 305 lines to 87 lines
-- **Consistent UI** - Unified styling and behavior across all components
-- **Easy Maintenance** - Fix bugs once, update everywhere
-- **Single Responsibility** - Each component does one thing well
-
-### 7. Multi-Device Support
+### 6. Multi-Device Support
 
 Seamless switching between multiple IoT devices:
 
@@ -120,19 +152,11 @@ Seamless switching between multiple IoT devices:
 - **WebSocket Resubscription** - Automatic topic switching when device changes
 - **Historical Data Reload** - Chart data refreshed for new device
 
-### 8. Alert System
-
-Color-coded status indicators for all sensors:
-
-- **Critical (Red)** - Sensor far outside acceptable range, immediate attention required
-- **Warning (Yellow)** - Sensor approaching threshold, monitor closely
-- **Optimal (Green)** - Sensor within safe range, all good
-
 ---
 
 ## 🏗️ System Architecture
 
-### Communication Flow
+### Communication Flow (Cookie-Based Auth)
 
 ```
 ┌──────────────┐    MQTT Publish     ┌──────────────┐
@@ -141,21 +165,31 @@ Color-coded status indicators for all sensors:
 └──────────────┘                     └──────┬───────┘
        ↑                                    │
        │                                    │ WebSocket
-       │ MQTT Subscribe                     │ (Real-time)
+       │ MQTT Subscribe                     │ (Cookie Auth)
        │                                    ↓
        │                             ┌──────────────┐
        │    ←─── HTTP API ─────────  │   Frontend   │
-       │      (Commands)             │  Dashboard   │
+       │      (with cookies)         │  Dashboard   │
        └─────────────────────────────│  (React)     │
          Device Confirmation         └──────────────┘
 ```
 
-### Data Flows
+### Authentication Flow
 
-1. **Real-time Sensor Data**: Device → MQTT → Backend → WebSocket → Frontend → UI Update
-2. **Pump Control (Auto)**: Frontend Automation → HTTP POST → Backend → MQTT → Device → Confirmation → WebSocket → UI Update
-3. **Pump Control (Manual)**: User Click → HTTP POST → Backend → MQTT → Device → Confirmation → WebSocket → UI Update
-4. **Historical Data**: Frontend → HTTP POST → Backend Database → JSON Response → Chart Render
+```
+1. User Login (or Auto-Login from ENV)
+   POST /user/get-token → Sets HttpOnly Cookies
+                ↓
+2. WebSocket Connection
+   Connect to wss://...ws (cookies sent automatically)
+                ↓
+3. API Requests
+   All requests include withCredentials: true
+   Cookies sent automatically
+                ↓
+4. Token Refresh (on 400 "Invalid token")
+   GET /get-new-token → New cookies set automatically
+```
 
 ---
 
@@ -164,33 +198,27 @@ Color-coded status indicators for all sensors:
 ```
 src/
 ├── Components/                      # React Components
-│   ├── Dashboard.jsx               # Main orchestrator (576 lines)
-│   ├── Header.jsx                  # Navigation bar
-│   ├── SettingsPanel.jsx           # Threshold settings UI (87 lines)
-│   ├── StatusCard.jsx              # Sensor display card
+│   ├── Dashboard.jsx               # Main dashboard with sensor display
+│   ├── Header.jsx                  # Navigation bar with device selector
+│   ├── StatusBar.jsx               # Tab navigation component
+│   ├── DeviceSettingsPage.jsx      # Full device settings page
 │   ├── HistoricalChartTest.jsx     # Recharts visualization
 │   ├── ErrorBoundary.jsx           # Error handling wrapper
-│   │
-│   └── Reusable Components/        # Extracted for code reuse
-│       ├── ThresholdInput.jsx      # Single threshold input field
-│       ├── ThresholdSection.jsx    # Min/max threshold pair
-│       ├── SensorStatusIndicator.jsx # Color-coded status display
-│       ├── CommandStatusMessage.jsx  # Success/error message banner
-│       ├── ActionButton.jsx         # Button with loading state
-│       ├── AutoModeToggle.jsx       # Auto pump control toggle
-│       └── PumpControlToggle.jsx    # Manual pump control button
+│   └── ... (reusable components)
 │
 ├── Service/                         # API & Communication Layer
-│   ├── api.js                      # Axios instance with JWT interceptor
-│   ├── authService.js              # Login/register API calls
-│   ├── deviceService.js            # Device & sensor data API (498 lines)
-│   └── webSocketClient.js          # STOMP WebSocket client (469 lines)
+│   ├── api.js                      # Axios client with cookie auth
+│   ├── authService.js              # Login/session management
+│   ├── deviceService.js            # Device & sensor data API
+│   └── webSocketClient.js          # STOMP WebSocket client
 │
 ├── Context/                         # React Context
-│   └── AuthContext.jsx             # JWT token & user ID management
+│   ├── AuthContext.jsx             # Authentication state management
+│   └── NotificationContext.jsx     # App-wide notification system
 │
-└── assets/                          # Images, logos
-    └── images/
+├── App.jsx                          # Main app with WebSocket integration
+├── main.jsx                         # React entry point
+└── index.css                        # Global styles
 ```
 
 ---
@@ -207,110 +235,53 @@ src/
 
 ### Data & Communication
 
-- **@stomp/stompjs 7.2.1** - WebSocket STOMP protocol for real-time updates
-- **Axios 1.6.2** - HTTP client for REST API calls
+- **@stomp/stompjs 7.2.1** - WebSocket STOMP protocol
+- **Axios 1.6.2** - HTTP client with cookie support
 - **Recharts 2.10.3** - Interactive charting library
 
 ### Backend Integration
 
-- **WebSocket Server** - STOMP over WebSocket for real-time sensor data
-- **REST API** - HTTP endpoints for commands and historical data
+- **WebSocket Server** - STOMP over WebSocket for real-time data
+- **REST API** - HTTP endpoints with cookie authentication
 - **MQTT Broker** - Device communication protocol
-- **JWT Authentication** - Secure token-based authentication
+- **HttpOnly Cookies** - Secure token storage
 
 ---
 
-## 📡 Backend Integration
+## 📡 API Reference
 
-**Base URL (Production):**  
-`https://api.protonestconnect.co/api/v1/user`
+**Base URL:** `https://api.protonestconnect.co/api/v1`  
+**WebSocket URL:** `wss://api.protonestconnect.co/ws`
 
-**WebSocket URL (Production):**  
-`wss://api.protonestconnect.co/ws?token={JWT_TOKEN}`
+### Authentication Endpoints
 
-### Key Endpoints
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/user/get-token` | POST | Login - sets HttpOnly cookies |
+| `/get-new-token` | GET | Refresh tokens via cookie |
 
-- **POST /login-email** - User authentication (returns JWT token)
-- **POST /get-all-stream-data** - Fetch historical sensor data (24 hours)
-- **POST /get-stream-data/device/topic** - Fetch specific sensor data with time range
-- **POST /update-state-details** - Send commands to device (pump control, etc.)
+### Data Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/user/get-stream-data/device/topic` | POST | Fetch historical sensor data |
+| `/update-state-details` | POST | Send commands to device |
 
 ### WebSocket Topics
 
-- **Subscribe**: `/topic/protonest/{deviceId}/state/#` - All sensor updates
-- **Message Format**: `{ sensorType: "moisture", data: { moisture: 45.2 } }`
-- **Batch Updates**: `{ sensorType: "batchUpdate", data: { moisture: 45.2, temp: 28.5, ... } }`
-
-See `PROJECT_DOCUMENTATION.md` for complete API reference.
+- **Stream Data**: `/topic/stream/{deviceId}` - All sensor updates
+- **State Data**: `/topic/state/{deviceId}` - Pump status updates
 
 ---
 
 ## 📚 Documentation
 
-Additional guides and references:
-
-| Document                   | Purpose                                                                |
-| -------------------------- | ---------------------------------------------------------------------- |
-| **MQTTX_TESTING_GUIDE.md** | 🧪 Step-by-step MQTT testing with device configuration (device0011233) |
-| **PROTONEST_SETUP.md**     | ⚙️ ProtoNest platform setup and configuration guide                    |
-| **README.md**              | 📖 Main project documentation (features, setup, troubleshooting)       |
-
-**Quick Reference:**
-
-- 🚀 **Getting Started?** Read this README for setup and features
-- 🧪 **Testing MQTT?** Follow MQTTX_TESTING_GUIDE.md with device ID: `device0011233`
-- ⚙️ **ProtoNest Setup?** Check PROTONEST_SETUP.md for platform configuration
-
----
-
-## ⚙️ Configuration
-
-### Default Device ID
-
-Edit `src/Components/Dashboard.jsx`:
-
-```javascript
-const defaultDeviceId = "device0011233"; // Change to your device ID
-```
-
-### Time Intervals
-
-**Historical data refresh** (Dashboard.jsx, line 103):
-
-```javascript
-}, 30000); // 30 seconds - change to 15000 for 15 seconds
-```
-
-**Command status message display** (Dashboard.jsx, lines 408, 434):
-
-```javascript
-setTimeout(() => setCommandStatus(null), 3000); // 3 seconds
-```
-
-**WebSocket reconnect delay** (webSocketClient.js, line 37):
-
-```javascript
-reconnectDelay: 5000, // 5 seconds
-```
-
-### Default Thresholds
-
-**Location**: `src/Components/Dashboard.jsx` (line 50)
-
-```javascript
-{
-  moistureMin: '20',    // Turn pump ON if below
-  moistureMax: '70',    // Turn pump OFF if above
-  tempMin: '10',
-  tempMax: '35',
-  humidityMin: '30',
-  humidityMax: '80',
-  lightMin: '200',
-  lightMax: '1000',
-  batteryMin: '20',
-  autoMode: true        // Auto pump control enabled by default
-}
-```
+| Document | Purpose |
+|----------|---------|
+| **MQTTX_TESTING_GUIDE.md** | 🧪 MQTT testing with MQTTX client |
+| **PROTONEST_SETUP.md** | ⚙️ ProtoNest platform configuration |
+| **WEBSOCKET_IMPLEMENTATION.md** | 🔌 WebSocket client details |
+| **README.md** | 📖 This documentation |
 
 ---
 
@@ -318,38 +289,33 @@ reconnectDelay: 5000, // 5 seconds
 
 ### WebSocket Not Connecting
 
-- Check JWT token: `console.log(localStorage.getItem('jwtToken'))`
-- Login again if token expired
-- Check browser console for connection errors
-- Verify WebSocket URL (must be `wss://` for HTTPS sites)
-- **Auto-reconnection**: Client automatically reconnects every 5 seconds
-- **Ref-based callbacks**: App.jsx uses refs for stable callback references to prevent duplicate handlers
+1. Verify you're authenticated (login succeeded)
+2. Check browser console for cookie-related errors
+3. Ensure `withCredentials: true` in requests
+4. For CORS issues, verify server allows credentials
 
-### Pump Not Turning On (Auto Mode)
+### Session Expired
 
-1. **Check auto mode enabled**: Toggle should be blue in Settings Panel
-2. **Check thresholds saved**: Click "Save Settings" after changes
-3. **Check moisture level**: Must be below minimum threshold (default: 20%)
-4. **Check console logs**: Look for HTTP POST `/update-state-details` requests
-5. **Check device logs**: Ensure device receives MQTT messages
+- On 400 "Invalid token" error, automatic refresh is attempted
+- If refresh fails, user is logged out
+- Re-login to get new session cookies
 
-### Historical Data Not Loading
+### Pump Not Responding
 
-- **Device ownership**: Ensure device belongs to your account
-- **Update device ID**: Edit `defaultDeviceId` in Dashboard.jsx
-- **JWT expired**: Login again to refresh token
-- **Check console**: Look for 403/401 errors in Network tab
+1. Check auto mode enabled in settings
+2. Verify device ownership
+3. Check console for API errors
+4. Verify WebSocket connection status
 
-### Settings Not Saving
+---
 
-1. Click "Save Settings" button (not just change values)
-2. Check localStorage: `console.log(localStorage.getItem('settings_device0011233'))`
-3. Clear localStorage and re-save if needed
-4. Settings are stored in two formats for compatibility:
-   - **Nested format** (for DeviceSettingsPage): `{ thresholds: { moisture: { min, max } } }`
-   - **Flat format** (for Dashboard): `{ moistureMin, moistureMax, tempMin, ... }`
+## 🚀 Deployment
 
-## 🚀 Quick Deploy
+### GitHub Pages
+
+```bash
+npm run deploy
+```
 
 ### Vercel
 
@@ -368,12 +334,13 @@ docker run -p 80:80 plant-monitoring:latest
 ---
 
 **Status:** Production Ready  
-**Last Updated:** January 2025  
-**Version:** 1.1.0
+**Last Updated:** January 2026  
+**Version:** 2.0.0 (Cookie-Based Auth)
+**Auth Method:** HttpOnly Cookies
 
 ---
 
-## 📞 Support & Contributing
+## 📞 Support
 
-**Issues**: Open GitHub issue with detailed description and console logs  
+**Issues**: Open GitHub issue with console logs  
 **Questions**: Use GitHub Discussions

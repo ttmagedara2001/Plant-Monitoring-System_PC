@@ -4,19 +4,20 @@ import { Download, Loader2, Eye, EyeOff, Database, Wifi, AlertCircle, Clock } fr
 import SensorToggleToolbar from './SensorToggleToolbar';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
-const HistoricalChart = ({ 
-  chartData, 
-  isLoading, 
-  onExportCSV, 
-  isExporting, 
-  dataSource = 'None', 
+const HistoricalChart = ({
+  chartData,
+  isLoading,
+  onExportCSV,
+  isExporting,
+  dataSource = 'None',
   error = null,
   timeRange = '1h',
   dataInterval = 'auto',
   onTimeRangeChange,
   onDataIntervalChange,
   allData = [],
-  onFilteredDataChange
+  onFilteredDataChange,
+  hideTitle = false
 }) => {
   // Local state to manage which lines are visible for all sensors/ if not needed for the default add 'false'
   const [visibleSeries, setVisibleSeries] = useState({
@@ -97,25 +98,25 @@ const HistoricalChart = ({
     if (range.startsWith('custom_')) {
       const rangeMs = parseInt(range.replace('custom_', ''));
       const validIntervals = ['auto'];
-      
+
       // Only show intervals that are smaller than the time range
       if (rangeMs >= 1000) validIntervals.push('1s');
       if (rangeMs >= 5000) validIntervals.push('5s');
       if (rangeMs >= 60000) validIntervals.push('1m');
       if (rangeMs >= 300000) validIntervals.push('5m');
       if (rangeMs >= 3600000) validIntervals.push('1h');
-      
+
       return validIntervals;
     }
-    
+
     // For preset ranges : to make sense with the time range chosen
     const validIntervals = {
-      '1m': ['auto', '1s'],                    
-      '5m': ['auto', '1s', '5s'],              
-      '15m': ['auto', '1s', '5s', '1m'],       
-      '1h': ['auto', '1s', '5s', '1m', '5m'],  
-      '6h': ['auto', '5s', '1m', '5m'],        
-      '24h': ['auto', '1m', '5m', '1h']        
+      '1m': ['auto', '1s'],
+      '5m': ['auto', '1s', '5s'],
+      '15m': ['auto', '1s', '5s', '1m'],
+      '1h': ['auto', '1s', '5s', '1m', '5m'],
+      '6h': ['auto', '5s', '1m', '5m'],
+      '24h': ['auto', '1m', '5m', '1h']
     };
     return validIntervals[range] || ['auto'];
   };
@@ -127,7 +128,7 @@ const HistoricalChart = ({
     if (!allData || allData.length === 0) return chartData;
 
     const now = new Date();
-    
+
     // Handle custom ranges (format: custom_ms)
     let rangeMs;
     if (timeRange.startsWith('custom_')) {
@@ -154,7 +155,7 @@ const HistoricalChart = ({
     // Apply interval grouping if not auto - show readings at exact interval points
     if (dataInterval !== 'auto' && filtered.length > 0) {
       let intervalMs;
-      
+
       // Handle custom intervals (format: custom_interval_ms)
       if (dataInterval.startsWith('custom_interval_')) {
         intervalMs = parseInt(dataInterval.replace('custom_interval_', ''));
@@ -171,12 +172,12 @@ const HistoricalChart = ({
       if (intervalMs > 0) {
         // Group data into interval buckets and get one reading per interval
         const intervalBuckets = new Map();
-        
+
         filtered.forEach(record => {
           const recordTime = new Date(record.timestamp).getTime();
           // Calculate which interval bucket this record belongs to
           const bucketKey = Math.floor(recordTime / intervalMs) * intervalMs;
-          
+
           // Store the closest record to the bucket start time
           if (!intervalBuckets.has(bucketKey)) {
             intervalBuckets.set(bucketKey, record);
@@ -191,22 +192,22 @@ const HistoricalChart = ({
         });
 
         // Convert back to array and sort by time
-        filtered = Array.from(intervalBuckets.values()).sort((a, b) => 
+        filtered = Array.from(intervalBuckets.values()).sort((a, b) =>
           new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
         );
       }
     }
 
     // Update time format based on interval - show seconds for granular intervals
-    const shouldShowSeconds = dataInterval === '1s' || dataInterval === '5s' || 
-                             (dataInterval.startsWith('custom_interval_') && 
-                              parseInt(dataInterval.replace('custom_interval_', '')) < 60000);
-    
+    const shouldShowSeconds = dataInterval === '1s' || dataInterval === '5s' ||
+      (dataInterval.startsWith('custom_interval_') &&
+        parseInt(dataInterval.replace('custom_interval_', '')) < 60000);
+
     // Format time field for display
     filtered = filtered.map(record => ({
       ...record,
-      time: new Date(record.timestamp).toLocaleTimeString([], 
-        shouldShowSeconds 
+      time: new Date(record.timestamp).toLocaleTimeString([],
+        shouldShowSeconds
           ? { hour: '2-digit', minute: '2-digit', second: '2-digit' }
           : { hour: '2-digit', minute: '2-digit' }
       )
@@ -235,7 +236,7 @@ const HistoricalChart = ({
     // Temporarily apply export settings
     onTimeRangeChange && onTimeRangeChange(exportTimeRange);
     onDataIntervalChange && onDataIntervalChange(exportDataInterval);
-    
+
     // Export after a short delay to allow data filtering
     setTimeout(() => {
       onExportCSV && onExportCSV(selectedSensors);
@@ -248,7 +249,7 @@ const HistoricalChart = ({
     // Temporarily apply export settings
     onTimeRangeChange && onTimeRangeChange(exportTimeRange);
     onDataIntervalChange && onDataIntervalChange(exportDataInterval);
-    
+
     // Export after a short delay to allow data filtering
     setTimeout(() => {
       onExportCSV && onExportCSV();
@@ -258,7 +259,7 @@ const HistoricalChart = ({
 
   // Handle quick export with current settings
   const handleQuickExport = (sensorType) => {
-    const sensors = sensorType === 'selected' 
+    const sensors = sensorType === 'selected'
       ? Object.keys(visibleSeries).filter(key => visibleSeries[key])
       : null;
     onExportCSV && onExportCSV(sensors);
@@ -274,24 +275,25 @@ const HistoricalChart = ({
   }, [showExportMenu, timeRange, dataInterval]);
 
   // Helper to generate button classes based on active state
-  const getButtonClass = (isActive, colorClass) => 
-    `px-3 py-1.5 rounded-md text-xs font-bold flex items-center gap-2 transition-all border ${
-      isActive 
-        ? `${colorClass} text-white border-transparent shadow-sm` 
-        : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'
+  const getButtonClass = (isActive, colorClass) =>
+    `px-3 py-1.5 rounded-md text-xs font-bold flex items-center gap-2 transition-all border ${isActive
+      ? `${colorClass} text-white border-transparent shadow-sm`
+      : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'
     }`;
 
   return (
-   <div className="w-full sm:w-[calc(100%)] max-w-7xl mx-auto bg-white rounded-xl sm:rounded-2xl p-2 sm:p-4 shadow-sm flex flex-col border border-gray-200 sm:px-6 sm:py-5">
-      {/* Header Section */}
-      <div className="flex flex-col gap-3 sm:gap-4 mb-4 sm:mb-6">
-        {/* Title and badges row */}
-        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 sm:gap-4">
-          <h3 className="text-base sm:text-xl font-bold text-gray-800">Historical Trends</h3>
-          
-          {/* Badges - scrollable on mobile */}
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0 scrollbar-hide">
-            <span className="text-[10px] sm:text-xs bg-gray-100 text-gray-500 px-2 py-0.5 sm:py-1 rounded-full flex items-center gap-1 whitespace-nowrap">
+    <div className="w-full sm:w-[calc(100%)] max-w-7xl mx-auto bg-white rounded-xl sm:rounded-2xl p-3 sm:p-4 shadow-sm flex flex-col border border-gray-200">
+      {/* Header Section - Badges and Export Button aligned */}
+      <div className="flex items-center justify-between gap-3 mb-3">
+        {/* Left side: Title (if not hidden) + Badges inline */}
+        <div className="flex items-center gap-3 flex-wrap">
+          {!hideTitle && (
+            <h3 className="text-base sm:text-lg font-bold text-gray-800">Historical Trends</h3>
+          )}
+
+          {/* Status Badges - More visible */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs bg-gray-100 text-gray-600 px-2.5 py-1 rounded-full flex items-center gap-1 font-medium border border-gray-200">
               <Clock className="w-3 h-3" />
               {timeRangeLabels[timeRange] || timeRange.replace('custom_', '').replace(/\d+/, (ms) => {
                 const val = parseInt(ms);
@@ -301,73 +303,58 @@ const HistoricalChart = ({
                 return `${(val / 1000).toFixed(1)} Seconds`;
               })}
             </span>
-            {(dataInterval !== 'auto') && (
-              <span className="text-[10px] sm:text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 sm:py-1 rounded-full border border-indigo-200 whitespace-nowrap">
-                {intervalLabels[dataInterval] || dataInterval.replace('custom_interval_', '').replace(/\d+/, (ms) => {
-                  const val = parseInt(ms);
-                  if (val >= 3600000) return `${(val / 3600000).toFixed(1)}h`;
-                  if (val >= 60000) return `${(val / 60000).toFixed(1)}m`;
-                  return `${(val / 1000).toFixed(1)}s`;
-                })}
-              </span>
-            )}
             {displayData.length > 0 && (
-              <span className="text-[10px] sm:text-xs bg-purple-100 text-purple-700 px-2 py-0.5 sm:py-1 rounded-full border border-purple-200 whitespace-nowrap">
+              <span className="text-xs bg-purple-100 text-purple-700 px-2.5 py-1 rounded-full border border-purple-200 font-medium">
                 {displayData.length} pts
               </span>
             )}
             {dataSource !== 'None' && (
-              <span className={`text-[10px] sm:text-xs px-2 py-0.5 sm:py-1 rounded-full flex items-center gap-1 whitespace-nowrap ${
-                dataSource === 'API' 
-                  ? 'bg-blue-100 text-blue-700 border border-blue-200' 
-                  : 'bg-green-100 text-green-700 border border-green-200'
-              }`}>
+              <span className={`text-xs px-2.5 py-1 rounded-full flex items-center gap-1 font-medium ${dataSource === 'API'
+                ? 'bg-emerald-100 text-emerald-700 border border-emerald-200'
+                : 'bg-green-100 text-green-700 border border-green-200'
+                }`}>
                 {dataSource === 'API' ? <Database className="w-3 h-3" /> : <Wifi className="w-3 h-3" />}
                 {dataSource}
               </span>
             )}
           </div>
         </div>
-        
-        {/* Export button */}
-        <div className="flex justify-end">
-          <div className="relative">
-            <button 
-              onClick={() => setShowExportMenu(!showExportMenu)}
-              disabled={isExporting || chartData.length === 0}
-              className="bg-yellow-50 hover:bg-yellow-100 text-yellow-700 border border-yellow-200 text-xs font-bold px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg flex items-center gap-1.5 sm:gap-2 transition disabled:opacity-50">
-              {isExporting ? <Loader2 className="w-4 h-4 animate-spin"/> : <Download className="w-4 h-4" />}
-              <span className="hidden xs:inline">Export CSV</span>
-              <span className="xs:hidden">CSV</span>
-            </button>
-          
+
+        {/* Right: Export Button */}
+        <div className="relative flex-shrink-0">
+          <button
+            onClick={() => setShowExportMenu(!showExportMenu)}
+            disabled={isExporting || chartData.length === 0}
+            className="bg-yellow-50 hover:bg-yellow-100 text-yellow-700 border border-yellow-200 text-xs font-semibold px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 transition disabled:opacity-50">
+            {isExporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+            <span className="hidden sm:inline">Export CSV</span>
+          </button>
+
           {showExportMenu && !isExporting && chartData.length > 0 && (
-            <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-xl border border-gray-200 z-50">
-              <div className="p-4">
-                <h4 className="text-sm font-bold text-gray-800 mb-3">Export Options</h4>
-                
+            <div className="absolute right-0 mt-2 w-72 bg-white rounded-lg shadow-xl border border-gray-200 z-50">
+              <div className="p-3">
+                <h4 className="text-xs font-bold text-gray-800 mb-2">Export Options</h4>
+
                 {/* Sensor Selection */}
-                <div className="mb-3">
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Sensors</label>
-                  <div className="flex gap-2">
+                <div className="mb-2">
+                  <label className="block text-[10px] font-medium text-gray-600 mb-1">Sensors</label>
+                  <div className="flex gap-1.5">
                     <button
                       onClick={() => setExportSensorSelection('all')}
-                      className={`flex-1 px-3 py-1.5 text-xs rounded transition-all ${
-                        exportSensorSelection === 'all'
-                          ? 'bg-blue-500 text-white'
-                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                      }`}
+                      className={`flex-1 px-2 py-1 text-[10px] rounded transition-all ${exportSensorSelection === 'all'
+                        ? 'bg-blue-500 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        }`}
                     >
                       All Sensors
                     </button>
                     {!allSensorsSelected && (
                       <button
                         onClick={() => setExportSensorSelection('selected')}
-                        className={`flex-1 px-3 py-1.5 text-xs rounded transition-all ${
-                          exportSensorSelection === 'selected'
-                            ? 'bg-blue-500 text-white'
-                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                        }`}
+                        className={`flex-1 px-2 py-1 text-[10px] rounded transition-all ${exportSensorSelection === 'selected'
+                          ? 'bg-blue-500 text-white'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                          }`}
                       >
                         Selected ({Object.values(visibleSeries).filter(v => v).length})
                       </button>
@@ -375,77 +362,74 @@ const HistoricalChart = ({
                   </div>
                 </div>
 
-                {/* Time Range Selection */}
-                <div className="mb-3">
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Time Range</label>
-                  <select
-                    value={exportTimeRange}
-                    onChange={(e) => setExportTimeRange(e.target.value)}
-                    className="w-full px-3 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="1m">Last 1 Minute</option>
-                    <option value="5m">Last 5 Minutes</option>
-                    <option value="15m">Last 15 Minutes</option>
-                    <option value="1h">Last 1 Hour</option>
-                    <option value="6h">Last 6 Hours</option>
-                    <option value="24h">Last 24 Hours</option>
-                  </select>
-                </div>
-
-                {/* Data Interval Selection */}
-                <div className="mb-4">
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Data Interval</label>
-                  <select
-                    value={exportDataInterval}
-                    onChange={(e) => setExportDataInterval(e.target.value)}
-                    className="w-full px-3 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="auto">Auto</option>
-                    <option value="1s">1 Second</option>
-                    <option value="5s">5 Seconds</option>
-                    <option value="1m">1 Minute</option>
-                    <option value="5m">5 Minutes</option>
-                    <option value="1h">1 Hour</option>
-                  </select>
+                {/* Time Range and Interval in row */}
+                <div className="grid grid-cols-2 gap-2 mb-3">
+                  <div>
+                    <label className="block text-[10px] font-medium text-gray-600 mb-1">Time Range</label>
+                    <select
+                      value={exportTimeRange}
+                      onChange={(e) => setExportTimeRange(e.target.value)}
+                      className="w-full px-2 py-1 text-[10px] border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    >
+                      <option value="1m">1 Minute</option>
+                      <option value="5m">5 Minutes</option>
+                      <option value="15m">15 Minutes</option>
+                      <option value="1h">1 Hour</option>
+                      <option value="6h">6 Hours</option>
+                      <option value="24h">24 Hours</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-medium text-gray-600 mb-1">Interval</label>
+                    <select
+                      value={exportDataInterval}
+                      onChange={(e) => setExportDataInterval(e.target.value)}
+                      className="w-full px-2 py-1 text-[10px] border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    >
+                      <option value="auto">Auto</option>
+                      <option value="1s">1 Second</option>
+                      <option value="5s">5 Seconds</option>
+                      <option value="1m">1 Minute</option>
+                      <option value="5m">5 Minutes</option>
+                      <option value="1h">1 Hour</option>
+                    </select>
+                  </div>
                 </div>
 
                 {/* Action Buttons */}
-                <div className="flex gap-2 pt-2 border-t border-gray-200">
+                <div className="flex gap-1.5 pt-2 border-t border-gray-100">
                   <button
                     onClick={() => setShowExportMenu(false)}
-                    className="flex-1 px-3 py-2 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-all"
+                    className="flex-1 px-2 py-1.5 text-[10px] bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-all"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={exportSensorSelection === 'all' ? handleExportAll : handleExportSelected}
-                    className="flex-1 px-3 py-2 text-xs bg-blue-500 text-white rounded hover:bg-blue-600 transition-all font-medium flex items-center justify-center gap-1"
+                    className="flex-1 px-2 py-1.5 text-[10px] bg-blue-500 text-white rounded hover:bg-blue-600 transition-all font-medium flex items-center justify-center gap-1"
                   >
-                    <Download className="w-3 h-3" />
+                    <Download className="w-2.5 h-2.5" />
                     Export
                   </button>
                 </div>
 
-                {/* Quick Export with Current View */}
-                <div className="mt-2 pt-2 border-t border-gray-100">
-                  <button
-                    onClick={() => handleQuickExport(exportSensorSelection)}
-                    className="w-full px-3 py-1.5 text-xs text-gray-600 hover:text-gray-800 hover:bg-gray-50 rounded transition-all text-center"
-                  >
-                    Quick Export (Current View)
-                  </button>
-                </div>
+                {/* Quick Export */}
+                <button
+                  onClick={() => handleQuickExport(exportSensorSelection)}
+                  className="w-full mt-1.5 px-2 py-1 text-[10px] text-gray-500 hover:text-gray-700 hover:bg-gray-50 rounded transition-all text-center"
+                >
+                  Quick Export (Current View)
+                </button>
               </div>
             </div>
           )}
         </div>
       </div>
-      </div>
 
       {/* Click outside to close export menu */}
       {showExportMenu && (
-        <div 
-          className="fixed inset-0 z-40" 
+        <div
+          className="fixed inset-0 z-40"
           onClick={() => setShowExportMenu(false)}
         />
       )}
@@ -463,7 +447,7 @@ const HistoricalChart = ({
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4 shadow-2xl">
             <h3 className="text-lg font-bold text-gray-800 mb-4">Custom Time Range</h3>
-            
+
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Time Range</label>
@@ -536,9 +520,9 @@ const HistoricalChart = ({
       {/* (Compact selectors moved to the visibility toolbar; large selector bar removed) */}
 
       {/* Toggles Toolbar with compact Time Range + Interval selectors */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4 sm:mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3">
         {/* Sensor toggles - scrollable on mobile */}
-        <div className="flex-1 overflow-x-auto pb-2 sm:pb-0 scrollbar-hide">
+        <div className="flex-1 overflow-x-auto pb-1 sm:pb-0 scrollbar-hide">
           <SensorToggleToolbar
             visibleSeries={visibleSeries}
             toggleSeries={toggleSeries}
@@ -547,11 +531,10 @@ const HistoricalChart = ({
           />
         </div>
 
-        {/* Time Range and Interval selectors */}
-        <div className="flex items-center gap-2 sm:gap-3 sm:ml-4">
-          <div className="flex items-center gap-1 sm:gap-2">
-            <span className="text-xs text-gray-500 sm:hidden">Range:</span>
-            <span className="text-sm text-gray-600 hidden sm:inline">Time Range</span>
+        {/* Time Range and Interval selectors - Compact */}
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
+            <span className="text-[10px] text-gray-500">Range</span>
             <select
               value={timeRange.startsWith('custom_') ? 'custom' : timeRange}
               onChange={e => {
@@ -561,7 +544,7 @@ const HistoricalChart = ({
                   onTimeRangeChange && onTimeRangeChange(e.target.value);
                 }
               }}
-              className="px-2 sm:px-3 py-1 rounded-lg text-xs border border-gray-300 bg-white"
+              className="px-1.5 py-0.5 rounded text-[10px] border border-gray-300 bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
             >
               <option value="1m">1m</option>
               <option value="5m">5m</option>
@@ -573,9 +556,8 @@ const HistoricalChart = ({
             </select>
           </div>
 
-          <div className="flex items-center gap-1 sm:gap-2">
-            <span className="text-xs text-gray-500 sm:hidden">Int:</span>
-            <span className="text-sm text-gray-600 hidden sm:inline">Interval</span>
+          <div className="flex items-center gap-1">
+            <span className="text-[10px] text-gray-500">Interval</span>
             <select
               value={dataInterval.startsWith('custom_interval_') ? 'custom' : dataInterval}
               onChange={e => {
@@ -585,7 +567,7 @@ const HistoricalChart = ({
                   onDataIntervalChange && onDataIntervalChange(e.target.value);
                 }
               }}
-              className="px-2 sm:px-3 py-1 rounded-lg text-xs border border-gray-300 bg-white"
+              className="px-1.5 py-0.5 rounded text-[10px] border border-gray-300 bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
             >
               {['auto', '1s', '5s', '1m', '5m', '1h'].map(interval => (
                 <option key={interval} value={interval} disabled={!validIntervals.includes(interval)}>
@@ -597,75 +579,75 @@ const HistoricalChart = ({
           </div>
         </div>
       </div>
-      
+
       {/* Chart Container - responsive height */}
       <div className="h-64 sm:h-80 md:h-96 w-full flex-grow relative">
         {isLoading ? (
-           <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-400 bg-white/50 z-10">
-             <Loader2 className="animate-spin w-8 sm:w-10 h-8 sm:h-10 mb-2 sm:mb-3 text-blue-500" />
-             <span className="text-xs sm:text-sm font-medium">Loading Data...</span>
-           </div>
+          <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-400 bg-white/50 z-10">
+            <Loader2 className="animate-spin w-8 sm:w-10 h-8 sm:h-10 mb-2 sm:mb-3 text-blue-500" />
+            <span className="text-xs sm:text-sm font-medium">Loading Data...</span>
+          </div>
         ) : displayData.length === 0 ? (
-           <div className="absolute inset-0 flex items-center justify-center text-gray-400 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
-             <span className="text-xs sm:text-sm">No data available for this period</span>
-           </div>
+          <div className="absolute inset-0 flex items-center justify-center text-gray-400 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
+            <span className="text-xs sm:text-sm">No data available for this period</span>
+          </div>
         ) : (
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={displayData} margin={{ top: 5, right: 5, left: -25, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
-            <XAxis 
-                dataKey="time" 
-                tick={{ fontSize: 10, fill: '#9ca3af' }} 
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={displayData} margin={{ top: 5, right: 5, left: -25, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
+              <XAxis
+                dataKey="time"
+                tick={{ fontSize: 10, fill: '#9ca3af' }}
                 tickLine={false}
                 axisLine={{ stroke: '#e5e7eb' }}
                 minTickGap={20}
                 interval="preserveStartEnd"
-            />
-            
-            {/* Left Axis for most metrics */}
-            <YAxis 
-                yAxisId="left" 
-                tick={{ fontSize: 10, fill: '#9ca3af' }} 
+              />
+
+              {/* Left Axis for most metrics */}
+              <YAxis
+                yAxisId="left"
+                tick={{ fontSize: 10, fill: '#9ca3af' }}
                 tickLine={false}
                 axisLine={false}
                 domain={[0, 'auto']}
                 width={35}
-            />
-            
-            {/* Right Axis specifically for Light (high values; eg 800/900 lux) */}
-            <YAxis 
-                yAxisId="right" 
-                orientation="right" 
-                tick={{ fontSize: 10, fill: '#eab308' }} 
+              />
+
+              {/* Right Axis specifically for Light (high values; eg 800/900 lux) */}
+              <YAxis
+                yAxisId="right"
+                orientation="right"
+                tick={{ fontSize: 10, fill: '#eab308' }}
                 tickLine={false}
                 axisLine={false}
                 hide={!visibleSeries.light} // Hide axis if light is hidden
                 width={35}
-            />
-            
-            <Tooltip 
+              />
+
+              <Tooltip
                 contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', fontSize: '11px' }}
                 itemStyle={{ fontSize: '11px', fontWeight: 600 }}
-            />
-            
-            {visibleSeries.moisture && (
+              />
+
+              {visibleSeries.moisture && (
                 <Line yAxisId="left" type="monotone" dataKey="moisture" name="Moisture (%)" stroke="#06b6d4" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
-            )}
-            {visibleSeries.temperature && (
+              )}
+              {visibleSeries.temperature && (
                 <Line yAxisId="left" type="monotone" dataKey="temperature" name="Temp (°C)" stroke="#22c55e" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
-            )}
-            {visibleSeries.humidity && (
+              )}
+              {visibleSeries.humidity && (
                 <Line yAxisId="left" type="monotone" dataKey="humidity" name="Humidity (%)" stroke="#3b82f6" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
-            )}
-            {visibleSeries.battery && (
+              )}
+              {visibleSeries.battery && (
                 <Line yAxisId="left" type="step" dataKey="battery" name="Battery (%)" stroke="#a855f7" strokeWidth={3} dot={false} />
-            )}
-            {visibleSeries.light && (
+              )}
+              {visibleSeries.light && (
                 <Line yAxisId="right" type="monotone" dataKey="light" name="Light (lux)" stroke="#eab308" strokeWidth={3} dot={false} activeDot={{ r: 6 }} />
-            )}
-            
-          </LineChart>
-        </ResponsiveContainer>
+              )}
+
+            </LineChart>
+          </ResponsiveContainer>
         )}
       </div>
     </div>
