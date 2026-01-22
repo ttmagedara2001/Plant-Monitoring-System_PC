@@ -371,7 +371,7 @@ export const getHistoricalData = async (deviceId) => {
     const startTime = new Date();
     startTime.setDate(startTime.getDate() - 1);
 
-    const response = await api.get("/user/get-stream-data/device", {
+    const response = await api.get("/get-stream-data/device", {
       params: {
         deviceId: deviceId,
         startTime: startTime.toISOString(),
@@ -418,7 +418,7 @@ export const updateDeviceState = async (deviceId, topic, payload = {}) => {
       JSON.stringify(requestBody, null, 2)
     );
 
-    const response = await api.post(`/update-state-details`, requestBody);
+    const response = await api.post("/user/update-state-details", requestBody);
 
     console.log("✅ Device state update response:", response.data);
     return response.data;

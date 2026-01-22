@@ -5,6 +5,7 @@ import ActionButton from './ActionButton';
 import AutoModeToggle from './AutoModeToggle';
 import PageHeader from './PageHeader';
 import ValidationModal from './ValidationModal';
+import { updatePumpStatus } from '../Service/deviceService';
 
 const DEFAULT_THRESHOLDS = {
   moisture: { min: 20, max: 60 },
@@ -91,14 +92,35 @@ const DeviceSettingsPage = ({ deviceId: propDeviceId }) => {
     setAutoMode(prev => !prev);
   };
 
-  const handlePumpToggle = () => {
-    setPumpOn(prev => {
-      const next = !prev;
-      // persist immediately so dashboard or other tabs can react
-      persistSettings({ pumpOn: next });
-      // Pump status changes are NOT notified (only critical sensor alerts trigger notifications)
-      return next;
-    });
+  const handlePumpToggle = async () => {
+    // Don't allow toggling in auto mode
+    if (autoMode) {
+      console.log('⚠️ Pump control disabled in auto mode');
+      return;
+    }
+
+    const nextPumpState = !pumpOn;
+    const pumpCommand = nextPumpState ? 'ON' : 'OFF';
+    const currentMoisture = statusValues.moisture !== 'unknown' ? Number(statusValues.moisture) : null;
+
+    console.log(`🔄 [Manual Mode] Toggling pump to ${pumpCommand}`);
+    console.log(`   📊 Current moisture: ${currentMoisture}`);
+
+    // Update local UI immediately for responsiveness
+    setPumpOn(nextPumpState);
+    persistSettings({ pumpOn: nextPumpState });
+
+    try {
+      // Call API to send pump command
+      // Payload: { deviceId, topic: "pump", payload: { pump: "on"|"off", moisture: <value> } }
+      await updatePumpStatus(deviceId, pumpCommand, 'pump', 'manual', currentMoisture);
+      console.log(`✅ [API] Pump command sent: ${pumpCommand}`);
+    } catch (error) {
+      console.error('❌ [API] Failed to send pump command:', error);
+      // Revert UI state on failure
+      setPumpOn(!nextPumpState);
+      persistSettings({ pumpOn: !nextPumpState });
+    }
   };
 
   // Live status values (listen to global snapshot or dispatched events)
@@ -111,7 +133,7 @@ const DeviceSettingsPage = ({ deviceId: propDeviceId }) => {
   });
 
   useEffect(() => {
-    // initialize from global snapshot if present (also sync pump and mode)
+    // Initialize sensor values and pump state from global snapshot
     try {
       const snap = window.__latestLiveData || null;
       if (snap && typeof snap === 'object') {
@@ -122,14 +144,21 @@ const DeviceSettingsPage = ({ deviceId: propDeviceId }) => {
           light: typeof snap.light !== 'undefined' ? snap.light : prev.light,
           battery: typeof snap.battery !== 'undefined' ? snap.battery : prev.battery,
         }));
-        if (typeof snap.pumpStatus !== 'undefined') setPumpOn(String(snap.pumpStatus).toUpperCase() === 'ON');
-        if (typeof snap.pumpMode !== 'undefined') setAutoMode(String(snap.pumpMode).toLowerCase() === 'auto');
+        // Sync pump status from state messages (pumpStatus only changes via state topic messages, not sensor data)
+        if (typeof snap.pumpStatus !== 'undefined') {
+          setPumpOn(String(snap.pumpStatus).toUpperCase() === 'ON');
+        }
+        if (typeof snap.pumpMode !== 'undefined') {
+          setAutoMode(String(snap.pumpMode).toLowerCase() === 'auto');
+        }
       }
     } catch (e) { }
 
     const handler = (e) => {
       const d = e && e.detail ? e.detail : e;
       if (!d) return;
+
+      // Sync sensor values
       setStatusValues(prev => ({
         moisture: typeof d.moisture !== 'undefined' ? d.moisture : prev.moisture,
         temperature: typeof d.temperature !== 'undefined' ? d.temperature : prev.temperature,
@@ -138,15 +167,15 @@ const DeviceSettingsPage = ({ deviceId: propDeviceId }) => {
         battery: typeof d.battery !== 'undefined' ? d.battery : prev.battery,
       }));
 
-      // Sync pump status and mode with live updates so UI reflects MQTT messages in real time
-      try {
-        if (typeof d.pumpStatus !== 'undefined') {
-          setPumpOn(String(d.pumpStatus).toUpperCase() === 'ON');
-        }
-        if (typeof d.pumpMode !== 'undefined') {
-          setAutoMode(String(d.pumpMode).toLowerCase() === 'auto');
-        }
-      } catch (e) { }
+      // Sync pump status and mode from state topic messages
+      // Note: pumpStatus/pumpMode in liveData ONLY change when explicit state messages arrive via WebSocket
+      // (not from sensor batch updates), so it's safe to sync here
+      if (typeof d.pumpStatus !== 'undefined') {
+        setPumpOn(String(d.pumpStatus).toUpperCase() === 'ON');
+      }
+      if (typeof d.pumpMode !== 'undefined') {
+        setAutoMode(String(d.pumpMode).toLowerCase() === 'auto');
+      }
     };
 
     window.addEventListener('live:update', handler);
@@ -482,7 +511,7 @@ const DeviceSettingsPage = ({ deviceId: propDeviceId }) => {
 
                     <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
                       <div className="flex flex-col items-start">
-                        <div className="font-semibold text-gray-700 text-sm sm:text-base">Manual Control</div>
+                        <div className="font-semibold text-gray-700 text-sm sm:text-base">{autoMode ? 'Auto Control' : 'Manual Control'}</div>
                         <div className="flex flex-col items-start gap-1 mt-1">
                           <div className="flex items-center gap-2">
                             <span className="text-xs sm:text-sm text-gray-600">Status:</span>

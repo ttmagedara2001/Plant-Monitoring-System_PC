@@ -676,7 +676,7 @@ const Dashboard = ({ deviceId: propDeviceId, liveData: propLiveData, settings: p
         <div className={`w-full max-w-7xl mx-auto rounded-lg sm:rounded-xl py-2 sm:py-3 text-center border transition-colors duration-500 shadow-sm ${pumpStatus === 'ON' ? 'bg-green-100 border-green-300 text-green-900' : 'bg-blue-100 border-blue-300 text-blue-900'
           }`}>
           <h2 className="text-base sm:text-lg font-semibold">
-            Pump: {pumpStatus} <span className="text-sm font-normal">({liveData?.pumpMode || 'Optimal'})</span>
+            Pump: {pumpStatus} <span className="text-sm font-normal">({settings?.autoMode ? 'auto' : 'manual'})</span>
           </h2>
         </div>
       </div>
