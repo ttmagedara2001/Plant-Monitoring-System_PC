@@ -6,7 +6,7 @@ import Dashboard from './Components/Dashboard';
 import DeviceSettingsPage from './Components/DeviceSettingsPage';
 import { useAuth } from './Context/AuthContext';
 import { webSocketClient } from './Service/webSocketClient';
-import { updatePumpStatus } from './Service/deviceService';
+import { updatePumpStatus, updateDeviceMode } from './Service/deviceService';
 import { useNotifications } from './Context/NotificationContext';
 
 function App() {
@@ -43,7 +43,7 @@ function App() {
     light: 0,
     battery: 0,
     pumpStatus: 'OFF',
-    pumpMode: 'manual',
+    pumpMode: undefined, // only set when explicit state message arrives from backend
   });
   const [isConnected, setIsConnected] = useState(false);
 
@@ -190,49 +190,70 @@ function App() {
     return () => window.removeEventListener('settings:updated', onSettingsUpdated);
   }, [selectedDevice]);
 
-  // Automation: when autoMode is enabled in settings, control pump based on moisture
+  // Automation: control pump based on moisture — auto mode sends HTTP commands, manual mode sends notifications
   const _lastAuto = useRef({ cmd: null, ts: 0 });
+  const _lastManualNotify = useRef(0); // timestamp of last manual-mode notification
   useEffect(() => {
     try {
-      if (!settings || !settings.autoMode) return;
+      if (!settings) return;
       const raw = liveData?.moisture;
       if (raw === undefined || raw === null) return;
       const val = Number(raw);
       if (!isFinite(val)) return;
+      if (!selectedDevice) return;
 
       // derive min from settings with fallback
       let min = parseFloat(settings.moistureMin);
       if (isNaN(min)) min = 20;
 
-      // Decide desired pump state: ON when moisture <= min (warning/critical), OFF otherwise
-      const desired = val <= min ? 'ON' : 'OFF';
+      const moistureLow = val < min;
 
-      // Avoid sending duplicate commands too often
-      const now = Date.now();
-      const last = _lastAuto.current;
-      const sameAsLast = last.cmd === desired && now - last.ts < 5000;
-      if (sameAsLast) return;
+      // ── AUTO MODE: send pump ON/OFF via HTTP ──
+      if (settings.autoMode) {
+        const desired = moistureLow ? 'ON' : 'OFF';
 
-      // Only act for the currently selected device
-      if (!selectedDevice) return;
+        // Avoid sending duplicate commands too often (5s debounce)
+        const now = Date.now();
+        const last = _lastAuto.current;
+        if (last.cmd === desired && now - last.ts < 5000) return;
 
-      // If pump already in desired state, skip
-      if ((liveData?.pumpStatus || '').toUpperCase() === desired) return;
+        // If pump already in desired state, skip
+        if ((liveData?.pumpStatus || '').toUpperCase() === desired) return;
 
-      console.log('[App] AUTO MODE: sending pump command', { device: selectedDevice, desired, moisture: val, min });
-      // Pass moisture value to include in the payload
-      updatePumpStatus(selectedDevice, desired, 'pump', 'auto', val)
-        .then((res) => {
-          _lastAuto.current = { cmd: desired, ts: Date.now() };
-          console.log('[App] AUTO MODE: pump command response', res);
-        })
-        .catch((err) => {
-          console.error('[App] AUTO MODE: pump command failed', err);
+        console.log('[App] AUTO MODE: sending pump command', { device: selectedDevice, desired, moisture: val, min });
+        updateDeviceMode(selectedDevice, 'auto').catch(() => {});
+        updatePumpStatus(selectedDevice, desired, 'pmc/pump', 'auto', val)
+          .then((res) => {
+            _lastAuto.current = { cmd: desired, ts: Date.now() };
+            console.log('[App] AUTO MODE: pump command response', res);
+          })
+          .catch((err) => {
+            console.error('[App] AUTO MODE: pump command failed', err);
+          });
+        return;
+      }
+
+      // ── MANUAL MODE: notify user when moisture is low ──
+      if (moistureLow) {
+        const now = Date.now();
+        // Debounce: only notify once every 60 seconds
+        if (now - _lastManualNotify.current < 60_000) return;
+        // Don't notify if pump is already ON
+        if ((liveData?.pumpStatus || '').toUpperCase() === 'ON') return;
+
+        _lastManualNotify.current = now;
+        console.log('[App] MANUAL MODE: moisture low, notifying user', { moisture: val, min });
+        addNotification({
+          type: 'warning',
+          message: `💧 Moisture is low (${val}%). Please turn on the pump manually.`,
+          timestamp: new Date().toISOString(),
+          meta: { deviceId: selectedDevice, sensor: 'moisture', value: val, threshold: min },
         });
+      }
     } catch (e) {
-      console.warn('[App] auto control failed', e);
+      console.warn('[App] moisture control failed', e);
     }
-  }, [settings?.autoMode, liveData?.moisture, selectedDevice, liveData?.pumpStatus]);
+  }, [settings?.autoMode, settings?.moistureMin, liveData?.moisture, selectedDevice, liveData?.pumpStatus, addNotification]);
 
   // Store data handler in ref to ensure compatibility with webSocketClient
   const handleDataRef = useRef(null);
@@ -322,7 +343,7 @@ function App() {
       light: undefined,
       battery: undefined,
       pumpStatus: 'OFF',
-      pumpMode: 'manual',
+      pumpMode: undefined, // only set when explicit state message arrives from backend
     });
 
     // Valid handler required

@@ -2,7 +2,7 @@ import api from "./api";
 
 /**
  * Fetch Historical Stream Data for a specific topic
- * POST user/get-stream-data/device/topic
+ * POST /get-stream-data/device/topic
  * Topics: temp4/new, moisture, humidity, battery, light, etc.
  * Requires: deviceId, topic, startTime, endTime, pagination, pageSize
  */
@@ -12,7 +12,7 @@ export const getStreamDataByTopic = async (
   startTime = null,
   endTime = null,
   pagination = 0,
-  pageSize = 100
+  pageSize = 100,
 ) => {
   try {
     // Helper function to format date to ISO-8601 without milliseconds
@@ -58,11 +58,11 @@ export const getStreamDataByTopic = async (
           pageSize: payload.pageSize,
         },
         null,
-        2
-      )
+        2,
+      ),
     );
 
-    const response = await api.post(`user/get-stream-data/device/topic`, payload);
+    const response = await api.post(`/get-stream-data/device/topic`, payload);
 
     console.log(`📥 [HTTP] Response for ${topic}:`, {
       status: response.data.status,
@@ -115,9 +115,9 @@ export const getStreamDataByTopic = async (
 
 /**
  * Fetch State Details for a specific device and topic
- * POST /get-state-details/device/topic
- * Topics can include: temp, moisture, humidity, battery, light, motor status, etc.
- * Example: getStateDetails("device0000", "temp")
+ * POST /get-state-details/device
+ * Topics can include: pmc/temperature, pmc/moisture, pmc/humidity, pmc/battery, pmc/light, pmc/pump, etc.
+ * Example: getStateDetails("device0000", "pmc/temperature")
  */
 export const getStateDetails = async (deviceId, topic) => {
   try {
@@ -128,12 +128,12 @@ export const getStateDetails = async (deviceId, topic) => {
       topic: topic,
     };
 
-    const response = await api.post(`/get-state-details/device/topic`, payload);
+    const response = await api.post(`/get-state-details/device`, payload);
 
     if (response.data.status === "Success") {
       console.log(
         `✅ Successfully fetched state details for ${topic}:`,
-        response.data.data
+        response.data.data,
       );
       return response.data.data;
     }
@@ -165,40 +165,39 @@ export const getStateDetails = async (deviceId, topic) => {
 export const getAllStreamData = async (
   deviceId,
   startTime = null,
-  endTime = null
+  endTime = null,
 ) => {
   // Try multiple topic naming conventions
   // Format 1: Simple names (temp, moisture, humidity, battery, light)
   // Format 2: Extended names (temp4/new, temp5/new, etc.)
   const topicVariants = [
-    // Try simple names first (most common)
-    { name: "temp", label: "temperature" },
-    { name: "moisture", label: "moisture" },
-    { name: "humidity", label: "humidity" },
-    { name: "battery", label: "battery" },
-    { name: "light", label: "light" },
+    { name: "pmc/temperature", label: "temperature" },
+    { name: "pmc/moisture", label: "moisture" },
+    { name: "pmc/humidity", label: "humidity" },
+    { name: "pmc/battery", label: "battery" },
+    { name: "pmc/light", label: "light" },
   ];
 
   try {
     console.log(`📊 [HTTP] Fetching historical data for ${deviceId}`);
     console.log(
-      `📅 [HTTP] Time range: ${startTime || "Last 24h"} to ${endTime || "Now"}`
+      `📅 [HTTP] Time range: ${startTime || "Last 24h"} to ${endTime || "Now"}`,
     );
 
     // Fetch all topics in parallel with time parameters
     const results = await Promise.allSettled(
       topicVariants.map((topic) =>
-        getStreamDataByTopic(deviceId, topic.name, startTime, endTime, 0, 100)
-      )
+        getStreamDataByTopic(deviceId, topic.name, startTime, endTime, 0, 100),
+      ),
     );
 
     // Count successful vs failed requests
     const successful = results.filter(
-      (r) => r.status === "fulfilled" && r.value.length > 0
+      (r) => r.status === "fulfilled" && r.value.length > 0,
     ).length;
     const failed = results.filter((r) => r.status === "rejected").length;
     const empty = results.filter(
-      (r) => r.status === "fulfilled" && r.value.length === 0
+      (r) => r.status === "fulfilled" && r.value.length === 0,
     ).length;
 
     // Detailed logging for debugging
@@ -214,17 +213,17 @@ export const getAllStreamData = async (
       console.log(`✅ [HTTP] Loaded ${successful} topics with historical data`);
     } else if (!window.__historicalDataWarningShown) {
       console.warn(
-        `ℹ️ [HTTP] No historical data available yet. Real-time data will still work.`
+        `ℹ️ [HTTP] No historical data available yet. Real-time data will still work.`,
       );
       console.warn(`💡 [HTTP] Possible reasons:`);
       console.warn(
-        `   1. Device recently added - ProtoNest hasn't saved MQTT data to DB yet`
+        `   1. Device recently added - ProtoNest hasn't saved MQTT data to DB yet`,
       );
       console.warn(
-        `   2. Topic names mismatch - check what topic names are saved in DB`
+        `   2. Topic names mismatch - check what topic names are saved in DB`,
       );
       console.warn(
-        `   3. Device not in your account - verify device ownership`
+        `   3. Device not in your account - verify device ownership`,
       );
       window.__historicalDataWarningShown = true;
     }
@@ -239,7 +238,7 @@ export const getAllStreamData = async (
 
       if (result.status === "fulfilled" && Array.isArray(result.value)) {
         console.log(
-          `🔍 [HTTP] Processing ${topicName}: ${result.value.length} records`
+          `🔍 [HTTP] Processing ${topicName}: ${result.value.length} records`,
         );
 
         result.value.forEach((item) => {
@@ -271,7 +270,7 @@ export const getAllStreamData = async (
             } catch (e) {
               console.warn(
                 `⚠️ Failed to parse payload for ${topicName}:`,
-                item.payload
+                item.payload,
               );
               parsedData = item;
             }
@@ -280,12 +279,12 @@ export const getAllStreamData = async (
           }
 
           // Map topic to the correct field using label
-          if (label === "temperature" || topicName === "temp") {
+          if (label === "temperature" || topicName === "pmc/temperature") {
             dataPoint.temperature = Number(
-              parsedData.temp || parsedData.temperature || item.value || 0
+              parsedData.temp || parsedData.temperature || item.value || 0,
             );
             console.log(
-              `  📊 [${timestamp}] temperature: ${dataPoint.temperature}`
+              `  📊 [${timestamp}] temperature: ${dataPoint.temperature}`,
             );
           } else if (label === "moisture") {
             dataPoint.moisture = Number(parsedData.moisture || item.value || 0);
@@ -304,14 +303,14 @@ export const getAllStreamData = async (
       } else if (result.status === "rejected") {
         console.warn(
           `⚠️ [HTTP] Failed to fetch ${topicName} data:`,
-          result.reason?.message
+          result.reason?.message,
         );
       }
     });
 
     // Convert to array and sort by timestamp
     const chartData = Array.from(dataByTimestamp.values()).sort(
-      (a, b) => new Date(a.timestamp) - new Date(b.timestamp)
+      (a, b) => new Date(a.timestamp) - new Date(b.timestamp),
     );
 
     // Fill in missing values with last known values to create continuous lines
@@ -341,16 +340,16 @@ export const getAllStreamData = async (
 
     if (chartData.length > 0) {
       console.log(
-        `✅ [HTTP] Historical data: ${chartData.length} data points combined`
+        `✅ [HTTP] Historical data: ${chartData.length} data points combined`,
       );
       console.log(
         `📅 [HTTP] Time range: ${chartData[0].time} to ${
           chartData[chartData.length - 1].time
-        }`
+        }`,
       );
       console.log(
         `📊 [HTTP] Latest data point:`,
-        chartData[chartData.length - 1]
+        chartData[chartData.length - 1],
       );
     }
     return chartData;
@@ -415,21 +414,21 @@ export const updateDeviceState = async (deviceId, topic, payload = {}) => {
 
     console.log(
       "📤 Update state request body:",
-      JSON.stringify(requestBody, null, 2)
+      JSON.stringify(requestBody, null, 2),
     );
 
-    const response = await api.post("/user/update-state-details", requestBody);
+    const response = await api.post("/update-state-details", requestBody);
 
     console.log("✅ Device state update response:", response.data);
     return response.data;
   } catch (error) {
     if (error.response?.status === 405) {
       console.error(
-        "❌ Method not allowed for update-state-details. Server may not support POST."
+        "❌ Method not allowed for update-state-details. Server may not support POST.",
       );
       console.error(
         "Allowed methods:",
-        error.response.headers?.allow || "Unknown"
+        error.response.headers?.allow || "Unknown",
       );
     }
 
@@ -464,30 +463,30 @@ export const updateDeviceState = async (deviceId, topic, payload = {}) => {
 /**
  * Helper function for updating pump status via HTTP API
  * The backend will receive this and forward to MQTT broker
- * 
+ *
  * API: POST /update-state-details
  * Payload format:
  * {
  *   "deviceId": "deviceid",
- *   "topic": "pump",
+ *   "topic": "pmc/pump",
  *   "payload": {
  *     "moisture": <value>,
  *     "pump": "on" | "off"
  *   }
  * }
- * 
+ *
  * @param {string} deviceId - Device ID
  * @param {string} status - Pump status ('ON' or 'OFF')
- * @param {string} topic - Topic to update (default: 'pump')
+ * @param {string} topic - Topic to update (default: 'pmc/pump')
  * @param {string} mode - Control mode ('auto' or 'manual', default: 'auto')
  * @param {number|null} moistureValue - Current moisture reading (optional, for context)
  */
 export const updatePumpStatus = async (
   deviceId,
   status,
-  topic = "pump",
+  topic = "pmc/pump",
   mode = "auto",
-  moistureValue = null
+  moistureValue = null,
 ) => {
   // Convert status to lowercase for MQTT compatibility
   const pumpValue = status.toLowerCase(); // "ON" -> "on", "OFF" -> "off"
@@ -516,3 +515,26 @@ export const updatePumpStatus = async (
 
 // Note: Device settings (thresholds) are managed in frontend localStorage only
 // No backend API available for settings, so no updateDeviceSettings() function needed
+
+/**
+ * Send mode change (auto/manual) to the backend via HTTP API
+ * POST /update-state-details
+ * Topic: pmc/mode
+ *
+ * @param {string} deviceId - Device ID
+ * @param {string} mode - 'auto' or 'manual'
+ * @returns {Promise} API response
+ */
+export const updateDeviceMode = async (deviceId, mode) => {
+  const payload = {
+    mode: mode.toLowerCase(),
+  };
+
+  console.log(`📤 Sending mode change via HTTP API:`, {
+    deviceId,
+    topic: "pmc/mode",
+    payload,
+  });
+
+  return updateDeviceState(deviceId, "pmc/mode", payload);
+};

@@ -55,7 +55,7 @@ The application uses **Cookie-Based HttpOnly Authentication** for enhanced secur
 
 ### How It Works
 
-1. **Login** (`POST /user/get-token`)
+1. **Login** (`POST /get-token`)
    - Send email and secretKey in request body
    - Server returns 200 OK with **no response body**
    - JWT and Refresh Token are set as **HttpOnly cookies** automatically
@@ -78,11 +78,14 @@ The application uses **Cookie-Based HttpOnly Authentication** for enhanced secur
 ### Environment Variables
 
 ```env
-# API Configuration
-VITE_API_BASE_URL=https://api.protonestconnect.co/api/v1
+# API Configuration (includes /user path)
+VITE_API_BASE_URL=https://api.protonestconnect.co/api/v1/user
 
-# WebSocket Configuration  
+# WebSocket Configuration
 VITE_WS_URL=wss://api.protonestconnect.co/ws
+
+# Device ID
+VITE_DEVICE_ID=your-device-id
 
 # Auto-login credentials (optional)
 VITE_USER_EMAIL=your-email@example.com
@@ -108,10 +111,11 @@ Live WebSocket updates for 6 key metrics:
 
 Intelligent pump control based on configurable moisture thresholds:
 
-- **Auto Mode** - Automatically turns pump ON when moisture ≤ minimum threshold (default: 20%)
-- **Auto Mode** - Pump turns OFF when moisture > minimum threshold
-- **Mode Tracking** - Device receives mode information (auto/manual) with each command
-- **HTTP API Flow** - PC → `/update-state-details` → Backend → MQTT → Device → Confirmation → WebSocket → UI Update
+- **Auto Mode** - Automatically turns pump ON when moisture < minimum threshold (default: 20%) via HTTP state update
+- **Auto Mode** - Pump automatically turns OFF when moisture ≥ minimum threshold
+- **Manual Mode Notification** - When moisture drops below minimum in manual mode, a notification alerts the user to turn on the pump
+- **Mode Sync** - Mode changes (auto/manual) sent to device via HTTP `pmc/mode` topic
+- **HTTP API Flow** - PC → `/update-state-details` (topic: `pmc/pump`) → Backend → MQTT → Device → Confirmation → WebSocket → UI Update
 
 ### 3. Manual Pump Control
 
@@ -126,7 +130,9 @@ User-controlled pump operation with instant feedback:
 
 Interactive charts showing sensor trends over time:
 
-- **24-Hour Data** - Default view of last 24 hours with configurable time ranges
+- **Flexible Time Ranges** - Presets: 1min, 5min, 15min, 30min, 1h, 3h, 6h, 12h, 24h (default: 24h)
+- **Custom Ranges** - User-definable time range and interval (e.g., last 7h with 1min interval)
+- **Interval Options** - Auto, 1min, 5min, 15min, 30min, 1h
 - **Multi-Line Chart** - All sensors on one graph with Recharts
 - **CSV Export** - Download data for external analysis
 - **Responsive Design** - Zoom, pan, and tooltip interactions
@@ -178,7 +184,7 @@ Seamless switching between multiple IoT devices:
 
 ```
 1. User Login (or Auto-Login from ENV)
-   POST /user/get-token → Sets HttpOnly Cookies
+   POST /get-token → Sets HttpOnly Cookies
                 ↓
 2. WebSocket Connection
    Connect to wss://...ws (cookies sent automatically)
@@ -250,38 +256,52 @@ src/
 
 ## 📡 API Reference
 
-**Base URL:** `https://api.protonestconnect.co/api/v1`  
+**Base URL:** `https://api.protonestconnect.co/api/v1/user`  
 **WebSocket URL:** `wss://api.protonestconnect.co/ws`
 
 ### Authentication Endpoints
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/user/get-token` | POST | Login - sets HttpOnly cookies |
-| `/get-new-token` | GET | Refresh tokens via cookie |
+| Endpoint         | Method | Description                   |
+| ---------------- | ------ | ----------------------------- |
+| `/get-token`     | POST   | Login - sets HttpOnly cookies |
+| `/get-new-token` | GET    | Refresh tokens via cookie     |
 
 ### Data Endpoints
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/user/get-stream-data/device/topic` | POST | Fetch historical sensor data |
-| `/update-state-details` | POST | Send commands to device |
+| Endpoint                        | Method | Description                              |
+| ------------------------------- | ------ | ---------------------------------------- |
+| `/get-stream-data/device`       | GET    | Fetch all historical data for device     |
+| `/get-stream-data/device/topic` | POST   | Fetch historical data for specific topic |
+| `/get-state-details/device`     | POST   | Get current device state                 |
+| `/update-state-details`         | POST   | Send commands to device (pump, mode)     |
+
+### MQTT Topics (pmc/ prefix)
+
+| Topic             | Description                      |
+| ----------------- | -------------------------------- |
+| `pmc/temperature` | Temperature sensor data          |
+| `pmc/humidity`    | Humidity sensor data             |
+| `pmc/moisture`    | Soil moisture sensor data        |
+| `pmc/light`       | Light intensity data             |
+| `pmc/battery`     | Battery level data               |
+| `pmc/pump`        | Pump control commands (ON/OFF)   |
+| `pmc/mode`        | Mode state updates (auto/manual) |
 
 ### WebSocket Topics
 
 - **Stream Data**: `/topic/stream/{deviceId}` - All sensor updates
-- **State Data**: `/topic/state/{deviceId}` - Pump status updates
+- **State Data**: `/topic/state/{deviceId}` - Pump/mode status updates
 
 ---
 
 ## 📚 Documentation
 
-| Document | Purpose |
-|----------|---------|
-| **MQTTX_TESTING_GUIDE.md** | 🧪 MQTT testing with MQTTX client |
-| **PROTONEST_SETUP.md** | ⚙️ ProtoNest platform configuration |
-| **WEBSOCKET_IMPLEMENTATION.md** | 🔌 WebSocket client details |
-| **README.md** | 📖 This documentation |
+| Document                        | Purpose                             |
+| ------------------------------- | ----------------------------------- |
+| **MQTTX_TESTING_GUIDE.md**      | 🧪 MQTT testing with MQTTX client   |
+| **PROTONEST_SETUP.md**          | ⚙️ ProtoNest platform configuration |
+| **WEBSOCKET_IMPLEMENTATION.md** | 🔌 WebSocket client details         |
+| **README.md**                   | 📖 This documentation               |
 
 ---
 
@@ -334,8 +354,8 @@ docker run -p 80:80 plant-monitoring:latest
 ---
 
 **Status:** Production Ready  
-**Last Updated:** January 2026  
-**Version:** 2.0.0 (Cookie-Based Auth)
+**Last Updated:** February 2026  
+**Version:** 2.1.0 (Cookie-Based Auth + pmc/ Topics)
 **Auth Method:** HttpOnly Cookies
 
 ---

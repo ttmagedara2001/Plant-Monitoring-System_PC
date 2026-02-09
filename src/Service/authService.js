@@ -6,12 +6,12 @@ const API_URL = import.meta.env.VITE_API_BASE_URL;
 
 /**
  * Login using cookie-based authentication
- * 
+ *
  * NEW API BEHAVIOR:
  * - POST /user/get-token returns 200 OK with NO response body on success
  * - JWT and Refresh Token are set automatically as HttpOnly cookies by the server
  * - We do NOT store tokens in localStorage/sessionStorage
- * 
+ *
  * @param {string} email - User email
  * @param {string} password - User secret key (from Protonest dashboard)
  * @returns {Promise<{success: true, userId: string}>} - Success indicator and user ID
@@ -33,7 +33,7 @@ export const login = async (email, password) => {
 
     console.log("🔄 Making cookie-based authentication request to:", API_URL);
     console.log(
-      "📋 IMPORTANT: Using secretKey as password (not login password)"
+      "📋 IMPORTANT: Using secretKey as password (not login password)",
     );
 
     const payload = {
@@ -47,7 +47,7 @@ export const login = async (email, password) => {
       passwordLength: cleanPassword.length,
     });
 
-    const response = await axios.post(`${API_URL}/user/get-token`, payload, {
+    const response = await axios.post(`${API_URL}/get-token`, payload, {
       headers: {
         "Content-Type": "application/json",
         Accept: "application/json",
@@ -64,11 +64,10 @@ export const login = async (email, password) => {
 
     // Return success indicator and userId (email)
     // Note: We no longer return jwtToken or refreshToken as they're in HttpOnly cookies
-    return { 
-      success: true, 
-      userId: cleanEmail 
+    return {
+      success: true,
+      userId: cleanEmail,
     };
-    
   } catch (error) {
     // Enhanced error logging based on API documentation
     if (error.response?.status === 400) {
@@ -89,23 +88,23 @@ export const login = async (email, password) => {
       const errorData = serverResponse?.data;
       if (errorData === "Invalid email format") {
         throw new Error(
-          "Invalid email format. Please check the email address."
+          "Invalid email format. Please check the email address.",
         );
       } else if (errorData === "Invalid credentials") {
         throw new Error(
-          "Invalid credentials. Please verify the email and secretKey from Protonest dashboard."
+          "Invalid credentials. Please verify the email and secretKey from Protonest dashboard.",
         );
       } else if (errorData === "User not found") {
         throw new Error(
-          "User not found. Please check if the email is registered in the system."
+          "User not found. Please check if the email is registered in the system.",
         );
       } else if (errorData === "Email not verified") {
         throw new Error(
-          "Email not verified. Please verify your email address first."
+          "Email not verified. Please verify your email address first.",
         );
       } else {
         throw new Error(
-          `Authentication failed: ${errorData || "Please verify email and secretKey"}`
+          `Authentication failed: ${errorData || "Please verify email and secretKey"}`,
         );
       }
     } else if (error.response?.status === 500) {
@@ -114,7 +113,7 @@ export const login = async (email, password) => {
     } else {
       console.error(
         `❌ Unexpected error (${error.response?.status}):`,
-        error.response?.data
+        error.response?.data,
       );
       throw error;
     }
@@ -123,12 +122,12 @@ export const login = async (email, password) => {
 
 /**
  * Refresh session using cookie-based token refresh
- * 
+ *
  * NEW API BEHAVIOR:
  * - GET /get-new-token uses the existing Refresh Token cookie
  * - No manual headers needed - cookies are sent automatically
  * - On success, new cookies are set by the server
- * 
+ *
  * @returns {Promise<{success: true}>} - Success indicator
  */
 export const refreshSession = async () => {
@@ -144,12 +143,11 @@ export const refreshSession = async () => {
     // Success is indicated by 200 OK status
     // New cookies are set automatically by the server
     console.log("✅ Session refreshed successfully via cookies");
-    
+
     return { success: true };
-    
   } catch (error) {
     const errorData = error.response?.data?.data;
-    
+
     console.error("❌ Session refresh failed:", {
       status: error.response?.status,
       data: error.response?.data,
@@ -170,12 +168,12 @@ export const refreshSession = async () => {
 /**
  * Ensure authentication using environment credentials
  * Used for auto-login during app initialization
- * 
+ *
  * With cookie-based auth, this function:
  * - Checks if we believe we're authenticated (from a flag)
  * - If not, attempts login using ENV credentials
  * - Returns success indicator
- * 
+ *
  * @returns {Promise<boolean>} - True if authenticated
  */
 let __envAuthPromise = null;

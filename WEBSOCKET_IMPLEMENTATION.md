@@ -15,7 +15,7 @@ IoT Device → MQTT Broker (ProtoNest) → STOMP/WebSocket → React Dashboard
 
 **Cookie-Based HttpOnly Authentication:**
 
-- WebSocket connection is established AFTER successful login to `/user/get-token`
+- WebSocket connection is established AFTER successful login to `/get-token`
 - Login sets HttpOnly cookies that browser sends automatically with WebSocket handshake
 - No token query parameter in WebSocket URL
 - No Authorization headers needed
@@ -30,21 +30,26 @@ IoT Device → MQTT Broker (ProtoNest) → STOMP/WebSocket → React Dashboard
 
 ## Topics Structure
 
+### MQTT Topic Convention
+
+All topics use the `pmc/` prefix (Plant Monitoring Controller):
+
 ### Sensor Stream Topics (Real-time Data)
 
-| Topic Pattern | Data Type | Example Payload |
-|--------------|-----------|-----------------|
-| `/topic/stream/{deviceId}/temp` | Temperature | `{"temp": "25.5"}` |
-| `/topic/stream/{deviceId}/humidity` | Humidity | `{"humidity": "68.0"}` |
-| `/topic/stream/{deviceId}/moisture` | Moisture | `{"moisture": "45.2"}` |
-| `/topic/stream/{deviceId}/light` | Light | `{"light": "850.0"}` |
-| `/topic/stream/{deviceId}/battery` | Battery | `{"battery": "87.5"}` |
+| Topic Pattern              | MQTT Topic        | Data Type   | Example Payload        |
+| -------------------------- | ----------------- | ----------- | ---------------------- |
+| `/topic/stream/{deviceId}` | `pmc/temperature` | Temperature | `{"temp": "25.5"}`     |
+| `/topic/stream/{deviceId}` | `pmc/humidity`    | Humidity    | `{"humidity": "68.0"}` |
+| `/topic/stream/{deviceId}` | `pmc/moisture`    | Moisture    | `{"moisture": "45.2"}` |
+| `/topic/stream/{deviceId}` | `pmc/light`       | Light       | `{"light": "850.0"}`   |
+| `/topic/stream/{deviceId}` | `pmc/battery`     | Battery     | `{"battery": "87.5"}`  |
 
-### State Topics (Pump Control)
+### State Topics (Device Control)
 
-| Topic Pattern | Data Type | Example Payload |
-|--------------|-----------|-----------------|
-| `/topic/state/{deviceId}/pump` | Pump Status | `{"power": "ON", "mode": "auto"}` |
+| Topic Pattern             | MQTT Topic | Data Type   | Example Payload                   |
+| ------------------------- | ---------- | ----------- | --------------------------------- |
+| `/topic/state/{deviceId}` | `pmc/pump` | Pump Status | `{"power": "ON", "mode": "auto"}` |
+| `/topic/state/{deviceId}` | `pmc/mode` | Device Mode | `{"mode": "auto"}`                |
 
 ## WebSocket Client Service (`webSocketClient.js`)
 
@@ -54,9 +59,13 @@ IoT Device → MQTT Broker (ProtoNest) → STOMP/WebSocket → React Dashboard
 ✅ **Singleton Pattern** - One connection per application  
 ✅ **Auto-Reconnection** - Reconnects automatically on disconnect  
 ✅ **Subscription Management** - Tracks active subscriptions  
-✅ **Message Parsing** - Handles different payload formats  
-✅ **Pump Control** - Send commands to control pump  
+✅ **Message Parsing** - Handles pmc/ prefixed topics and different payload formats  
+✅ **Pump Control** - Send commands via HTTP state updates (topic: `pmc/pump`)  
+✅ **Mode Control** - Send auto/manual mode via HTTP (topic: `pmc/mode`)  
+✅ **Auto Irrigation** - Automatic pump ON when moisture < threshold (auto mode)  
+✅ **Manual Notifications** - Alerts user when moisture low in manual mode  
 ✅ **Event Callbacks** - Connect/disconnect handlers  
+✅ **Filtered Debug Logging** - Suppresses noisy PING/PONG heartbeat logs
 
 ### API Reference
 
@@ -135,30 +144,30 @@ const isConnected = webSocketClient.getConnectionStatus();
 ## React Integration (App.jsx)
 
 ```javascript
-import { webSocketClient } from './Service/webSocketClient';
-import { useAuth } from './Context/AuthContext';
+import { webSocketClient } from "./Service/webSocketClient";
+import { useAuth } from "./Context/AuthContext";
 
 function App() {
   const { isAuthenticated, isLoading } = useAuth();
-  
+
   useEffect(() => {
     // Wait for auth to complete
     if (isLoading) return;
     if (!isAuthenticated) return;
-    
+
     const handleData = (data) => {
       // Process incoming sensor data
     };
-    
+
     const onConnect = () => {
       webSocketClient.subscribeToDevice(deviceId, handleData);
     };
-    
+
     webSocketClient.onConnect(onConnect);
-    
+
     // Connect using cookies set by login
     webSocketClient.connect();
-    
+
     return () => {
       webSocketClient.offConnect(onConnect);
       webSocketClient.unsubscribeFromDevice(deviceId);
@@ -171,7 +180,7 @@ function App() {
 
 ### Initial Connection (Cookie-Based)
 
-1. User logs in via `/user/get-token` → HttpOnly cookies set
+1. User logs in via `/get-token` → HttpOnly cookies set
 2. App calls `webSocketClient.connect()` (no token parameter)
 3. Browser establishes WebSocket with cookies
 4. STOMP handshake completes
@@ -211,7 +220,7 @@ onStompError: (frame) => {
   const errorMsg = frame.headers["message"];
   if (errorMsg.includes("Unauthorized") || errorMsg.includes("401")) {
     // Cookie auth failed
-    window.dispatchEvent(new CustomEvent('auth:logout'));
+    window.dispatchEvent(new CustomEvent("auth:logout"));
   }
 };
 ```
@@ -266,14 +275,39 @@ try {
 ## Environment Variables
 
 ```env
-VITE_API_BASE_URL=https://api.protonestconnect.co/api/v1
+VITE_API_BASE_URL=https://api.protonestconnect.co/api/v1/user
 VITE_WS_URL=wss://api.protonestconnect.co/ws
+VITE_DEVICE_ID=your-device-id
 VITE_USER_EMAIL=your-email@example.com
 VITE_USER_SECRET=your-secretKey
 ```
 
 ---
 
-**Last Updated:** January 2026  
-**Version:** 2.0.0 (Cookie-Based Auth)  
+## Moisture Automation Logic
+
+### Auto Mode
+
+When `autoMode` is enabled in settings:
+
+1. Moisture drops below `moistureMin` threshold
+2. App sends HTTP `POST /update-state-details` with topic `pmc/pump`, payload `{"power": "ON", "mode": "auto"}`
+3. App also sends mode sync via topic `pmc/mode`, payload `{"mode": "auto"}`
+4. When moisture recovers above threshold, pump OFF is sent
+5. Commands debounced at 5 seconds to avoid duplicates
+
+### Manual Mode
+
+When `autoMode` is disabled:
+
+1. Moisture drops below `moistureMin` threshold
+2. App sends a warning notification: "Moisture is low (X%). Please turn on the pump manually."
+3. Notifications debounced at 60 seconds to avoid spam
+4. No notification if pump is already ON
+5. User must manually toggle pump from Settings page
+
+---
+
+**Last Updated:** February 2026  
+**Version:** 2.1.0 (Cookie-Based Auth + pmc/ Topics)  
 **Auth Method:** HttpOnly Cookies

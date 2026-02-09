@@ -33,7 +33,7 @@ const HistoricalChart = ({
   const [customValue, setCustomValue] = useState('');
   const [customUnit, setCustomUnit] = useState('minutes');
   const [customIntervalValue, setCustomIntervalValue] = useState('');
-  const [customIntervalUnit, setCustomIntervalUnit] = useState('seconds');
+  const [customIntervalUnit, setCustomIntervalUnit] = useState('minutes');
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [exportTimeRange, setExportTimeRange] = useState(timeRange);
   const [exportDataInterval, setExportDataInterval] = useState(dataInterval);
@@ -74,21 +74,24 @@ const HistoricalChart = ({
 
   // Time range labels
   const timeRangeLabels = {
-    '1m': 'Last 1 Minute',
-    '5m': 'Last 5 Minutes',
-    '15m': 'Last 15 Minutes',
+    '1min': 'Last 1 Minute',
+    '5min': 'Last 5 Minutes',
+    '15min': 'Last 15 Minutes',
+    '30min': 'Last 30 Minutes',
     '1h': 'Last 1 Hour',
+    '3h': 'Last 3 Hours',
     '6h': 'Last 6 Hours',
+    '12h': 'Last 12 Hours',
     '24h': 'Last 24 Hours'
   };
 
   // Data interval labels
   const intervalLabels = {
     'auto': 'Auto',
-    '1s': '1 Second',
-    '5s': '5 Seconds',
-    '1m': '1 Minute',
-    '5m': '5 Minutes',
+    '1min': '1 Minute',
+    '5min': '5 Minutes',
+    '15min': '15 Minutes',
+    '30min': '30 Minutes',
     '1h': '1 Hour'
   };
 
@@ -99,24 +102,27 @@ const HistoricalChart = ({
       const rangeMs = parseInt(range.replace('custom_', ''));
       const validIntervals = ['auto'];
 
-      // Only show intervals that are smaller than the time range
-      if (rangeMs >= 1000) validIntervals.push('1s');
-      if (rangeMs >= 5000) validIntervals.push('5s');
-      if (rangeMs >= 60000) validIntervals.push('1m');
-      if (rangeMs >= 300000) validIntervals.push('5m');
+      // Only show intervals that are smaller than the time range (min 1 minute)
+      if (rangeMs >= 60000) validIntervals.push('1min');
+      if (rangeMs >= 300000) validIntervals.push('5min');
+      if (rangeMs >= 900000) validIntervals.push('15min');
+      if (rangeMs >= 1800000) validIntervals.push('30min');
       if (rangeMs >= 3600000) validIntervals.push('1h');
 
       return validIntervals;
     }
 
-    // For preset ranges : to make sense with the time range chosen
+    // For preset ranges: only intervals that make sense with the time range chosen
     const validIntervals = {
-      '1m': ['auto', '1s'],
-      '5m': ['auto', '1s', '5s'],
-      '15m': ['auto', '1s', '5s', '1m'],
-      '1h': ['auto', '1s', '5s', '1m', '5m'],
-      '6h': ['auto', '5s', '1m', '5m'],
-      '24h': ['auto', '1m', '5m', '1h']
+      '1min': ['auto', '1min'],
+      '5min': ['auto', '1min'],
+      '15min': ['auto', '1min', '5min'],
+      '30min': ['auto', '1min', '5min', '15min'],
+      '1h': ['auto', '1min', '5min', '15min', '30min'],
+      '3h': ['auto', '1min', '5min', '15min', '30min', '1h'],
+      '6h': ['auto', '5min', '15min', '30min', '1h'],
+      '12h': ['auto', '15min', '30min', '1h'],
+      '24h': ['auto', '30min', '1h']
     };
     return validIntervals[range] || ['auto'];
   };
@@ -135,13 +141,16 @@ const HistoricalChart = ({
       rangeMs = parseInt(timeRange.replace('custom_', ''));
     } else {
       rangeMs = {
-        '1m': 1 * 60 * 1000,
-        '5m': 5 * 60 * 1000,
-        '15m': 15 * 60 * 1000,
+        '1min': 1 * 60 * 1000,
+        '5min': 5 * 60 * 1000,
+        '15min': 15 * 60 * 1000,
+        '30min': 30 * 60 * 1000,
         '1h': 60 * 60 * 1000,
+        '3h': 3 * 60 * 60 * 1000,
         '6h': 6 * 60 * 60 * 1000,
+        '12h': 12 * 60 * 60 * 1000,
         '24h': 24 * 60 * 60 * 1000
-      }[timeRange] || 60 * 60 * 1000;
+      }[timeRange] || 24 * 60 * 60 * 1000;
     }
 
     const cutoffTime = now.getTime() - rangeMs;
@@ -161,10 +170,10 @@ const HistoricalChart = ({
         intervalMs = parseInt(dataInterval.replace('custom_interval_', ''));
       } else {
         intervalMs = {
-          '1s': 1000,
-          '5s': 5000,
-          '1m': 60000,
-          '5m': 5 * 60000,
+          '1min': 60000,
+          '5min': 5 * 60000,
+          '15min': 15 * 60000,
+          '30min': 30 * 60000,
           '1h': 60 * 60000
         }[dataInterval] || 0;
       }
@@ -198,10 +207,9 @@ const HistoricalChart = ({
       }
     }
 
-    // Update time format based on interval - show seconds for granular intervals
-    const shouldShowSeconds = dataInterval === '1s' || dataInterval === '5s' ||
-      (dataInterval.startsWith('custom_interval_') &&
-        parseInt(dataInterval.replace('custom_interval_', '')) < 60000);
+    // Update time format based on interval
+    const shouldShowSeconds = (dataInterval.startsWith('custom_interval_') &&
+      parseInt(dataInterval.replace('custom_interval_', '')) < 60000);
 
     // Format time field for display
     filtered = filtered.map(record => ({
@@ -371,11 +379,14 @@ const HistoricalChart = ({
                       onChange={(e) => setExportTimeRange(e.target.value)}
                       className="w-full px-2 py-1 text-[10px] border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
                     >
-                      <option value="1m">1 Minute</option>
-                      <option value="5m">5 Minutes</option>
-                      <option value="15m">15 Minutes</option>
+                      <option value="1min">1 Minute</option>
+                      <option value="5min">5 Minutes</option>
+                      <option value="15min">15 Minutes</option>
+                      <option value="30min">30 Minutes</option>
                       <option value="1h">1 Hour</option>
+                      <option value="3h">3 Hours</option>
                       <option value="6h">6 Hours</option>
+                      <option value="12h">12 Hours</option>
                       <option value="24h">24 Hours</option>
                     </select>
                   </div>
@@ -387,10 +398,10 @@ const HistoricalChart = ({
                       className="w-full px-2 py-1 text-[10px] border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
                     >
                       <option value="auto">Auto</option>
-                      <option value="1s">1 Second</option>
-                      <option value="5s">5 Seconds</option>
-                      <option value="1m">1 Minute</option>
-                      <option value="5m">5 Minutes</option>
+                      <option value="1min">1 Minute</option>
+                      <option value="5min">5 Minutes</option>
+                      <option value="15min">15 Minutes</option>
+                      <option value="30min">30 Minutes</option>
                       <option value="1h">1 Hour</option>
                     </select>
                   </div>
@@ -466,7 +477,6 @@ const HistoricalChart = ({
                     onChange={(e) => setCustomUnit(e.target.value)}
                     className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
-                    <option value="seconds">Seconds</option>
                     <option value="minutes">Minutes</option>
                     <option value="hours">Hours</option>
                     <option value="days">Days</option>
@@ -491,7 +501,6 @@ const HistoricalChart = ({
                     onChange={(e) => setCustomIntervalUnit(e.target.value)}
                     className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
-                    <option value="seconds">Seconds</option>
                     <option value="minutes">Minutes</option>
                     <option value="hours">Hours</option>
                   </select>
@@ -546,11 +555,14 @@ const HistoricalChart = ({
               }}
               className="px-1.5 py-0.5 rounded text-[10px] border border-gray-300 bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
             >
-              <option value="1m">1m</option>
-              <option value="5m">5m</option>
-              <option value="15m">15m</option>
+              <option value="1min">1m</option>
+              <option value="5min">5m</option>
+              <option value="15min">15m</option>
+              <option value="30min">30m</option>
               <option value="1h">1h</option>
+              <option value="3h">3h</option>
               <option value="6h">6h</option>
+              <option value="12h">12h</option>
               <option value="24h">24h</option>
               <option value="custom">Custom</option>
             </select>
@@ -569,7 +581,7 @@ const HistoricalChart = ({
               }}
               className="px-1.5 py-0.5 rounded text-[10px] border border-gray-300 bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
             >
-              {['auto', '1s', '5s', '1m', '5m', '1h'].map(interval => (
+              {['auto', '1min', '5min', '15min', '30min', '1h'].map(interval => (
                 <option key={interval} value={interval} disabled={!validIntervals.includes(interval)}>
                   {intervalLabels[interval]}
                 </option>

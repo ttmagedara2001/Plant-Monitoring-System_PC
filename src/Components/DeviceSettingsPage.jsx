@@ -5,7 +5,7 @@ import ActionButton from './ActionButton';
 import AutoModeToggle from './AutoModeToggle';
 import PageHeader from './PageHeader';
 import ValidationModal from './ValidationModal';
-import { updatePumpStatus } from '../Service/deviceService';
+import { updatePumpStatus, updateDeviceMode } from '../Service/deviceService';
 
 const DEFAULT_THRESHOLDS = {
   moisture: { min: 20, max: 60 },
@@ -87,9 +87,19 @@ const DeviceSettingsPage = ({ deviceId: propDeviceId }) => {
     });
   };
 
-  const handleAutoModeToggle = () => {
-    // Toggle local UI state only; persist on Save so user can review changes before applying
-    setAutoMode(prev => !prev);
+  const handleAutoModeToggle = async () => {
+    const newMode = !autoMode;
+    setAutoMode(newMode);
+
+    // Send mode change to backend via HTTP API
+    try {
+      await updateDeviceMode(deviceId, newMode ? 'auto' : 'manual');
+      console.log(`✅ [API] Mode changed to: ${newMode ? 'auto' : 'manual'}`);
+    } catch (error) {
+      console.error('❌ [API] Failed to send mode change:', error);
+      // Revert on failure
+      setAutoMode(!newMode);
+    }
   };
 
   const handlePumpToggle = async () => {
@@ -112,8 +122,8 @@ const DeviceSettingsPage = ({ deviceId: propDeviceId }) => {
 
     try {
       // Call API to send pump command
-      // Payload: { deviceId, topic: "pump", payload: { pump: "on"|"off", moisture: <value> } }
-      await updatePumpStatus(deviceId, pumpCommand, 'pump', 'manual', currentMoisture);
+      // Payload: { deviceId, topic: "pmc/pump", payload: { pump: "on"|"off", moisture: <value> } }
+      await updatePumpStatus(deviceId, pumpCommand, 'pmc/pump', 'manual', currentMoisture);
       console.log(`✅ [API] Pump command sent: ${pumpCommand}`);
     } catch (error) {
       console.error('❌ [API] Failed to send pump command:', error);

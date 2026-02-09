@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../Context/AuthContext';
-import { getAllStreamData, updatePumpStatus } from '../Service/deviceService';
+import { getAllStreamData, updatePumpStatus, updateDeviceMode } from '../Service/deviceService';
 //import { AlertTriangle } from 'lucide-react';
 
 // Import Sub-Components
@@ -34,10 +34,10 @@ const Dashboard = ({ deviceId: propDeviceId, liveData: propLiveData, settings: p
   const [isExporting, setIsExporting] = useState(false);
   const [dataFetchError, setDataFetchError] = useState(null);
 
-  // Time frame selection for historical chart: default to 1 hour
+  // Time frame selection for historical chart: default to 24 hours
   const [timeRange, setTimeRange] = useState(() => {
     const saved = localStorage.getItem(`timeRange_${deviceId}`);
-    return saved || '1h';
+    return saved || '24h';
   });
   const [dataInterval, setDataInterval] = useState(() => {
     const saved = localStorage.getItem(`dataInterval_${deviceId}`);
@@ -119,13 +119,16 @@ const Dashboard = ({ deviceId: propDeviceId, liveData: propLiveData, settings: p
       rangeMs = parseInt(range.replace('custom_', ''));
     } else {
       rangeMs = {
-        '1m': 1 * 60 * 1000,
-        '5m': 5 * 60 * 1000,
-        '15m': 15 * 60 * 1000,
+        '1min': 1 * 60 * 1000,
+        '5min': 5 * 60 * 1000,
+        '15min': 15 * 60 * 1000,
+        '30min': 30 * 60 * 1000,
         '1h': 60 * 60 * 1000,
+        '3h': 3 * 60 * 60 * 1000,
         '6h': 6 * 60 * 60 * 1000,
+        '12h': 12 * 60 * 60 * 1000,
         '24h': 24 * 60 * 60 * 1000
-      }[range] || 60 * 60 * 1000;
+      }[range] || 24 * 60 * 60 * 1000;
     }
 
     const cutoffTime = now.getTime() - rangeMs;
@@ -145,10 +148,10 @@ const Dashboard = ({ deviceId: propDeviceId, liveData: propLiveData, settings: p
         intervalMs = parseInt(interval.replace('custom_interval_', ''));
       } else {
         intervalMs = {
-          '1s': 1000,
-          '5s': 5000,
-          '1m': 60000,
-          '5m': 5 * 60000,
+          '1min': 60000,
+          '5min': 5 * 60000,
+          '15min': 15 * 60000,
+          '30min': 30 * 60000,
           '1h': 60 * 60000
         }[interval] || 0;
       }
@@ -183,8 +186,7 @@ const Dashboard = ({ deviceId: propDeviceId, liveData: propLiveData, settings: p
     }
 
     // Update time format based on interval - show seconds for granular intervals
-    const shouldShowSeconds = interval === '1s' || interval === '5s' ||
-      (interval.startsWith('custom_interval_') &&
+    const shouldShowSeconds = (interval.startsWith('custom_interval_') &&
         parseInt(interval.replace('custom_interval_', '')) < 60000);
 
     // Format time field for display
@@ -257,7 +259,7 @@ const Dashboard = ({ deviceId: propDeviceId, liveData: propLiveData, settings: p
     // Load device-specific time range and interval (view-only)
     const savedTimeRange = localStorage.getItem(`timeRange_${deviceId}`);
     const savedInterval = localStorage.getItem(`dataInterval_${deviceId}`);
-    setTimeRange(savedTimeRange || '1h');
+    setTimeRange(savedTimeRange || '24h');
     setDataInterval(savedInterval || 'auto');
 
     console.log(`[Dashboard] ✅ View reset complete for device: ${deviceId}`);
@@ -321,13 +323,21 @@ const Dashboard = ({ deviceId: propDeviceId, liveData: propLiveData, settings: p
   };
 
   // Control Handlers
-  const handleSaveSettings = () => {
+  const handleSaveSettings = async () => {
     setCommandInProgress('settings');
     setCommandStatus(null);
     try {
-      // Save settings to localStorage (frontend only - no backend API available)
+      // Save settings to localStorage (frontend only)
       localStorage.setItem(`settings_${deviceId}`, JSON.stringify(settings));
       console.log('💾 Settings saved to localStorage:', settings);
+
+      // Send mode change to backend
+      try {
+        await updateDeviceMode(deviceId, settings.autoMode ? 'auto' : 'manual');
+        console.log(`✅ [API] Mode sent: ${settings.autoMode ? 'auto' : 'manual'}`);
+      } catch (modeError) {
+        console.error('❌ [API] Failed to send mode change:', modeError);
+      }
 
       // Log auto mode status
       if (settings.autoMode) {
@@ -362,18 +372,24 @@ const Dashboard = ({ deviceId: propDeviceId, liveData: propLiveData, settings: p
 
     // Auto-adjust interval based on time range for optimal display
     let newInterval = 'auto';
-    if (newRange === '1m') {
-      newInterval = '1s';
-    } else if (newRange === '5m') {
-      newInterval = '1s';
-    } else if (newRange === '15m') {
-      newInterval = '5s';
+    if (newRange === '1min') {
+      newInterval = '1min';
+    } else if (newRange === '5min') {
+      newInterval = '1min';
+    } else if (newRange === '15min') {
+      newInterval = '1min';
+    } else if (newRange === '30min') {
+      newInterval = '5min';
     } else if (newRange === '1h') {
-      newInterval = 'auto';
+      newInterval = '5min';
+    } else if (newRange === '3h') {
+      newInterval = '15min';
     } else if (newRange === '6h') {
-      newInterval = '1m';
+      newInterval = '30min';
+    } else if (newRange === '12h') {
+      newInterval = '30min';
     } else if (newRange === '24h') {
-      newInterval = '5m';
+      newInterval = '1h';
     }
     setDataInterval(newInterval);
     localStorage.setItem(`dataInterval_${deviceId}`, newInterval);
@@ -397,8 +413,8 @@ const Dashboard = ({ deviceId: propDeviceId, liveData: propLiveData, settings: p
     try {
       // Use HTTP API to send pump command with current moisture value
       // API: POST /update-state-details
-      // Payload: { deviceId, topic: "pump", payload: { moisture: <value>, pump: "on"|"off" } }
-      await updatePumpStatus(deviceId, newStatus, 'pump', 'manual', currentMoisture);
+      // Payload: { deviceId, topic: "pmc/pump", payload: { moisture: <value>, pump: "on"|"off" } }
+      await updatePumpStatus(deviceId, newStatus, 'pmc/pump', 'manual', currentMoisture);
 
       console.log(`✅ [HTTP API] Pump command sent: ${newStatus}`);
       console.log(`📡 Waiting for backend to publish to MQTT and device confirmation...`);

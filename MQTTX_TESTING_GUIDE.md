@@ -26,7 +26,7 @@
 
 **API Endpoints:**
 
-- **Base URL:** `https://api.protonestconnect.co/api/v1`
+- **Base URL:** `https://api.protonestconnect.co/api/v1/user`
 - **WebSocket:** `wss://api.protonestconnect.co/ws` (cookie-based auth)
 
 ---
@@ -50,6 +50,7 @@ Download from: https://mqttx.app/
   - Allow self‑signed: optional
 
 > In MQTTX:
+>
 > - Click "+ New Connection"
 > - Select `MQTTS/TLS`
 > - Fill host/port, set Client ID, enable TLS, then "Connect"
@@ -77,42 +78,42 @@ This allows you to:
 ### Temperature Data
 
 ```text
-Topic: protonest/device0011233/stream/temp
+Topic: protonest/device0011233/stream/pmc/temperature
 Payload: {"temp":"25.5"}
 ```
 
 ### Moisture Data
 
 ```text
-Topic: protonest/device0011233/stream/moisture
+Topic: protonest/device0011233/stream/pmc/moisture
 Payload: {"moisture":"45.2"}
 ```
 
 ### Humidity Data
 
 ```text
-Topic: protonest/device0011233/stream/humidity
+Topic: protonest/device0011233/stream/pmc/humidity
 Payload: {"humidity":"65.8"}
 ```
 
 ### Light Data
 
 ```text
-Topic: protonest/device0011233/stream/light
+Topic: protonest/device0011233/stream/pmc/light
 Payload: {"light":"850"}
 ```
 
 ### Battery Data
 
 ```text
-Topic: protonest/device0011233/stream/battery
+Topic: protonest/device0011233/stream/pmc/battery
 Payload: {"battery":"87.5"}
 ```
 
 ### Combined Sensor Packet
 
 ```text
-Topic: protonest/device0011233/stream/all
+Topic: protonest/device0011233/stream/pmc/all
 Payload: {
   "temp": "25.5",
   "moisture": "45.2",
@@ -127,20 +128,32 @@ Payload: {
 ## Step 5: Pump Control via MQTT
 
 ```text
-Topic: protonest/device0011233/state/pump
-Payload: {"power":"ON"}
+Topic: protonest/device0011233/state/pmc/pump
+Payload: {"power":"ON","mode":"auto"}
 ```
 
 ```text
-Topic: protonest/device0011233/state/pump
+Topic: protonest/device0011233/state/pmc/pump
 Payload: {"power":"OFF"}
 ```
 
 Device feedback:
 
 ```text
-Topic: protonest/device0011233/state/pump
+Topic: protonest/device0011233/state/pmc/pump
 Payload: {"power":"on","mode":"manual"}
+```
+
+### Mode Control via MQTT
+
+```text
+Topic: protonest/device0011233/state/pmc/mode
+Payload: {"mode":"auto"}
+```
+
+```text
+Topic: protonest/device0011233/state/pmc/mode
+Payload: {"mode":"manual"}
 ```
 
 ---
@@ -150,19 +163,27 @@ Payload: {"power":"on","mode":"manual"}
 When you publish payloads and they're forwarded to WebSocket:
 
 1. **Status Cards (top metrics)**
-   - `stream/moisture` → "Soil Moisture" card
-   - `stream/temp` → "Temperature" card
-   - `stream/humidity` → "Humidity" card
-   - `stream/light` → "Light" card
-   - `stream/battery` → "Battery" card
+   - `pmc/moisture` → "Soil Moisture" card
+   - `pmc/temperature` → "Temperature" card
+   - `pmc/humidity` → "Humidity" card
+   - `pmc/light` → "Light" card
+   - `pmc/battery` → "Battery" card
 
 2. **Pump Banner**
-   - `state/pump` with `"power":"ON"` → Green "Pump: ON" banner
-   - `state/pump` with `"power":"OFF"` → Blue "Pump: OFF" banner
+   - `pmc/pump` with `"power":"ON"` → Green "Pump: ON" banner
+   - `pmc/pump` with `"power":"OFF"` → Blue "Pump: OFF" banner
 
-3. **Alert Banner**
+3. **Mode Indicator**
+   - `pmc/mode` with `"mode":"auto"` → Auto mode enabled
+   - `pmc/mode` with `"mode":"manual"` → Manual mode
+
+4. **Alert Banner**
    - If `moisture` < `moistureMin` → red critical alert
    - If `temperature` > `tempMax` → red warning alert
+
+5. **Auto Irrigation**
+   - If auto mode ON and moisture < min → pump ON command sent automatically via HTTP
+   - If manual mode and moisture < min → notification sent to user
 
 ---
 
@@ -174,7 +195,7 @@ When you publish payloads and they're forwarded to WebSocket:
 2. Subscribe to `protonest/device0011233/stream/#`
 3. Publish:
    ```text
-   Topic: protonest/device0011233/stream/moisture
+   Topic: protonest/device0011233/stream/pmc/moisture
    Payload: {"moisture":"15.0"}
    ```
 4. Watch dashboard:
@@ -187,7 +208,7 @@ When you publish payloads and they're forwarded to WebSocket:
 2. Observe API request to `/update-state-details`
 3. Simulate device feedback in MQTTX:
    ```text
-   Topic: protonest/device0011233/state/pump
+   Topic: protonest/device0011233/state/pmc/pump
    Payload: {"power":"ON","mode":"manual"}
    ```
 4. Dashboard shows pump ON
@@ -198,7 +219,7 @@ When you publish payloads and they're forwarded to WebSocket:
 
 The dashboard uses **Cookie-Based Authentication**:
 
-1. Login via `/user/get-token` sets HttpOnly cookies
+1. Login via `/get-token` sets HttpOnly cookies
 2. WebSocket connects to `wss://api.protonestconnect.co/ws`
 3. Browser sends cookies automatically (no token URL param)
 4. All API requests include `withCredentials: true`
@@ -233,11 +254,11 @@ The dashboard uses **Cookie-Based Authentication**:
 
 ### Pump Commands Not Working
 
-1. Check device subscribed to `protonest/{deviceId}/state/#`
+1. Check device subscribed to `protonest/{deviceId}/state/pmc/#`
 2. Verify payload format: `{"power":"ON"}` (uppercase)
 3. Check dashboard has WebSocket connection
 
 ---
 
-**Last Updated:** January 2026  
-**Version:** 2.0.0 (Cookie-Based Auth)
+**Last Updated:** February 2026  
+**Version:** 2.1.0 (Cookie-Based Auth + pmc/ Topics)

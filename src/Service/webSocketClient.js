@@ -1,4 +1,4 @@
-import { Client } from '@stomp/stompjs';
+import { Client } from "@stomp/stompjs";
 
 /* ======================================================
    CONFIG FROM ENVIRONMENT
@@ -7,7 +7,8 @@ import { Client } from '@stomp/stompjs';
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
 const WS_URL = import.meta.env.VITE_WS_URL;
 const EMAIL = import.meta.env.VITE_USER_EMAIL;
-const PASSWORD = import.meta.env.VITE_USER_SECRET;
+const PASSWORD =
+  import.meta.env.VITE_USER_SECRET || import.meta.env.VITE_USER_PASSWORD;
 
 /* ======================================================
    LOGIN (GET COOKIES)
@@ -15,33 +16,30 @@ const PASSWORD = import.meta.env.VITE_USER_SECRET;
 
 /**
  * Login using cookie-based authentication via fetch
- * 
+ *
  * @param {string} email - User email
  * @param {string} password - User secret key (from Protonest dashboard)
  * @returns {Promise<void>}
  */
 async function login(email = EMAIL, password = PASSWORD) {
-  const response = await fetch(
-    `${API_BASE}/user/get-token`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      credentials: 'include', // ⭐ REQUIRED for cookies
-      body: JSON.stringify({
-        email: email,
-        password: password,
-      }),
-    }
-  );
+  const response = await fetch(`${API_BASE}/get-token`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    credentials: "include", // ⭐ REQUIRED for cookies
+    body: JSON.stringify({
+      email: email,
+      password: password,
+    }),
+  });
 
   if (!response.ok) {
-    const errorText = await response.text().catch(() => 'Login failed');
+    const errorText = await response.text().catch(() => "Login failed");
     throw new Error(`Login failed: ${errorText}`);
   }
 
-  console.log('✅ Login successful, cookies stored');
+  console.log("✅ Login successful, cookies stored");
 }
 
 /* ======================================================
@@ -50,7 +48,7 @@ async function login(email = EMAIL, password = PASSWORD) {
 
 /**
  * WebSocket Client Wrapper Class for Dashboard Integration
- * 
+ *
  * Cookie-Based Authentication:
  * - WebSocket URL no longer includes ?token=... query parameter
  * - Connection relies on browser cookies set by /user/get-token
@@ -75,7 +73,7 @@ class WebSocketClient {
       return;
     }
 
-    console.log('🔌 Initializing WebSocket with cookie-based auth:', WS_URL);
+    console.log("🔌 Initializing WebSocket with cookie-based auth:", WS_URL);
 
     this.client = new Client({
       brokerURL: WS_URL,
@@ -85,7 +83,7 @@ class WebSocketClient {
       heartbeatOutgoing: 4000,
 
       onConnect: () => {
-        console.log('✅ WebSocket connected');
+        console.log("✅ WebSocket connected");
         this.isReady = true;
 
         // Clear stale subscription references on reconnect
@@ -105,42 +103,51 @@ class WebSocketClient {
           try {
             cb();
           } catch (e) {
-            console.error('Connect callback error:', e);
+            console.error("Connect callback error:", e);
           }
         });
       },
 
       onStompError: (frame) => {
-        console.error('❌ STOMP error:', frame.headers['message']);
-        console.error('Details:', frame.body);
+        console.error("❌ STOMP error:", frame.headers["message"]);
+        console.error("Details:", frame.body);
 
         // Check for authentication errors
-        const errorMsg = frame.headers['message'] || '';
-        if (errorMsg.includes('Unauthorized') || errorMsg.includes('401')) {
-          console.error('🔐 WebSocket authentication failed - cookies may have expired');
-          window.dispatchEvent(new CustomEvent('auth:logout'));
+        const errorMsg = frame.headers["message"] || "";
+        if (errorMsg.includes("Unauthorized") || errorMsg.includes("401")) {
+          console.error(
+            "🔐 WebSocket authentication failed - cookies may have expired",
+          );
+          window.dispatchEvent(new CustomEvent("auth:logout"));
         }
       },
 
       onWebSocketError: (event) => {
-        console.error('🚫 WebSocket error', event);
+        console.error("🚫 WebSocket error", event);
       },
 
       onWebSocketClose: (event) => {
-        console.warn('🔻 WebSocket closed', event);
+        console.warn("🔻 WebSocket closed", event);
         this.isReady = false;
 
         this.disconnectCallbacks.forEach((cb) => {
           try {
             cb();
           } catch (e) {
-            console.error('Disconnect callback error:', e);
+            console.error("Disconnect callback error:", e);
           }
         });
       },
 
       debug: (msg) => {
-        console.log('🪵', msg);
+        // Filter out noisy heartbeat frames, only log meaningful STOMP messages
+        if (
+          msg.startsWith(">>>") ||
+          msg.startsWith("<<<") ||
+          msg === "Received data"
+        )
+          return;
+        console.log("🪵 [STOMP]", msg);
       },
     });
 
@@ -169,10 +176,10 @@ class WebSocketClient {
     const streamSub = this.client.subscribe(streamTopic, (message) => {
       try {
         const data = JSON.parse(message.body);
-        console.log('📡 Stream message:', data);
+        console.log("📡 Stream message:", data);
         this._processStreamMessage(data);
       } catch (parseError) {
-        console.error('❌ Failed to parse stream message:', parseError);
+        console.error("❌ Failed to parse stream message:", parseError);
       }
     });
     this.subscriptions.set(streamKey, streamSub);
@@ -182,15 +189,15 @@ class WebSocketClient {
     const stateSub = this.client.subscribe(stateTopic, (message) => {
       try {
         const data = JSON.parse(message.body);
-        console.log('📡 State message:', data);
+        console.log("📡 State message:", data);
         this._processStateMessage(data);
       } catch (parseError) {
-        console.error('❌ Failed to parse state message:', parseError);
+        console.error("❌ Failed to parse state message:", parseError);
       }
     });
     this.subscriptions.set(stateKey, stateSub);
 
-    console.log('🔔 Subscribed to device topics:');
+    console.log("🔔 Subscribed to device topics:");
     console.log(`   📡 Stream: ${streamTopic}`);
     console.log(`   📡 State: ${stateTopic}`);
   }
@@ -205,12 +212,21 @@ class WebSocketClient {
     const topic = data.topic;
 
     const sensorMap = {
-      temp: 'temp',
-      temperature: 'temp',
-      humidity: 'humidity',
-      moisture: 'moisture',
-      light: 'light',
-      battery: 'battery',
+      temp: "temp",
+      temperature: "temp",
+      humidity: "humidity",
+      moisture: "moisture",
+      light: "light",
+      battery: "battery",
+    };
+
+    // Map pmc/ prefixed topic names to internal sensor types
+    const topicToSensor = {
+      "pmc/temperature": "temp",
+      "pmc/humidity": "humidity",
+      "pmc/moisture": "moisture",
+      "pmc/light": "light",
+      "pmc/battery": "battery",
     };
 
     // Check if this is a batch state update
@@ -226,13 +242,28 @@ class WebSocketClient {
       });
 
       this.dataCallback({
-        sensorType: 'batchUpdate',
+        sensorType: "batchUpdate",
         value: stateUpdate,
         timestamp: data.timestamp || new Date().toISOString(),
       });
     } else {
-      // Single sensor update
-      if (topic && payload[topic] !== undefined) {
+      // Single sensor update - check pmc/ prefixed topic first, then payload keys
+      if (topic && topicToSensor[topic]) {
+        // Resolve sensor type from pmc/ topic name
+        const sensorType = topicToSensor[topic];
+        // Find value in payload by checking common key names
+        const value =
+          payload[sensorType] ??
+          payload[topic] ??
+          payload[topic.split("/").pop()];
+        if (value !== undefined) {
+          this.dataCallback({
+            sensorType: sensorType,
+            value: value,
+            timestamp: data.timestamp || new Date().toISOString(),
+          });
+        }
+      } else if (topic && payload[topic] !== undefined) {
         const sensorType = sensorMap[topic] || topic;
         this.dataCallback({
           sensorType: sensorType,
@@ -266,7 +297,7 @@ class WebSocketClient {
     if (powerValue !== undefined) {
       const normalizedPower = String(powerValue).toUpperCase();
       this.dataCallback({
-        sensorType: 'pumpStatus',
+        sensorType: "pumpStatus",
         value: normalizedPower,
         timestamp: data.timestamp || new Date().toISOString(),
       });
@@ -276,7 +307,7 @@ class WebSocketClient {
     if (modeValue !== undefined) {
       const normalizedMode = String(modeValue).toLowerCase();
       this.dataCallback({
-        sensorType: 'pumpMode',
+        sensorType: "pumpMode",
         value: normalizedMode,
         timestamp: data.timestamp || new Date().toISOString(),
       });
@@ -324,12 +355,12 @@ class WebSocketClient {
 
   /**
    * Connect to WebSocket (cookie-based authentication)
-   * 
+   *
    * IMPORTANT: This should only be called AFTER a successful login
    * The WebSocket connection will use the cookies set by that login call
    */
   async connect() {
-    console.log('🔌 Connecting WebSocket (cookie-based auth)...');
+    console.log("🔌 Connecting WebSocket (cookie-based auth)...");
 
     // Initialize client if not already done
     if (!this.client) {
@@ -349,12 +380,12 @@ class WebSocketClient {
   async connectWithAutoLogin() {
     if (EMAIL && PASSWORD) {
       try {
-        console.log('🔐 Attempting auto-login before WebSocket connection...');
+        console.log("🔐 Attempting auto-login before WebSocket connection...");
         await login(EMAIL, PASSWORD);
-        console.log('✅ Auto-login successful, connecting WebSocket...');
+        console.log("✅ Auto-login successful, connecting WebSocket...");
       } catch (e) {
-        console.error('❌ Auto-login failed:', e.message);
-        throw new Error('Authentication required for WebSocket connection');
+        console.error("❌ Auto-login failed:", e.message);
+        throw new Error("Authentication required for WebSocket connection");
       }
     }
 
@@ -402,7 +433,7 @@ class WebSocketClient {
    * Register connect callback
    */
   onConnect(callback) {
-    if (typeof callback === 'function') {
+    if (typeof callback === "function") {
       this.connectCallbacks.push(callback);
       if (this.isConnected) {
         try {
@@ -419,14 +450,16 @@ class WebSocketClient {
    */
   offConnect(callback) {
     if (!callback) return;
-    this.connectCallbacks = this.connectCallbacks.filter((cb) => cb !== callback);
+    this.connectCallbacks = this.connectCallbacks.filter(
+      (cb) => cb !== callback,
+    );
   }
 
   /**
    * Register disconnect callback
    */
   onDisconnect(callback) {
-    if (typeof callback === 'function') {
+    if (typeof callback === "function") {
       this.disconnectCallbacks.push(callback);
     }
   }
@@ -436,7 +469,9 @@ class WebSocketClient {
    */
   offDisconnect(callback) {
     if (!callback) return;
-    this.disconnectCallbacks = this.disconnectCallbacks.filter((cb) => cb !== callback);
+    this.disconnectCallbacks = this.disconnectCallbacks.filter(
+      (cb) => cb !== callback,
+    );
   }
 
   /**
@@ -444,11 +479,11 @@ class WebSocketClient {
    */
   sendPumpCommand(deviceIdParam, power, mode = null) {
     if (!this.isConnected) {
-      console.warn('❌ Cannot send pump command - not connected');
+      console.warn("❌ Cannot send pump command - not connected");
       return false;
     }
 
-    const destination = `protonest/${deviceIdParam}/state/motor/paddy`;
+    const destination = `protonest/${deviceIdParam}/state/pmc/pump`;
     const payload = { power: power.toLowerCase() };
 
     if (mode) {
@@ -460,10 +495,10 @@ class WebSocketClient {
         destination,
         body: JSON.stringify(payload),
       });
-      console.log('✅ Pump command sent:', payload);
+      console.log("✅ Pump command sent:", payload);
       return true;
     } catch (error) {
-      console.error('❌ Failed to send pump command:', error);
+      console.error("❌ Failed to send pump command:", error);
       return false;
     }
   }
@@ -481,7 +516,7 @@ class WebSocketClient {
       // Deactivate client
       this.client.deactivate();
       this.isReady = false;
-      console.log('🔌 WebSocket disconnected');
+      console.log("🔌 WebSocket disconnected");
     }
   }
 
@@ -489,11 +524,11 @@ class WebSocketClient {
    * Enable testing mode (development only)
    */
   enableTestingMode() {
-    if (typeof window === 'undefined') return;
+    if (typeof window === "undefined") return;
 
     window.sendPumpCommand = (power, mode = null) => {
       if (!this.currentDeviceId) {
-        console.error('No device selected');
+        console.error("No device selected");
         return false;
       }
       return this.sendPumpCommand(this.currentDeviceId, power, mode);
@@ -501,12 +536,12 @@ class WebSocketClient {
 
     window.simulateSensorData = (sensorType, value) => {
       if (!this.isConnected) {
-        console.error('Not connected');
+        console.error("Not connected");
         return false;
       }
 
       if (!this.currentDeviceId) {
-        console.error('No device selected');
+        console.error("No device selected");
         return false;
       }
 
@@ -518,10 +553,10 @@ class WebSocketClient {
           destination,
           body: JSON.stringify(payload),
         });
-        console.log('✅ Simulated sensor data sent:', payload);
+        console.log("✅ Simulated sensor data sent:", payload);
         return true;
       } catch (error) {
-        console.error('❌ Failed to simulate sensor data:', error);
+        console.error("❌ Failed to simulate sensor data:", error);
         return false;
       }
     };
@@ -531,14 +566,14 @@ class WebSocketClient {
         connected: this.isConnected,
         currentDevice: this.currentDeviceId || null,
         activeSubscriptions: Array.from(this.subscriptions.keys()),
-        authMethod: 'cookie-based',
+        authMethod: "cookie-based",
       };
     };
 
-    console.log('🧪 Testing mode enabled. Available commands:');
+    console.log("🧪 Testing mode enabled. Available commands:");
     console.log("  - sendPumpCommand('on'|'off', 'auto'|'manual')");
     console.log("  - simulateSensorData('temp'|'moisture'|..., value)");
-    console.log('  - wsInfo()');
+    console.log("  - wsInfo()");
   }
 }
 
@@ -549,6 +584,6 @@ export const webSocketClient = new WebSocketClient();
 export { login };
 
 // Auto-enable testing mode in development
-if (typeof window !== 'undefined' && import.meta.env?.DEV) {
+if (typeof window !== "undefined" && import.meta.env?.DEV) {
   window.webSocketClient = webSocketClient;
 }

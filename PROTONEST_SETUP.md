@@ -16,11 +16,14 @@ This application uses **Cookie-Based HttpOnly Authentication**:
 Create a `.env` file in the project root:
 
 ```env
-# Protonest Backend Configuration
-VITE_API_BASE_URL=https://api.protonestconnect.co/api/v1
+# Protonest Backend Configuration (includes /user path)
+VITE_API_BASE_URL=https://api.protonestconnect.co/api/v1/user
 
 # WebSocket Configuration
 VITE_WS_URL=wss://api.protonestconnect.co/ws
+
+# Device ID
+VITE_DEVICE_ID=your-device-id
 
 # Auto-Login Credentials (Optional)
 # These are obtained from Protonest Web Dashboard
@@ -42,9 +45,12 @@ VITE_USER_SECRET=your-secretKey-from-dashboard
 
 ### 1. Login - Get Session Cookies
 
-**Endpoint:** `POST /user/get-token`
+**Endpoint:** `POST /get-token`
+
+> Note: The base URL already includes `/user`, so the full path is `{baseUrl}/get-token`
 
 **Request:**
+
 ```json
 {
   "email": "your-email@example.com",
@@ -53,6 +59,7 @@ VITE_USER_SECRET=your-secretKey-from-dashboard
 ```
 
 **Response:**
+
 - Status: `200 OK`
 - Body: Empty (no response body)
 - **Cookies Set by Server:**
@@ -66,11 +73,13 @@ VITE_USER_SECRET=your-secretKey-from-dashboard
 **Headers:** None required (cookies sent automatically)
 
 **Response:**
+
 - Status: `200 OK`
 - Body: Empty
 - New cookies set automatically
 
 **Error Responses:**
+
 - `400` with `"Refresh token is required"` - No refresh cookie present
 - `400` with `"Invalid refresh token"` - Refresh token expired
 
@@ -81,8 +90,23 @@ VITE_USER_SECRET=your-secretKey-from-dashboard
 **Authentication:** Via browser cookies (no token parameter)
 
 **Topics:**
+
 - `/topic/stream/{deviceId}` - Real-time sensor data
-- `/topic/state/{deviceId}` - Device state updates
+- `/topic/state/{deviceId}` - Device state updates (pump, mode)
+
+### MQTT Topics (pmc/ prefix)
+
+All topics use the `pmc/` prefix convention:
+
+| Topic             | Description              |
+| ----------------- | ------------------------ |
+| `pmc/temperature` | Temperature sensor data  |
+| `pmc/humidity`    | Humidity sensor data     |
+| `pmc/moisture`    | Soil moisture data       |
+| `pmc/light`       | Light intensity data     |
+| `pmc/battery`     | Battery level data       |
+| `pmc/pump`        | Pump control (ON/OFF)    |
+| `pmc/mode`        | Mode state (auto/manual) |
 
 ---
 
@@ -93,7 +117,7 @@ VITE_USER_SECRET=your-secretKey-from-dashboard
    ↓
 2. Read credentials from .env
    ↓
-3. POST /user/get-token with email/password
+3. POST /get-token with email/password
    ↓
 4. Server sets HttpOnly cookies
    ↓
@@ -112,27 +136,38 @@ VITE_USER_SECRET=your-secretKey-from-dashboard
 
 ### Publishing (IoT Device → Protonest)
 
-**Stream Data:**
+**Stream Data (sensor readings):**
+
 ```
-Topic: protonest/{deviceId}/stream/temp
+Topic: protonest/{deviceId}/stream/pmc/temperature
 Payload: {"temp": "24.5"}
 ```
 
-**State Data:**
+**State Data (pump control):**
+
 ```
-Topic: protonest/{deviceId}/state/pump
+Topic: protonest/{deviceId}/state/pmc/pump
 Payload: {"power": "on", "mode": "auto"}
+```
+
+**Mode Data:**
+
+```
+Topic: protonest/{deviceId}/state/pmc/mode
+Payload: {"mode": "auto"}
 ```
 
 ### Subscription (Dashboard ← Protonest)
 
 **Stream Updates:**
+
 ```
 Topic: /topic/stream/{deviceId}
 Payload: {"payload": {"temp": "24.5"}, "topic": "temp", "timestamp": "..."}
 ```
 
 **State Updates:**
+
 ```
 Topic: /topic/state/{deviceId}
 Payload: {"payload": {"power": "on"}, "timestamp": "..."}
@@ -145,6 +180,7 @@ Payload: {"payload": {"power": "on"}, "timestamp": "..."}
 ### "Email and password required" Error
 
 Ensure `.env` file exists with credentials:
+
 ```bash
 # Check if .env exists
 cat .env
@@ -153,11 +189,13 @@ cat .env
 ### "Invalid credentials" Error (400)
 
 **Possible Causes:**
+
 - Wrong email address
 - Wrong secret key (not using the API secret, using login password instead)
 - Account not verified
 
 **Solution:**
+
 1. Go to Protonest Web Dashboard
 2. Navigate to your device settings
 3. Copy the correct API secret key
@@ -171,11 +209,13 @@ cat .env
 ### WebSocket Connection Failed
 
 **Check:**
+
 1. Login succeeded (cookies were set)
 2. Browser DevTools → Application → Cookies should show `jwt` cookie
 3. Network tab shows WebSocket connection attempt
 
 **Common Issues:**
+
 - CORS blocking credentials
 - Cookies blocked by browser settings
 - Server not allowing credentials
@@ -183,6 +223,7 @@ cat .env
 ### Session Expired
 
 On 400 "Invalid token":
+
 1. Automatic refresh is attempted via `/get-new-token`
 2. If refresh fails, user is logged out
 3. Re-login required
@@ -228,12 +269,12 @@ In development, requests go through Vite proxy to bypass CORS:
 export default {
   server: {
     proxy: {
-      '/api': {
-        target: 'https://api.protonestconnect.co/api/v1',
+      "/api": {
+        target: "https://api.protonestconnect.co",
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, ''),
+        rewrite: (path) => path.replace(/^\/api/, "/api/v1"),
         // Important for cookies
-        cookieDomainRewrite: 'localhost',
+        cookieDomainRewrite: "localhost",
       },
     },
   },
@@ -244,15 +285,52 @@ export default {
 
 ```javascript
 // Browser console
-fetch('/api/user/get-token', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  credentials: 'include', // Important!
+fetch("/api/user/get-token", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  credentials: "include", // Important!
   body: JSON.stringify({
-    email: 'your-email@example.com',
-    password: 'your-secretKey',
+    email: "your-email@example.com",
+    password: "your-secretKey",
   }),
-}).then(r => console.log('Status:', r.status));
+}).then((r) => console.log("Status:", r.status));
+```
+
+---
+
+## HTTP API Endpoints
+
+### Data Endpoints
+
+| Endpoint                        | Method | Description                          |
+| ------------------------------- | ------ | ------------------------------------ |
+| `/get-stream-data/device`       | GET    | Fetch all historical data for device |
+| `/get-stream-data/device/topic` | POST   | Fetch historical data by topic       |
+| `/get-state-details/device`     | POST   | Get current device state             |
+| `/update-state-details`         | POST   | Send pump/mode commands              |
+
+### Example: Update Pump Status
+
+```json
+POST /update-state-details
+{
+  "deviceId": "your-device-id",
+  "topic": "pmc/pump",
+  "payload": { "power": "ON", "mode": "auto" }
+}
+```
+
+### Example: Update Device Mode
+
+```json
+POST /update-state-details
+{
+  "deviceId": "your-device-id",
+  "topic": "pmc/mode",
+  "payload": { "mode": "auto" }
+}
+```
+
 ```
 
 ---
@@ -277,6 +355,7 @@ fetch('/api/user/get-token', {
 
 ---
 
-**Version:** 2.0.0 (Cookie-Based Auth)  
-**Last Updated:** January 2026  
+**Version:** 2.1.0 (Cookie-Based Auth + pmc/ Topics)
+**Last Updated:** February 2026
 **Status:** Ready for Integration
+```
