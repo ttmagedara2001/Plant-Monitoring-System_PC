@@ -10,255 +10,162 @@ import { updatePumpStatus, updateDeviceMode } from './Service/deviceService';
 import { useNotifications } from './Context/NotificationContext';
 
 function App() {
-  // Use isAuthenticated instead of jwtToken for cookie-based auth
   const { isAuthenticated, isLoading } = useAuth();
   const { addNotification } = useNotifications();
 
-  // SPA navigation state
-  const [activeTab, setActiveTab] = useState(() => {
-    return localStorage.getItem('activeTab') || 'dashboard';
-  });
+  // --- Navigation ---
+  const [activeTab, setActiveTab] = useState(() => localStorage.getItem('activeTab') || 'dashboard');
 
-  // Use VITE_DEVICE_ID from .env or fallback to hardcoded default
-  // IMPORTANT: Device IDs are case-sensitive in WebSocket topics, so normalize to lowercase
-  const defaultDevice = (import.meta.env.VITE_DEVICE_ID);
+  // --- Device selection (persisted across page refreshes) ---
+  const defaultDevice = import.meta.env.VITE_DEVICE_ID;
+  const [selectedDevice, setSelectedDevice] = useState(() => localStorage.getItem('selectedDevice') || defaultDevice);
 
-  // Clear localStorage cache if stored device differs from env
-  const storedDevice = localStorage.getItem('selectedDevice');
-  if (storedDevice && defaultDevice && storedDevice !== defaultDevice) {
-    console.log(`🔄 Device ID changed: ${storedDevice} → ${defaultDevice}, clearing cache`);
-    localStorage.removeItem('selectedDevice');
-  }
-
-  const [selectedDevice, setSelectedDevice] = useState(() => {
-    const stored = localStorage.getItem('selectedDevice');
-    return stored || defaultDevice;
-  });
-
-  // Live data and connection state lifted to App so monitoring continues while navigating
+  // --- Live sensor data + connection state ---
   const [liveData, setLiveData] = useState({
-    moisture: 0,
-    temperature: 0,
-    humidity: 0,
-    light: 0,
-    battery: 0,
+    moisture: 0, temperature: 0, humidity: 0, light: 0, battery: 0,
     pumpStatus: 'OFF',
-    pumpMode: undefined, // only set when explicit state message arrives from backend
+    pumpMode: undefined,
   });
   const [isConnected, setIsConnected] = useState(false);
 
+  // --- Device settings (from localStorage) ---
+  const defaultSettings = () => ({
+    moistureMin: '20', moistureMax: '70',
+    tempMin: '10', tempMax: '35',
+    humidityMin: '30', humidityMax: '80',
+    lightMin: '200', lightMax: '1000',
+    batteryMin: '20', autoMode: false,
+  });
+
   const [settings, setSettings] = useState(() => {
-    // load settings for initial selected device
     try {
       const raw = localStorage.getItem(`settings_${selectedDevice}`);
-      return raw
-        ? JSON.parse(raw)
-        : {
-          moistureMin: '20',
-          moistureMax: '70',
-          tempMin: '10',
-          tempMax: '35',
-          humidityMin: '30',
-          humidityMax: '80',
-          lightMin: '200',
-          lightMax: '1000',
-          batteryMin: '20',
-          autoMode: false,
-        };
-    } catch (e) {
-      return {
-        moistureMin: '20',
-        moistureMax: '70',
-        tempMin: '10',
-        tempMax: '35',
-        humidityMin: '30',
-        humidityMax: '80',
-        lightMin: '200',
-        lightMax: '1000',
-        batteryMin: '20',
-        autoMode: false,
-      };
+      return raw ? JSON.parse(raw) : defaultSettings();
+    } catch {
+      return defaultSettings();
     }
   });
 
+  // Broadcast live data globally for components outside the React tree
   useEffect(() => {
-    // Broadcast latest live data globally so other components can subscribe
     try {
       window.__latestLiveData = liveData;
       window.dispatchEvent(new CustomEvent('live:update', { detail: liveData }));
-    } catch (e) {
-      // ignore
-    }
+    } catch (_) { /* ignored */ }
   }, [liveData]);
 
-  // Watch for critical sensor transitions to emit notifications
-  // Only critical sensor states trigger notifications (pump status changes are not notified)
+  // Notify on critical sensor transitions (value enters critical range)
   const _prevLive = React.useRef(null);
   React.useEffect(() => {
     try {
       const prev = _prevLive.current || {};
       const curr = liveData || {};
 
-      // load thresholds from persisted settings for selected device if present
       let persisted = null;
       try {
         const raw = localStorage.getItem(`settings_${selectedDevice}`);
         if (raw) persisted = JSON.parse(raw).thresholds || null;
-      } catch (e) { }
+      } catch (_) { /* ignored */ }
 
-      const sensors = ['moisture', 'temperature', 'humidity', 'light', 'battery'];
       const isCritical = (key, value) => {
-        if (value === undefined || value === null || String(value) === 'unknown') return false; // Don't treat missing as critical for notifications
+        if (value == null || String(value) === 'unknown') return false;
         const num = Number(value);
         if (Number.isNaN(num)) return false;
-        const group = (persisted && persisted[key]) || null;
-        const min = group && typeof group.min !== 'undefined' ? Number(group.min) : undefined;
-        const max = group && typeof group.max !== 'undefined' ? Number(group.max) : undefined;
-        if (typeof min !== 'undefined' && !Number.isNaN(min) && num < min) return true;
-        if (typeof max !== 'undefined' && !Number.isNaN(max) && num > max) return true;
+        const group = persisted?.[key];
+        const min = group?.min != null ? Number(group.min) : undefined;
+        const max = group?.max != null ? Number(group.max) : undefined;
+        if (min != null && !Number.isNaN(min) && num < min) return true;
+        if (max != null && !Number.isNaN(max) && num > max) return true;
         return false;
       };
 
-      sensors.forEach((s) => {
-        const prevCritical = isCritical(s, prev[s]);
-        const currCritical = isCritical(s, curr[s]);
-        // Only notify when transitioning INTO critical state (not during first load)
-        if (!prevCritical && currCritical && _prevLive.current !== null) {
+      ['moisture', 'temperature', 'humidity', 'light', 'battery'].forEach((s) => {
+        if (!isCritical(s, prev[s]) && isCritical(s, curr[s]) && _prevLive.current !== null) {
           try {
             addNotification({
               type: 'critical',
               message: `⚠️ Critical: ${s.charAt(0).toUpperCase() + s.slice(1)} = ${curr[s]}`,
               timestamp: new Date().toISOString(),
-              meta: { deviceId: selectedDevice, sensor: s, value: curr[s] }
+              meta: { deviceId: selectedDevice, sensor: s, value: curr[s] },
             });
-          } catch (e) { }
+          } catch (_) { /* ignored */ }
         }
       });
-
-      // Pump status changes are NOT notified (removed per user request)
-    } catch (e) {
-      // ignore
-    } finally {
-      _prevLive.current = liveData;
-    }
+    } catch (_) { /* ignored */ }
+    finally { _prevLive.current = liveData; }
   }, [liveData, selectedDevice, addNotification, settings]);
 
 
-  useEffect(() => {
-    localStorage.setItem('activeTab', activeTab);
-  }, [activeTab]);
+  useEffect(() => { localStorage.setItem('activeTab', activeTab); }, [activeTab]);
 
-
-
-  // Reload settings when selected device changes or on external update
+  // Reload settings when selected device changes
   useEffect(() => {
     try {
       const raw = localStorage.getItem(`settings_${selectedDevice}`);
-      if (raw) setSettings(JSON.parse(raw));
-      else
-        setSettings({
-          moistureMin: '20',
-          moistureMax: '70',
-          tempMin: '10',
-          tempMax: '35',
-          humidityMin: '30',
-          humidityMax: '80',
-          lightMin: '200',
-          lightMax: '1000',
-          batteryMin: '20',
-          autoMode: false,
-        });
-    } catch (e) {
-      console.warn('[App] Failed to load settings', e);
-    }
+      setSettings(raw ? JSON.parse(raw) : defaultSettings());
+    } catch (_) { /* ignored */ }
   }, [selectedDevice]);
 
   // Listen for settings saved from DeviceSettingsPage
   useEffect(() => {
     const onSettingsUpdated = (e) => {
+      if (e?.detail?.deviceId !== selectedDevice) return;
       try {
-        const updatedDevice = e?.detail?.deviceId;
-        if (!updatedDevice) return;
-        if (updatedDevice !== selectedDevice) return;
         const raw = localStorage.getItem(`settings_${selectedDevice}`);
         if (raw) setSettings(JSON.parse(raw));
-      } catch (err) {
-        console.error('[App] onSettingsUpdated', err);
-      }
+      } catch (_) { /* ignored */ }
     };
     window.addEventListener('settings:updated', onSettingsUpdated);
     return () => window.removeEventListener('settings:updated', onSettingsUpdated);
   }, [selectedDevice]);
 
-  // Automation: control pump based on moisture — auto mode sends HTTP commands, manual mode sends notifications
+  // --- Automation: pump control based on moisture level ---
   const _lastAuto = useRef({ cmd: null, ts: 0 });
-  const _lastManualNotify = useRef(0); // timestamp of last manual-mode notification
+  const _lastManualNotify = useRef(0);
+
   useEffect(() => {
-    try {
-      if (!settings) return;
-      const raw = liveData?.moisture;
-      if (raw === undefined || raw === null) return;
-      const val = Number(raw);
-      if (!isFinite(val)) return;
-      if (!selectedDevice) return;
+    if (!settings || !selectedDevice) return;
+    const raw = liveData?.moisture;
+    if (raw == null) return;
+    const val = Number(raw);
+    if (!isFinite(val)) return;
 
-      // derive min from settings with fallback
-      let min = parseFloat(settings.moistureMin);
-      if (isNaN(min)) min = 20;
+    let min = parseFloat(settings.moistureMin);
+    if (isNaN(min)) min = 20;
+    const moistureLow = val < min;
 
-      const moistureLow = val < min;
+    // AUTO MODE — send HTTP pump ON/OFF command
+    if (settings.autoMode) {
+      const desired = moistureLow ? 'ON' : 'OFF';
+      const now = Date.now();
+      if (_lastAuto.current.cmd === desired && now - _lastAuto.current.ts < 5000) return;
+      if ((liveData?.pumpStatus || '').toUpperCase() === desired) return;
 
-      // ── AUTO MODE: send pump ON/OFF via HTTP ──
-      if (settings.autoMode) {
-        const desired = moistureLow ? 'ON' : 'OFF';
+      updateDeviceMode(selectedDevice, 'auto').catch(() => {});
+      updatePumpStatus(selectedDevice, desired, 'pmc/pump', 'auto', val)
+        .then(() => { _lastAuto.current = { cmd: desired, ts: Date.now() }; })
+        .catch((err) => console.error('[App] Auto pump command failed', err));
+      return;
+    }
 
-        // Avoid sending duplicate commands too often (5s debounce)
-        const now = Date.now();
-        const last = _lastAuto.current;
-        if (last.cmd === desired && now - last.ts < 5000) return;
-
-        // If pump already in desired state, skip
-        if ((liveData?.pumpStatus || '').toUpperCase() === desired) return;
-
-        console.log('[App] AUTO MODE: sending pump command', { device: selectedDevice, desired, moisture: val, min });
-        updateDeviceMode(selectedDevice, 'auto').catch(() => {});
-        updatePumpStatus(selectedDevice, desired, 'pmc/pump', 'auto', val)
-          .then((res) => {
-            _lastAuto.current = { cmd: desired, ts: Date.now() };
-            console.log('[App] AUTO MODE: pump command response', res);
-          })
-          .catch((err) => {
-            console.error('[App] AUTO MODE: pump command failed', err);
-          });
-        return;
-      }
-
-      // ── MANUAL MODE: notify user when moisture is low ──
-      if (moistureLow) {
-        const now = Date.now();
-        // Debounce: only notify once every 60 seconds
-        if (now - _lastManualNotify.current < 60_000) return;
-        // Don't notify if pump is already ON
-        if ((liveData?.pumpStatus || '').toUpperCase() === 'ON') return;
-
-        _lastManualNotify.current = now;
-        console.log('[App] MANUAL MODE: moisture low, notifying user', { moisture: val, min });
-        addNotification({
-          type: 'warning',
-          message: `💧 Moisture is low (${val}%). Please turn on the pump manually.`,
-          timestamp: new Date().toISOString(),
-          meta: { deviceId: selectedDevice, sensor: 'moisture', value: val, threshold: min },
-        });
-      }
-    } catch (e) {
-      console.warn('[App] moisture control failed', e);
+    // MANUAL MODE — notify user when moisture is low
+    if (moistureLow) {
+      const now = Date.now();
+      if (now - _lastManualNotify.current < 60_000) return;
+      if ((liveData?.pumpStatus || '').toUpperCase() === 'ON') return;
+      _lastManualNotify.current = now;
+      addNotification({
+        type: 'warning',
+        message: `💧 Moisture is low (${val}%). Please turn on the pump manually.`,
+        timestamp: new Date().toISOString(),
+        meta: { deviceId: selectedDevice, sensor: 'moisture', value: val, threshold: min },
+      });
     }
   }, [settings?.autoMode, settings?.moistureMin, liveData?.moisture, selectedDevice, liveData?.pumpStatus, addNotification]);
 
-  // Store data handler in ref to ensure compatibility with webSocketClient
+  // --- Data handler (stable ref for webSocketClient) ---
   const handleDataRef = useRef(null);
 
-  // Stable data handler
   const handleData = useCallback((data) => {
     setLiveData((prev) => {
       const updated = { ...prev };
@@ -270,53 +177,24 @@ function App() {
         if (v.light !== undefined) updated.light = parseFloat(v.light);
         if (v.moisture !== undefined) updated.moisture = parseFloat(v.moisture);
       } else {
-        switch (data.sensorType) {
-          case 'temp':
-            updated.temperature = parseFloat(data.value);
-            break;
-          case 'humidity':
-            updated.humidity = parseFloat(data.value);
-            break;
-          case 'battery':
-            updated.battery = parseFloat(data.value);
-            break;
-          case 'light':
-            updated.light = parseFloat(data.value);
-            break;
-          case 'moisture':
-            updated.moisture = parseFloat(data.value);
-            break;
-          case 'pumpStatus':
-            updated.pumpStatus = data.value;
-            break;
-          case 'pumpMode':
-            updated.pumpMode = data.value;
-            break;
-          default:
-            break;
-        }
+        const map = { temp: 'temperature', humidity: 'humidity', battery: 'battery', light: 'light', moisture: 'moisture', pumpStatus: 'pumpStatus', pumpMode: 'pumpMode' };
+        const key = map[data.sensorType];
+        if (key) updated[key] = key === 'pumpStatus' || key === 'pumpMode' ? data.value : parseFloat(data.value);
       }
       return updated;
     });
   }, []);
 
-  // Update ref when handler changes (stable, so runs once)
-  useEffect(() => {
-    handleDataRef.current = handleData;
-  }, [handleData]);
+  useEffect(() => { handleDataRef.current = handleData; }, [handleData]);
 
-  // 1. Connection Effect - Connects when authenticated
+  // --- Effect 1: Connect WebSocket when authenticated ---
   useEffect(() => {
     if (isLoading || !isAuthenticated) return;
 
-    console.log('[App] Authenticated - Connecting WebSocket');
-    webSocketClient.connect()
-      .then(() => setIsConnected(true))
-      .catch(e => console.warn('[App] WS Connect failed', e));
+    webSocketClient.connect().catch((e) => console.warn('[App] WS connect failed', e));
 
     const onDisconnect = () => setIsConnected(false);
     const onConnect = () => setIsConnected(true);
-
     webSocketClient.onDisconnect(onDisconnect);
     webSocketClient.onConnect(onConnect);
 
@@ -326,40 +204,27 @@ function App() {
     };
   }, [isAuthenticated, isLoading]);
 
-  // 2. Subscription & Device Change Effect
-  // Handles switching devices and resetting data
+  // Persist device selection
+  useEffect(() => { if (selectedDevice) localStorage.setItem('selectedDevice', selectedDevice); }, [selectedDevice]);
+
+  // --- Effect 2: Switch STOMP subscriptions when device changes ---
   useEffect(() => {
-    if (!selectedDevice) return;
+    if (!selectedDevice || !isConnected || !handleDataRef.current) return;
 
-    // Persist selection
-    localStorage.setItem('selectedDevice', selectedDevice);
-
-    // Reset UI state for new device
-    console.log(`[App] 🔄 Device changed to: ${selectedDevice} - Resetting live data`);
+    // Reset live data for the new device
     setLiveData({
-      moisture: undefined,
-      temperature: undefined,
-      humidity: undefined,
-      light: undefined,
-      battery: undefined,
-      pumpStatus: 'OFF',
-      pumpMode: undefined, // only set when explicit state message arrives from backend
+      moisture: undefined, temperature: undefined, humidity: undefined,
+      light: undefined, battery: undefined, pumpStatus: 'OFF', pumpMode: undefined,
     });
 
-    // Valid handler required
-    if (!handleDataRef.current) return;
-
-    // Subscribe (webSocketClient handles unsubscribing from old device automatically)
     try {
-      console.log(`[App] 📡 Subscribing to device: ${selectedDevice}`);
       webSocketClient.subscribeToDevice(selectedDevice, handleDataRef.current);
     } catch (e) {
       console.warn('[App] Subscription failed', e);
     }
+  }, [selectedDevice, isConnected, handleData]);
 
-  }, [selectedDevice, handleData]);
-
-  // Show loading state while auth is initializing
+  // --- Loading spinner ---
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-900">
@@ -384,8 +249,7 @@ function App() {
 
         <StatusBar activeTab={activeTab} setActiveTab={setActiveTab} />
 
-        {/* Main content area rendered by state (SPA) */}
-        {/* Padding top accounts for fixed Header + Navigation Bar - responsive for all screen sizes */}
+        {/* Main content — padding accounts for fixed Header + Nav */}
         <main className="w-full pt-[100px] landscape:pt-[104px] sm:pt-[116px] md:pt-[128px]">
           {activeTab === 'dashboard' ? (
             <Dashboard deviceId={selectedDevice} liveData={liveData} settings={settings} isConnected={isConnected} />

@@ -1,210 +1,156 @@
 import axios from "axios";
 
-// Use VITE_API_BASE_URL from environment
-// This should be the full API base path: https://api.protonestconnect.co/api/v1
 const API_URL = import.meta.env.VITE_API_BASE_URL;
 
+// ---------------------------------------------------------------------------
+// Token store — in-memory + localStorage (survives page refresh, no cookies)
+// ---------------------------------------------------------------------------
+const TOKEN_KEY = "authToken";
+const REFRESH_KEY = "refreshToken";
+
+let __jwtToken = localStorage.getItem(TOKEN_KEY) || null;
+let __refreshToken = localStorage.getItem(REFRESH_KEY) || null;
+let __isAuthenticated = !!__jwtToken;
+let __envAuthPromise = null;
+
+/** Sync in-memory tokens to localStorage. */
+function _persistTokens() {
+  __jwtToken
+    ? localStorage.setItem(TOKEN_KEY, __jwtToken)
+    : localStorage.removeItem(TOKEN_KEY);
+  __refreshToken
+    ? localStorage.setItem(REFRESH_KEY, __refreshToken)
+    : localStorage.removeItem(REFRESH_KEY);
+}
+
+/** Get the current JWT access token. */
+export const getJwtToken = () => __jwtToken;
+
+/** Get the current refresh token. */
+export const getRefreshToken = () => __refreshToken;
+
+/** Manually set tokens (e.g. after restore or refresh). */
+export const setTokens = (jwt, refresh) => {
+  __jwtToken = jwt;
+  __refreshToken = refresh;
+  __isAuthenticated = !!jwt;
+  _persistTokens();
+};
+
 /**
- * Login using cookie-based authentication
+ * Authenticate via POST /get-token.
+ * Stores JWT + refresh token in memory and localStorage.
  *
- * NEW API BEHAVIOR:
- * - POST /user/get-token returns 200 OK with NO response body on success
- * - JWT and Refresh Token are set automatically as HttpOnly cookies by the server
- * - We do NOT store tokens in localStorage/sessionStorage
- *
- * @param {string} email - User email
- * @param {string} password - User secret key (from Protonest dashboard)
- * @returns {Promise<{success: true, userId: string}>} - Success indicator and user ID
+ * @param {string} email    - User email
+ * @param {string} password - Secret key from Protonest dashboard
+ * @returns {Promise<{success: boolean, userId: string, jwtToken: string, refreshToken: string}>}
  */
 export const login = async (email, password) => {
+  if (!email || !password) throw new Error("Email and password are required");
+
+  const cleanEmail = email.trim();
+  const cleanPassword = password.trim();
+  if (!cleanEmail.includes("@")) throw new Error("Invalid email format");
+
   try {
-    // Validate input before making request
-    if (!email || !password) {
-      throw new Error("Email and password are required");
-    }
-
-    // Clean and validate email format
-    const cleanEmail = email.trim();
-    const cleanPassword = password.trim();
-
-    if (!cleanEmail.includes("@")) {
-      throw new Error("Invalid email format");
-    }
-
-    console.log("🔄 Making cookie-based authentication request to:", API_URL);
-    console.log(
-      "📋 IMPORTANT: Using secretKey as password (not login password)",
+    const response = await axios.post(
+      `${API_URL}/get-token`,
+      { email: cleanEmail, password: cleanPassword },
+      {
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        timeout: 10000,
+      },
     );
 
-    const payload = {
-      email: cleanEmail,
-      password: cleanPassword,
-    };
+    const data = response.data?.data || response.data;
+    const jwtToken = data?.jwtToken || data?.token || data?.accessToken || null;
+    const refreshToken = data?.refreshToken || null;
 
-    console.log("🔄 Attempting /user/get-token:", {
-      email: cleanEmail,
-      passwordType: "secretKey",
-      passwordLength: cleanPassword.length,
-    });
+    __jwtToken = jwtToken;
+    __refreshToken = refreshToken;
+    __isAuthenticated = true;
+    _persistTokens();
 
-    const response = await axios.post(`${API_URL}/get-token`, payload, {
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
-      // CRITICAL: Include credentials so cookies can be set by server
-      withCredentials: true,
-      timeout: 10000,
-    });
-
-    // NEW: Success is indicated by 200 OK status
-    // The server sets HttpOnly cookies automatically - no token in response body
-    console.log("✅ Login successful - cookies set by server");
-    console.log("📡 Response status:", response.status);
-
-    // Return success indicator and userId (email)
-    // Note: We no longer return jwtToken or refreshToken as they're in HttpOnly cookies
-    return {
-      success: true,
-      userId: cleanEmail,
-    };
+    return { success: true, userId: cleanEmail, jwtToken, refreshToken };
   } catch (error) {
-    // Enhanced error logging based on API documentation
     if (error.response?.status === 400) {
-      const serverResponse = error.response.data;
-
-      console.error("❌ Authentication failed (400):", {
-        serverResponse: JSON.stringify(serverResponse, null, 2),
-        possibleCauses: [
-          "Invalid email format - check email address",
-          "Invalid credentials - verify email is registered",
-          "Wrong secretKey - check Protonest dashboard for correct secretKey",
-          "User not found - email not registered in system",
-          "Email not verified - check email verification status",
-        ],
-      });
-
-      // Provide specific error message based on server response
-      const errorData = serverResponse?.data;
-      if (errorData === "Invalid email format") {
-        throw new Error(
+      const errorData = error.response.data?.data;
+      const messages = {
+        "Invalid email format":
           "Invalid email format. Please check the email address.",
-        );
-      } else if (errorData === "Invalid credentials") {
-        throw new Error(
+        "Invalid credentials":
           "Invalid credentials. Please verify the email and secretKey from Protonest dashboard.",
-        );
-      } else if (errorData === "User not found") {
-        throw new Error(
-          "User not found. Please check if the email is registered in the system.",
-        );
-      } else if (errorData === "Email not verified") {
-        throw new Error(
+        "User not found":
+          "User not found. Please check if the email is registered.",
+        "Email not verified":
           "Email not verified. Please verify your email address first.",
-        );
-      } else {
-        throw new Error(
+      };
+      throw new Error(
+        messages[errorData] ||
           `Authentication failed: ${errorData || "Please verify email and secretKey"}`,
-        );
-      }
-    } else if (error.response?.status === 500) {
-      console.error("❌ Server error (500):", error.response.data);
-      throw new Error("Internal server error. Please try again later.");
-    } else {
-      console.error(
-        `❌ Unexpected error (${error.response?.status}):`,
-        error.response?.data,
       );
-      throw error;
+    } else if (error.response?.status === 500) {
+      throw new Error("Internal server error. Please try again later.");
     }
+    throw error;
   }
 };
 
 /**
- * Refresh session using cookie-based token refresh
- *
- * NEW API BEHAVIOR:
- * - GET /get-new-token uses the existing Refresh Token cookie
- * - No manual headers needed - cookies are sent automatically
- * - On success, new cookies are set by the server
- *
- * @returns {Promise<{success: true}>} - Success indicator
+ * Refresh the JWT by calling GET /get-new-token with the refresh token.
+ * @returns {Promise<{success: boolean, jwtToken: string}>}
  */
 export const refreshSession = async () => {
-  try {
-    console.log("🔄 Attempting cookie-based session refresh");
+  if (!__refreshToken)
+    throw new Error("No refresh token available — please log in again");
 
+  try {
     const response = await axios.get(`${API_URL}/get-new-token`, {
-      // CRITICAL: Include credentials so refresh token cookie is sent
-      withCredentials: true,
+      headers: { Authorization: `Bearer ${__refreshToken}` },
       timeout: 10000,
     });
 
-    // Success is indicated by 200 OK status
-    // New cookies are set automatically by the server
-    console.log("✅ Session refreshed successfully via cookies");
-
-    return { success: true };
-  } catch (error) {
-    const errorData = error.response?.data?.data;
-
-    console.error("❌ Session refresh failed:", {
-      status: error.response?.status,
-      data: error.response?.data,
-      message: error.message,
-    });
-
-    // Provide specific error for refresh failures
-    if (errorData === "Refresh token is required") {
-      throw new Error("No refresh token available - please log in again");
-    } else if (errorData === "Invalid refresh token") {
-      throw new Error("Session expired - please log in again");
-    } else {
-      throw error;
+    const data = response.data?.data || response.data;
+    if (data?.jwtToken || data?.token || data?.accessToken) {
+      __jwtToken = data.jwtToken || data.token || data.accessToken;
     }
+    if (data?.refreshToken) __refreshToken = data.refreshToken;
+
+    __isAuthenticated = true;
+    _persistTokens();
+    return { success: true, jwtToken: __jwtToken };
+  } catch (error) {
+    const msg = error.response?.data?.data;
+    if (msg === "Refresh token is required")
+      throw new Error("No refresh token available — please log in again");
+    if (msg === "Invalid refresh token")
+      throw new Error("Session expired — please log in again");
+    throw error;
   }
 };
 
 /**
- * Ensure authentication using environment credentials
- * Used for auto-login during app initialization
- *
- * With cookie-based auth, this function:
- * - Checks if we believe we're authenticated (from a flag)
- * - If not, attempts login using ENV credentials
- * - Returns success indicator
- *
- * @returns {Promise<boolean>} - True if authenticated
+ * Ensure authenticated using env credentials (auto-login on app init).
+ * @returns {Promise<boolean>}
  */
-let __envAuthPromise = null;
-let __isAuthenticated = false;
-
 export const ensureAuthFromEnv = async () => {
-  // If we believe we're already authenticated, return true
-  // Note: We can't actually check cookies from JS (HttpOnly), so we track state
-  if (__isAuthenticated) {
-    return true;
-  }
+  if (__isAuthenticated && __jwtToken) return true;
 
   const envEmail = import.meta.env.VITE_USER_EMAIL;
   const envSecret = import.meta.env.VITE_USER_SECRET;
+  if (!envEmail || !envSecret) return false;
 
-  if (!envEmail || !envSecret) {
-    return false;
-  }
-
-  // Singleton promise to avoid race conditions
-  if (__envAuthPromise) {
-    return __envAuthPromise;
-  }
+  if (__envAuthPromise) return __envAuthPromise;
 
   __envAuthPromise = (async () => {
     try {
       await login(envEmail, envSecret);
-      __isAuthenticated = true;
       return true;
     } catch (e) {
-      console.error("❌ Auto-login from ENV failed:", e.message);
+      console.error("[Auth] Auto-login from ENV failed:", e.message);
       __isAuthenticated = false;
       return false;
     } finally {
@@ -215,24 +161,18 @@ export const ensureAuthFromEnv = async () => {
   return __envAuthPromise;
 };
 
-/**
- * Check if user is authenticated (based on local state)
- * Note: We can't directly check HttpOnly cookies from JavaScript
- */
-export const isAuthenticated = () => {
-  return __isAuthenticated;
-};
+/** Check if user is authenticated. */
+export const isAuthenticated = () => __isAuthenticated && !!__jwtToken;
 
-/**
- * Set authentication state (used by AuthContext)
- */
+/** Set authentication flag (used by AuthContext). */
 export const setAuthenticatedState = (state) => {
   __isAuthenticated = state;
 };
 
-/**
- * Clear authentication state (used on logout)
- */
+/** Clear all auth state (logout). */
 export const clearAuthState = () => {
+  __jwtToken = null;
+  __refreshToken = null;
   __isAuthenticated = false;
+  _persistTokens();
 };

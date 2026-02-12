@@ -3,126 +3,99 @@ import {
   login as authLogin,
   setAuthenticatedState,
   clearAuthState,
-  ensureAuthFromEnv
+  getJwtToken,
 } from '../Service/authService';
 
 /**
- * Authentication Context for Cookie-Based Auth
- * 
- * Key Changes from Header-Based Auth:
- * - No jwtToken state (tokens are in HttpOnly cookies, not accessible from JS)
- * - Track isAuthenticated boolean instead
- * - No localStorage token storage
- * - Login function calls /user/get-token which sets cookies automatically
+ * Authentication context — provides login/logout and token state.
+ * Tokens are stored in localStorage (via authService), attached as
+ * Bearer headers on API requests, and passed as ?token= on WebSocket.
  */
 const AuthContext = createContext({
   userId: '',
+  jwtToken: '',
   isAuthenticated: false,
   isLoading: true,
-  login: async () => { },
-  logout: () => { },
+  login: async () => {},
+  logout: () => {},
 });
 
-// Custom Hook for easy access in components
-export const useAuth = () => {
-  return useContext(AuthContext);
-};
+export const useAuth = () => useContext(AuthContext);
 
-// Provider Component
 export const AuthProvider = ({ children }) => {
   const [userId, setUserId] = useState('');
+  const [jwtToken, setJwtToken] = useState('');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
-  /**
-   * Login function - uses cookie-based authentication
-   * Calls /user/get-token which sets HttpOnly cookies on success
-   */
+  /** Authenticate using email + secretKey. */
   const login = useCallback(async (email, password) => {
     try {
       const result = await authLogin(email, password);
-
       if (result.success) {
         setUserId(result.userId);
+        setJwtToken(result.jwtToken || '');
         setIsAuthenticated(true);
         setAuthenticatedState(true);
-
-        // Store userId for display purposes only (not for auth)
         localStorage.setItem('userId', result.userId);
-
-        console.log('✅ Auth state updated (cookie-based):', {
-          userId: result.userId,
-          isAuthenticated: true
-        });
-
-        return { success: true, userId: result.userId };
+        return { success: true, userId: result.userId, jwtToken: result.jwtToken };
       }
     } catch (error) {
-      console.error('❌ Login failed:', error.message);
       setIsAuthenticated(false);
+      setJwtToken('');
       setAuthenticatedState(false);
       throw error;
     }
   }, []);
 
-  /**
-   * Logout function - clears local state
-   * Note: HttpOnly cookies must be cleared by server or they expire naturally
-   */
+  /** Clear tokens and redirect to login. */
   const logout = useCallback(() => {
-    console.log('🚪 Logging out...');
-
     setUserId('');
+    setJwtToken('');
     setIsAuthenticated(false);
     clearAuthState();
-
-    // Clear any local storage items (but not auth cookies - they're HttpOnly)
     localStorage.removeItem('userId');
     localStorage.removeItem('activeTab');
     localStorage.removeItem('selectedDevice');
-
-    // Redirect to home
     window.location.href = '/';
   }, []);
 
-  /**
-   * Attempt auto-login on app initialization
-   * Uses environment variables if available
-   */
+  // Restore session from localStorage or auto-login from env vars
   useEffect(() => {
     const initAuth = async () => {
       try {
-        // Check if we have stored userId (might indicate previous session)
-        const storedUserId = localStorage.getItem('userId');
-
-        // Try auto-login from environment credentials
         const envEmail = import.meta.env.VITE_USER_EMAIL;
         const envSecret = import.meta.env.VITE_USER_SECRET;
 
+        // 1. Check for localStorage-restored token
+        const restoredToken = getJwtToken();
+        if (restoredToken) {
+          const storedUserId = localStorage.getItem('userId') || '';
+
+          // If env credentials changed → stale token, force re-login
+          if (envEmail && storedUserId && storedUserId !== envEmail) {
+            clearAuthState();
+            localStorage.removeItem('userId');
+          } else {
+            setUserId(storedUserId);
+            setJwtToken(restoredToken);
+            setIsAuthenticated(true);
+            setAuthenticatedState(true);
+            setIsLoading(false);
+            return;
+          }
+        }
+
+        // 2. Auto-login from env
         if (envEmail && envSecret) {
-          console.log('🔐 Attempting auto-login from environment...');
           try {
             await login(envEmail, envSecret);
-            console.log('✅ Auto-login successful');
-          } catch (e) {
-            console.warn('⚠️ Auto-login failed:', e.message);
-            // If auto-login fails but we had a stored userId, 
-            // the session might have expired
-            if (storedUserId) {
-              localStorage.removeItem('userId');
-            }
+          } catch (_) {
+            localStorage.removeItem('userId');
           }
-        } else if (storedUserId) {
-          // We have a stored userId but no ENV credentials
-          // User may still have valid cookies from previous session
-          // We'll assume authenticated until an API call fails
-          console.log('ℹ️ Found stored userId, assuming session active');
-          setUserId(storedUserId);
-          setIsAuthenticated(true);
-          setAuthenticatedState(true);
         }
       } catch (error) {
-        console.error('❌ Auth initialization failed:', error);
+        console.error('[Auth] Initialization failed:', error);
       } finally {
         setIsLoading(false);
       }
@@ -131,32 +104,18 @@ export const AuthProvider = ({ children }) => {
     initAuth();
   }, [login]);
 
-  /**
-   * Listen for logout events from API interceptor
-   * (When token refresh fails, api.js dispatches 'auth:logout')
-   */
+  // Handle logout events dispatched by the API interceptor
   useEffect(() => {
-    const handleLogout = () => {
-      console.log('📢 Received auth:logout event');
-      logout();
-    };
-
+    const handleLogout = () => logout();
     window.addEventListener('auth:logout', handleLogout);
     return () => window.removeEventListener('auth:logout', handleLogout);
   }, [logout]);
 
-  const value = {
-    userId,
-    isAuthenticated,
-    isLoading,
-    login,
-    logout,
-    // Backward compatibility: some components may check for jwtToken
-    // Return a truthy value when authenticated
-    jwtToken: isAuthenticated ? 'COOKIE_BASED_AUTH' : '',
-  };
-
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={{ userId, jwtToken, isAuthenticated, isLoading, login, logout }}>
+      {children}
+    </AuthContext.Provider>
+  );
 };
 
 export default AuthContext;

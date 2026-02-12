@@ -1,58 +1,31 @@
 import { Client } from "@stomp/stompjs";
+import { getJwtToken, login as authServiceLogin } from "./authService";
 
-/* ======================================================
-   CONFIG FROM ENVIRONMENT
-====================================================== */
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL;
-const WS_URL = import.meta.env.VITE_WS_URL;
+// --- Environment config ---
+const WS_BASE = import.meta.env.VITE_WS_URL;
 const EMAIL = import.meta.env.VITE_USER_EMAIL;
-const PASSWORD =
-  import.meta.env.VITE_USER_SECRET || import.meta.env.VITE_USER_PASSWORD;
-
-/* ======================================================
-   LOGIN (GET COOKIES)
-====================================================== */
+const PASSWORD = import.meta.env.VITE_USER_SECRET;
 
 /**
- * Login using cookie-based authentication via fetch
- *
- * @param {string} email - User email
- * @param {string} password - User secret key (from Protonest dashboard)
- * @returns {Promise<void>}
+ * Build WebSocket broker URL with JWT token as query parameter.
+ * @returns {string} Broker URL (with ?token=<jwt> when authenticated)
  */
-async function login(email = EMAIL, password = PASSWORD) {
-  const response = await fetch(`${API_BASE}/get-token`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    credentials: "include", // ⭐ REQUIRED for cookies
-    body: JSON.stringify({
-      email: email,
-      password: password,
-    }),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text().catch(() => "Login failed");
-    throw new Error(`Login failed: ${errorText}`);
+function buildBrokerURL() {
+  const token = getJwtToken();
+  if (token) {
+    const separator = WS_BASE.includes("?") ? "&" : "?";
+    return `${WS_BASE}${separator}token=${encodeURIComponent(token)}`;
   }
-
-  console.log("✅ Login successful, cookies stored");
+  return WS_BASE;
 }
 
-/* ======================================================
-   WEBSOCKET CLIENT CLASS
-====================================================== */
-
 /**
- * WebSocket Client Wrapper Class for Dashboard Integration
+ * STOMP WebSocket client for real-time sensor data and device state.
  *
- * Cookie-Based Authentication:
- * - WebSocket URL no longer includes ?token=... query parameter
- * - Connection relies on browser cookies set by /user/get-token
- * - Must only connect AFTER successful login (cookies set)
+ * - Authenticates via ?token=<jwt> query parameter on the WS URL
+ * - Subscribes to /topic/stream/<deviceId> (sensor readings)
+ *   and /topic/state/<deviceId> (pump status / mode)
+ * - Handles reconnection with progressive backoff and token refresh
  */
 class WebSocketClient {
   constructor() {
@@ -63,91 +36,127 @@ class WebSocketClient {
     this.connectCallbacks = [];
     this.disconnectCallbacks = [];
     this.isReady = false;
+    this._lastConnectTs = 0;
+    this._wsFailures = 0;
+    this._maxWsFailures = 10;
+    this._tokenRefreshAttempted = false;
   }
 
-  /**
-   * Initialize and connect the STOMP client
-   */
+  /** Initialise the STOMP client and activate the connection. */
   _initializeClient() {
-    if (this.client) {
-      return;
-    }
-
-    console.log("🔌 Initializing WebSocket with cookie-based auth:", WS_URL);
+    if (this.client) return;
 
     this.client = new Client({
-      brokerURL: WS_URL,
-
+      brokerURL: buildBrokerURL(),
       reconnectDelay: 5000,
       heartbeatIncoming: 4000,
       heartbeatOutgoing: 4000,
 
-      onConnect: () => {
-        console.log("✅ WebSocket connected");
-        this.isReady = true;
+      // Refresh the broker URL before every (re)connect so
+      // reconnects always use a fresh JWT.
+      beforeConnect: () => {
+        const freshURL = buildBrokerURL();
+        if (this.client && this.client.brokerURL !== freshURL) {
+          this.client.brokerURL = freshURL;
+        }
+      },
 
-        // Clear stale subscription references on reconnect
+      onConnect: () => {
+        console.log("[WS] Connected");
+        this.isReady = true;
+        this._lastConnectTs = Date.now();
+        this._wsFailures = 0;
+        this._tokenRefreshAttempted = false;
+
+        // Server-side subscriptions are gone after reconnect
         this.subscriptions.clear();
 
-        // If we have a device already set, subscribe to it
-        if (this.currentDeviceId) {
-          setTimeout(() => {
-            if (this.isReady && this.currentDeviceId) {
-              this._subscribeToDeviceTopics(this.currentDeviceId);
-            }
-          }, 100);
+        if (this._pendingSubRetry) {
+          clearTimeout(this._pendingSubRetry);
+          this._pendingSubRetry = null;
         }
 
-        // Call user's connect callbacks
+        // Re-subscribe to current device topics
+        if (this.currentDeviceId) {
+          this._subscribeToDeviceTopics(this.currentDeviceId);
+        }
+
         this.connectCallbacks.forEach((cb) => {
           try {
             cb();
           } catch (e) {
-            console.error("Connect callback error:", e);
+            console.error("[WS] Connect callback error:", e);
           }
         });
       },
 
       onStompError: (frame) => {
-        console.error("❌ STOMP error:", frame.headers["message"]);
-        console.error("Details:", frame.body);
-
-        // Check for authentication errors
         const errorMsg = frame.headers["message"] || "";
+        console.error("[WS] STOMP error:", errorMsg);
+
         if (errorMsg.includes("Unauthorized") || errorMsg.includes("401")) {
-          console.error(
-            "🔐 WebSocket authentication failed - cookies may have expired",
-          );
+          console.error("[WS] Auth failed — token may have expired");
           window.dispatchEvent(new CustomEvent("auth:logout"));
         }
       },
 
-      onWebSocketError: (event) => {
-        console.error("🚫 WebSocket error", event);
+      onWebSocketError: () => {
+        this._wsFailures++;
       },
 
       onWebSocketClose: (event) => {
-        console.warn("🔻 WebSocket closed", event);
         this.isReady = false;
+
+        if (this._pendingSubRetry) {
+          clearTimeout(this._pendingSubRetry);
+          this._pendingSubRetry = null;
+        }
+
+        // Progressive backoff on repeated connection failures (code 1006 = abnormal close)
+        if (event && event.code === 1006 && this._wsFailures > 0) {
+          const backoff = Math.min(
+            5000 * Math.pow(1.5, this._wsFailures - 1),
+            60000,
+          );
+          if (this.client) this.client.reconnectDelay = backoff;
+
+          // Auto-refresh token after 3 consecutive failures
+          if (this._wsFailures >= 3 && !this._tokenRefreshAttempted) {
+            this._tokenRefreshAttempted = true;
+            this._refreshTokenForWs();
+          }
+
+          // Circuit breaker — stop retrying after too many failures
+          if (this._wsFailures >= this._maxWsFailures) {
+            console.error(
+              `[WS] Failed ${this._wsFailures} times — auto-reconnect stopped. Call connect() to retry.`,
+            );
+            try {
+              this.client.deactivate();
+            } catch (_) {
+              /* ignored */
+            }
+          }
+        }
 
         this.disconnectCallbacks.forEach((cb) => {
           try {
             cb();
           } catch (e) {
-            console.error("Disconnect callback error:", e);
+            console.error("[WS] Disconnect callback error:", e);
           }
         });
       },
 
+      // Only log meaningful STOMP frames (skip heartbeats)
       debug: (msg) => {
-        // Filter out noisy heartbeat frames, only log meaningful STOMP messages
         if (
           msg.startsWith(">>>") ||
           msg.startsWith("<<<") ||
           msg === "Received data"
         )
           return;
-        console.log("🪵 [STOMP]", msg);
+        console.debug("[STOMP]", msg);
       },
     });
 
@@ -155,56 +164,61 @@ class WebSocketClient {
   }
 
   /**
-   * Subscribe to device topics dynamically
-   * @param {string} deviceId - Device ID to subscribe to
+   * Re-authenticate using env credentials when WS connections keep failing.
+   * The beforeConnect hook will automatically pick up the fresh token.
+   * @private
    */
-  _subscribeToDeviceTopics(deviceId) {
-    // Guard: Check if client is ready
-    if (!this.client || !this.isReady) {
-      return;
+  async _refreshTokenForWs() {
+    if (!EMAIL || !PASSWORD) return;
+    try {
+      await authServiceLogin(EMAIL, PASSWORD);
+      console.log("[WS] Token refreshed — next reconnect will use new token");
+    } catch (e) {
+      console.error("[WS] Token refresh failed:", e.message);
     }
-
-    // Guard: Check if already subscribed to this device
-    const streamKey = `stream-${deviceId}`;
-    const stateKey = `state-${deviceId}`;
-    if (this.subscriptions.has(streamKey) && this.subscriptions.has(stateKey)) {
-      return;
-    }
-
-    // 🔔 Stream topic
-    const streamTopic = `/topic/stream/${deviceId}`;
-    const streamSub = this.client.subscribe(streamTopic, (message) => {
-      try {
-        const data = JSON.parse(message.body);
-        console.log("📡 Stream message:", data);
-        this._processStreamMessage(data);
-      } catch (parseError) {
-        console.error("❌ Failed to parse stream message:", parseError);
-      }
-    });
-    this.subscriptions.set(streamKey, streamSub);
-
-    // 🔔 State topic
-    const stateTopic = `/topic/state/${deviceId}`;
-    const stateSub = this.client.subscribe(stateTopic, (message) => {
-      try {
-        const data = JSON.parse(message.body);
-        console.log("📡 State message:", data);
-        this._processStateMessage(data);
-      } catch (parseError) {
-        console.error("❌ Failed to parse state message:", parseError);
-      }
-    });
-    this.subscriptions.set(stateKey, stateSub);
-
-    console.log("🔔 Subscribed to device topics:");
-    console.log(`   📡 Stream: ${streamTopic}`);
-    console.log(`   📡 State: ${stateTopic}`);
   }
 
   /**
-   * Process stream message and notify callback
+   * Subscribe to stream and state topics for the given device.
+   * Skips topics that are already subscribed.
+   * @param {string} deviceId
+   * @private
    */
+  _subscribeToDeviceTopics(deviceId) {
+    if (!this.client || !this.isReady || !this.client.connected) return;
+
+    const topics = [
+      {
+        key: `stream-${deviceId}`,
+        path: `/topic/stream/${deviceId}`,
+        handler: "_processStreamMessage",
+      },
+      {
+        key: `state-${deviceId}`,
+        path: `/topic/state/${deviceId}`,
+        handler: "_processStateMessage",
+      },
+    ];
+
+    for (const { key, path, handler } of topics) {
+      if (this.subscriptions.has(key)) continue;
+      try {
+        const sub = this.client.subscribe(path, (message) => {
+          try {
+            this[handler](JSON.parse(message.body));
+          } catch (e) {
+            console.error(`[WS] Failed to parse message on ${path}:`, e);
+          }
+        });
+        this.subscriptions.set(key, sub);
+        console.log(`[WS] Subscribed: ${path}`);
+      } catch (e) {
+        console.error(`[WS] Failed to subscribe to ${path}:`, e);
+      }
+    }
+  }
+
+  /** Route incoming stream data to the registered callback. @private */
   _processStreamMessage(data) {
     if (!this.dataCallback) return;
 
@@ -284,9 +298,7 @@ class WebSocketClient {
     }
   }
 
-  /**
-   * Process state message and notify callback
-   */
+  /** Route incoming state data (pump status / mode) to the callback. @private */
   _processStateMessage(data) {
     if (!this.dataCallback) return;
 
@@ -315,139 +327,137 @@ class WebSocketClient {
   }
 
   /**
-   * Unsubscribe from device topics
-   * @param {string} deviceId - Device ID to unsubscribe from
+   * Unsubscribe from a device's stream and state topics.
+   * @param {string} deviceId
+   * @private
    */
   _unsubscribeFromDeviceTopics(deviceId) {
-    const streamKey = `stream-${deviceId}`;
-    const stateKey = `state-${deviceId}`;
-
-    if (this.subscriptions.has(streamKey)) {
-      try {
-        this.subscriptions.get(streamKey).unsubscribe();
-      } catch (e) {
-        // Unsubscribe may fail if connection lost
+    for (const prefix of ["stream", "state"]) {
+      const key = `${prefix}-${deviceId}`;
+      if (this.subscriptions.has(key)) {
+        try {
+          this.subscriptions.get(key).unsubscribe();
+        } catch (_) {
+          /* connection may be lost */
+        }
+        this.subscriptions.delete(key);
       }
-      this.subscriptions.delete(streamKey);
-    }
-
-    if (this.subscriptions.has(stateKey)) {
-      try {
-        this.subscriptions.get(stateKey).unsubscribe();
-      } catch (e) {
-        // Unsubscribe may fail if connection lost
-      }
-      this.subscriptions.delete(stateKey);
     }
   }
 
-  /**
-   * Public wrapper to unsubscribe from a device's topics
-   * @param {string} deviceId
-   */
+  /** Public wrapper — unsubscribe from a device's topics. */
   unsubscribeFromDevice(deviceId) {
     try {
       this._unsubscribeFromDeviceTopics(deviceId);
-    } catch (e) {
-      // Unsubscribe error
+    } catch (_) {
+      /* ignored */
     }
   }
 
   /**
-   * Connect to WebSocket (cookie-based authentication)
-   *
-   * IMPORTANT: This should only be called AFTER a successful login
-   * The WebSocket connection will use the cookies set by that login call
+   * Connect to the WebSocket broker.
+   * Must be called AFTER authentication (get-token) so the JWT is available.
    */
   async connect() {
-    console.log("🔌 Connecting WebSocket (cookie-based auth)...");
+    // Reset failure tracking on explicit connect
+    this._wsFailures = 0;
+    this._tokenRefreshAttempted = false;
 
-    // Initialize client if not already done
     if (!this.client) {
       this._initializeClient();
     } else if (!this.isConnected) {
-      // Client exists but disconnected - try to reconnect
+      this.client.brokerURL = buildBrokerURL();
+      this.client.reconnectDelay = 5000;
       this.client.activate();
     }
 
     return Promise.resolve();
   }
 
-  /**
-   * Connect with auto-login from environment variables
-   * Login → WebSocket connection flow
-   */
+  /** Auto-login from env vars, then connect. */
   async connectWithAutoLogin() {
     if (EMAIL && PASSWORD) {
       try {
-        console.log("🔐 Attempting auto-login before WebSocket connection...");
-        await login(EMAIL, PASSWORD);
-        console.log("✅ Auto-login successful, connecting WebSocket...");
+        await authServiceLogin(EMAIL, PASSWORD);
       } catch (e) {
-        console.error("❌ Auto-login failed:", e.message);
         throw new Error("Authentication required for WebSocket connection");
       }
     }
-
     return this.connect();
   }
 
   /**
-   * Subscribe to device topics with callback
+   * Subscribe to a device's topics. Handles unsubscribing from the
+   * previous device and retries if the connection isn't ready yet.
    * @param {string} deviceIdParam - Device ID to subscribe to
-   * @param {Function} callback - Data handler callback
+   * @param {Function} callback     - Receives parsed sensor/state data
    */
   subscribeToDevice(deviceIdParam, callback) {
-    // If switching to a different device, unsubscribe from old one
     if (this.currentDeviceId && this.currentDeviceId !== deviceIdParam) {
       this._unsubscribeFromDeviceTopics(this.currentDeviceId);
     }
 
-    // Update current device and callback
     this.currentDeviceId = deviceIdParam;
     this.dataCallback = callback;
 
-    // Subscribe to new device if connection is ready
+    if (this._pendingSubRetry) {
+      clearTimeout(this._pendingSubRetry);
+      this._pendingSubRetry = null;
+    }
+
     if (this.isReady && this.isConnected) {
       this._subscribeToDeviceTopics(deviceIdParam);
+    } else {
+      this._retrySubscription(deviceIdParam, 0);
     }
 
     return true;
   }
 
   /**
-   * Check if connected
+   * Retry subscription with exponential back-off (500 ms → 5 s, max 10 attempts).
+   * @private
    */
+  _retrySubscription(deviceId, attempt) {
+    const MAX_ATTEMPTS = 10;
+    if (attempt >= MAX_ATTEMPTS) return;
+
+    const delay = Math.min(500 * Math.pow(1.5, attempt), 5000);
+    this._pendingSubRetry = setTimeout(() => {
+      this._pendingSubRetry = null;
+      if (this.currentDeviceId !== deviceId) return;
+      if (this.isReady && this.isConnected) {
+        this._subscribeToDeviceTopics(deviceId);
+      } else {
+        this._retrySubscription(deviceId, attempt + 1);
+      }
+    }, delay);
+  }
+
+  /** Whether the STOMP client is currently connected. */
   get isConnected() {
     return this.client?.connected || false;
   }
 
-  /**
-   * Get connection status
-   */
+  /** Alias for isConnected (used by status components). */
   getConnectionStatus() {
     return this.isConnected;
   }
 
-  /**
-   * Register connect callback
-   */
+  /** Register a callback invoked on successful connection. */
   onConnect(callback) {
-    if (typeof callback === "function") {
-      this.connectCallbacks.push(callback);
-      if (this.isConnected) {
-        try {
-          callback();
-        } catch (e) {
-          // Callback error
-        }
+    if (typeof callback !== "function") return;
+    this.connectCallbacks.push(callback);
+    if (this.isConnected) {
+      try {
+        callback();
+      } catch (_) {
+        /* ignored */
       }
     }
   }
 
-  /**
-   * Remove a previously registered connect callback
-   */
+  /** Remove a previously registered connect callback. */
   offConnect(callback) {
     if (!callback) return;
     this.connectCallbacks = this.connectCallbacks.filter(
@@ -455,18 +465,12 @@ class WebSocketClient {
     );
   }
 
-  /**
-   * Register disconnect callback
-   */
+  /** Register a callback invoked on disconnection. */
   onDisconnect(callback) {
-    if (typeof callback === "function") {
-      this.disconnectCallbacks.push(callback);
-    }
+    if (typeof callback === "function") this.disconnectCallbacks.push(callback);
   }
 
-  /**
-   * Remove a previously registered disconnect callback
-   */
+  /** Remove a previously registered disconnect callback. */
   offDisconnect(callback) {
     if (!callback) return;
     this.disconnectCallbacks = this.disconnectCallbacks.filter(
@@ -475,54 +479,43 @@ class WebSocketClient {
   }
 
   /**
-   * Send pump command
+   * Publish a pump command to the device.
+   * @param {string} deviceIdParam - Target device
+   * @param {string} power         - "on" or "off"
+   * @param {string|null} mode     - "auto" or "manual" (optional)
+   * @returns {boolean} true if sent successfully
    */
   sendPumpCommand(deviceIdParam, power, mode = null) {
     if (!this.isConnected) {
-      console.warn("❌ Cannot send pump command - not connected");
+      console.warn("[WS] Cannot send pump command — not connected");
       return false;
     }
 
     const destination = `protonest/${deviceIdParam}/state/pmc/pump`;
     const payload = { power: power.toLowerCase() };
-
-    if (mode) {
-      payload.mode = mode.toLowerCase();
-    }
+    if (mode) payload.mode = mode.toLowerCase();
 
     try {
-      this.client.publish({
-        destination,
-        body: JSON.stringify(payload),
-      });
-      console.log("✅ Pump command sent:", payload);
+      this.client.publish({ destination, body: JSON.stringify(payload) });
       return true;
     } catch (error) {
-      console.error("❌ Failed to send pump command:", error);
+      console.error("[WS] Failed to send pump command:", error);
       return false;
     }
   }
 
-  /**
-   * Disconnect from WebSocket
-   */
+  /** Cleanly disconnect from the WebSocket broker. */
   disconnect() {
     if (this.client && this.isConnected) {
-      // Unsubscribe from all topics
-      if (this.currentDeviceId) {
+      if (this.currentDeviceId)
         this._unsubscribeFromDeviceTopics(this.currentDeviceId);
-      }
-
-      // Deactivate client
       this.client.deactivate();
       this.isReady = false;
-      console.log("🔌 WebSocket disconnected");
+      console.log("[WS] Disconnected");
     }
   }
 
-  /**
-   * Enable testing mode (development only)
-   */
+  /** Expose dev helpers on window (development builds only). */
   enableTestingMode() {
     if (typeof window === "undefined") return;
 
@@ -535,55 +528,38 @@ class WebSocketClient {
     };
 
     window.simulateSensorData = (sensorType, value) => {
-      if (!this.isConnected) {
-        console.error("Not connected");
+      if (!this.isConnected || !this.currentDeviceId) {
+        console.error("Not connected or no device");
         return false;
       }
-
-      if (!this.currentDeviceId) {
-        console.error("No device selected");
-        return false;
-      }
-
       const destination = `protonest/${this.currentDeviceId}/stream/${sensorType}`;
-      const payload = { [sensorType]: String(value) };
-
       try {
         this.client.publish({
           destination,
-          body: JSON.stringify(payload),
+          body: JSON.stringify({ [sensorType]: String(value) }),
         });
-        console.log("✅ Simulated sensor data sent:", payload);
         return true;
-      } catch (error) {
-        console.error("❌ Failed to simulate sensor data:", error);
+      } catch (e) {
+        console.error("[WS] Simulate failed:", e);
         return false;
       }
     };
 
-    window.wsInfo = () => {
-      return {
-        connected: this.isConnected,
-        currentDevice: this.currentDeviceId || null,
-        activeSubscriptions: Array.from(this.subscriptions.keys()),
-        authMethod: "cookie-based",
-      };
-    };
+    window.wsInfo = () => ({
+      connected: this.isConnected,
+      currentDevice: this.currentDeviceId || null,
+      activeSubscriptions: Array.from(this.subscriptions.keys()),
+    });
 
-    console.log("🧪 Testing mode enabled. Available commands:");
-    console.log("  - sendPumpCommand('on'|'off', 'auto'|'manual')");
-    console.log("  - simulateSensorData('temp'|'moisture'|..., value)");
-    console.log("  - wsInfo()");
+    console.log(
+      "[WS] Testing mode enabled — sendPumpCommand / simulateSensorData / wsInfo",
+    );
   }
 }
 
-// Export singleton instance
+// --- Singleton export ---
 export const webSocketClient = new WebSocketClient();
 
-// Export login function for external use
-export { login };
-
-// Auto-enable testing mode in development
 if (typeof window !== "undefined" && import.meta.env?.DEV) {
   window.webSocketClient = webSocketClient;
 }
