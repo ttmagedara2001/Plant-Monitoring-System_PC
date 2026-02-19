@@ -124,7 +124,9 @@ function App() {
   const _lastManualNotify = useRef(0);
 
   useEffect(() => {
-    if (!settings || !selectedDevice) return;
+    // Do not fire any API calls until the user is authenticated and
+    // we have real live data (not the default initialised zeros).
+    if (!isAuthenticated || !settings || !selectedDevice) return;
     const raw = liveData?.moisture;
     if (raw == null) return;
     const val = Number(raw);
@@ -161,7 +163,7 @@ function App() {
         meta: { deviceId: selectedDevice, sensor: 'moisture', value: val, threshold: min },
       });
     }
-  }, [settings?.autoMode, settings?.moistureMin, liveData?.moisture, selectedDevice, liveData?.pumpStatus, addNotification]);
+  }, [isAuthenticated, settings?.autoMode, settings?.moistureMin, liveData?.moisture, selectedDevice, liveData?.pumpStatus, addNotification]);
 
   // --- Data handler (stable ref for webSocketClient) ---
   const handleDataRef = useRef(null);

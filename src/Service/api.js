@@ -62,9 +62,17 @@ api.interceptors.response.use(
       if (status === 405) return Promise.reject(error);
     }
 
-    // Token refresh on "Invalid token" (400 / 401)
+    // Token refresh on expired/invalid JWT (400 or 401)
+    // The server may return the error in either data.data or data.error,
+    // and the exact message varies — match both shapes defensively.
     const status = error.response?.status;
-    const isTokenError = error.response?.data?.data === "Invalid token";
+    const errPayload =
+      error.response?.data?.data || error.response?.data?.error || "";
+    const isTokenError =
+      typeof errPayload === "string" &&
+      (errPayload === "Invalid token" ||
+        errPayload.toLowerCase().includes("invalid") ||
+        errPayload.toLowerCase().includes("expired"));
     const isRefreshable =
       (status === 400 || status === 401) &&
       isTokenError &&

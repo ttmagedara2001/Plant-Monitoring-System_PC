@@ -245,7 +245,10 @@ const Dashboard = ({ deviceId: propDeviceId, liveData: propLiveData, settings: p
     }, 30000); // 30s
 
     return () => clearInterval(refreshInterval);
-  }, [deviceId, jwtToken, timeRange]);
+  // NOTE: timeRange intentionally omitted — getAllStreamData always fetches the
+  // full 24 h window; filterDataByTimeframe handles the client-side slicing.
+  // Including timeRange here would fire a redundant API call on every slider change.
+  }, [deviceId, jwtToken]);
 
   // Reset view-specific data when device changes (keep liveData/settings handled by App)
   useEffect(() => {
@@ -274,7 +277,7 @@ const Dashboard = ({ deviceId: propDeviceId, liveData: propLiveData, settings: p
   // Dashboard is a display-only component that receives `propAlertMessage` and `propLiveData` from App.
 
   // Data Export Function - Export from HTTP API historical data only
-  const handleExportCSV = async (selectedSensors = null) => {
+  const handleExportCSV = (selectedSensors = null) => {
     setIsExporting(true);
     try {
       // Use filtered data if available, otherwise fall back to all historical data
@@ -287,23 +290,44 @@ const Dashboard = ({ deviceId: propDeviceId, liveData: propLiveData, settings: p
 
       // If selectedSensors is provided, filter columns; otherwise export all
       const allSensors = ["moisture", "temperature", "humidity", "light", "battery"];
+      const sensorMeta = {
+        moisture: { label: "Soil Moisture (%)", icon: "💧" },
+        temperature: { label: "Temperature (°C)", icon: "🌡️" },
+        humidity: { label: "Humidity (%)", icon: "💦" },
+        light: { label: "Light (lux)", icon: "🔆" },
+        battery: { label: "Battery (%)", icon: "🔋" },
+      };
       const sensorsToExport = selectedSensors && selectedSensors.length > 0
         ? selectedSensors.filter(s => allSensors.includes(s))
         : allSensors;
 
-      // Build headers dynamically based on selected sensors
-      const headers = ["time", ...sensorsToExport].join(',');
+      // Build headers with icons and descriptive names
+      const headers = [
+        '"🕒 Time"',
+        ...sensorsToExport.map(s => `"${sensorMeta[s].icon} ${sensorMeta[s].label}"`)
+      ].join(',');
 
-      // Build rows with only selected sensor data
+      // Build rows with formatted and quoted values
+      // Use d.timestamp (ISO 8601) not d.time (locale display string) so the
+      // exported CSV contains a real, parseable datetime in every row.
       const rows = dataToExport.map(d => {
-        const rowData = [d.time];
-        sensorsToExport.forEach(sensor => {
-          rowData.push(d[sensor] ?? '');
-        });
+        const rowData = [
+          `"${d.timestamp || d.time}"`,  // ISO preferred, display-time as fallback
+          ...sensorsToExport.map(sensor => {
+            let val = d[sensor];
+            if (val === undefined || val === null) return '""';
+            // Format numbers to 2 decimals for clarity
+            if (typeof val === 'number') val = val.toFixed(2);
+            return `"${val}"`;
+          })
+        ];
         return rowData.join(',');
       }).join('\n');
 
-      const csvContent = `${headers}\n${rows}`;
+      // Prepend UTF-8 BOM so Excel opens the file with correct encoding
+      // (required for emoji/Unicode column headers to render properly)
+      const BOM = '\uFEFF';
+      const csvContent = `${BOM}${headers}\n${rows}`;
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -315,6 +339,8 @@ const Dashboard = ({ deviceId: propDeviceId, liveData: propLiveData, settings: p
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+      // Release the object URL to avoid a memory leak
+      URL.revokeObjectURL(url);
     } catch (e) {
       console.error("Export failed", e);
     } finally {

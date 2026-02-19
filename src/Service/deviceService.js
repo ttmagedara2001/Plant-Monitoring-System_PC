@@ -96,8 +96,10 @@ export const getAllStreamData = async (
 
   try {
     const results = await Promise.allSettled(
+      // Use 500 per topic so a 24 h window at ~1-min resolution (≈1440 pts) is
+      // well-covered.  Adjust upward if the API allows larger pages.
       topicVariants.map((t) =>
-        getStreamDataByTopic(deviceId, t.name, startTime, endTime, 0, 100),
+        getStreamDataByTopic(deviceId, t.name, startTime, endTime, 0, 500),
       ),
     );
 
@@ -141,12 +143,14 @@ export const getAllStreamData = async (
           parsed = item.payload;
         }
 
+        // Use ?? (nullish coalescing) so that a real value of 0 is preserved
+        // (e.g. 0% moisture, 0°C temperature) — || would silently skip those.
         const valueMap = {
-          temperature: parsed.temp || parsed.temperature || item.value,
-          moisture: parsed.moisture || item.value,
-          humidity: parsed.humidity || item.value,
-          battery: parsed.battery || item.value,
-          light: parsed.light || item.value,
+          temperature: parsed.temp ?? parsed.temperature ?? item.value ?? null,
+          moisture: parsed.moisture ?? item.value ?? null,
+          humidity: parsed.humidity ?? item.value ?? null,
+          battery: parsed.battery ?? item.value ?? null,
+          light: parsed.light ?? item.value ?? null,
         };
 
         if (valueMap[label] != null) dp[label] = Number(valueMap[label]);
@@ -167,7 +171,8 @@ export const getAllStreamData = async (
     };
     chartData.forEach((dp) => {
       Object.keys(lastKnown).forEach((key) => {
-        if (dp[key] != null && dp[key] !== 0) {
+        // Accept 0 as a valid reading — only treat null/undefined as "missing"
+        if (dp[key] != null) {
           lastKnown[key] = dp[key];
         } else if (lastKnown[key] != null) {
           dp[key] = lastKnown[key];
