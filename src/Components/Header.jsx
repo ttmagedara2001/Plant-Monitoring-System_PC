@@ -212,8 +212,63 @@ const Header = ({ deviceId, deviceList, activeTab, setActiveTab, selectedDevice,
 
 export default Header;
 
+// ─── Helpers ────────────────────────────────────────────────────────────────
+
+const relativeTime = (isoString) => {
+  try {
+    const diff = Date.now() - new Date(isoString).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return 'Just now';
+    if (mins < 60) return `${mins} min ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs} hr ago`;
+    return new Date(isoString).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  } catch {
+    return '';
+  }
+};
+
+const SENSOR_META_MAP = {
+  moisture:    { label: 'Moisture',    unit: '%'    },
+  temperature: { label: 'Temperature', unit: '°C'   },
+  humidity:    { label: 'Humidity',    unit: '%'    },
+  light:       { label: 'Light',       unit: ' lux' },
+  battery:     { label: 'Battery',     unit: '%'    },
+};
+
+const TYPE_CONFIG = {
+  critical: {
+    border: 'border-l-red-500',
+    bg: 'bg-red-50',
+    pill: 'bg-red-100 text-red-700',
+    Icon: AlertTriangle,
+    label: 'Critical',
+  },
+  warning: {
+    border: 'border-l-amber-500',
+    bg: 'bg-amber-50',
+    pill: 'bg-amber-100 text-amber-700',
+    Icon: AlertCircle,
+    label: 'Warning',
+  },
+};
+
+const getTypeConfig = (type) => {
+  if (type === 'critical') return TYPE_CONFIG.critical;
+  if (type === 'warning') return TYPE_CONFIG.warning;
+  return {
+    border: 'border-l-blue-500',
+    bg: 'bg-blue-50',
+    pill: 'bg-blue-100 text-blue-700',
+    Icon: Bell,
+    label: 'Info',
+  };
+};
+
+// ─── NotificationsBell ──────────────────────────────────────────────────────
+
 const NotificationsBell = ({ selectedDevice }) => {
-  const { notifications, markRead, clearAll } = useNotifications();
+  const { notifications, markRead, markAllRead, clearAll } = useNotifications();
   const [open, setOpen] = React.useState(false);
   const ref = useRef();
 
@@ -226,56 +281,184 @@ const NotificationsBell = ({ selectedDevice }) => {
     return () => document.removeEventListener('click', onDoc);
   }, []);
 
-  // show only notifications for the selected device (or those without deviceId)
-  const visible = notifications.filter(n => {
+  // Show only notifications for the selected device (or those without a deviceId)
+  const visible = notifications.filter((n) => {
     const did = n.meta && n.meta.deviceId ? n.meta.deviceId : null;
     return did === null || did === selectedDevice;
   });
 
-  const unread = visible.filter(n => !n.read).length;
-
-  const iconFor = (type) => {
-    if (type === 'critical') return <AlertTriangle className="w-4 h-4 text-red-600" />;
-    if (type && type.startsWith('pump')) return <AlertCircle className="w-4 h-4 text-blue-600" />;
-    return <Bell className="w-4 h-4 text-gray-600" />;
-  };
+  const unread = visible.filter((n) => !n.read).length;
+  const badgeCount = unread > 99 ? '99+' : unread;
 
   return (
     <div className="relative" ref={ref}>
-      <button onClick={() => setOpen(v => !v)} className="relative group" title="View Alerts" aria-haspopup="true">
-        <Bell className="w-6 h-6 text-gray-500 hover:text-yellow-500 transition" />
+      {/* ── Trigger button ── */}
+      <button
+        onClick={() => setOpen((v) => !v)}
+        title="View Notifications"
+        aria-haspopup="true"
+        aria-expanded={open}
+        className={`relative flex items-center justify-center w-9 h-9 rounded-full transition-all duration-200 ${
+          open ? 'bg-yellow-50 ring-2 ring-yellow-400' : 'hover:bg-gray-100'
+        }`}
+      >
+        <Bell className={`w-5 h-5 transition-colors ${open ? 'text-yellow-500' : 'text-gray-500'}`} />
         {unread > 0 && (
-          <span className="absolute -top-1 -right-1 inline-flex items-center justify-center px-1.5 py-0.5 text-xs font-bold leading-none text-white bg-red-600 rounded-full">{unread}</span>
+          <span className="absolute -top-1 -right-1 inline-flex items-center justify-center min-w-[1.1rem] h-[1.1rem] px-1 text-[10px] font-bold leading-none text-white bg-red-600 rounded-full ring-2 ring-white">
+            {badgeCount}
+          </span>
         )}
       </button>
 
+      {/* ── Panel ── */}
       {open && (
-        <div className="absolute right-0 mt-2 w-80 max-h-96 overflow-auto bg-white border rounded shadow-lg z-50">
-          <div className="flex items-center justify-between px-3 py-2 border-b">
-            <div className="font-semibold">Notifications</div>
+        <div
+          className="absolute right-0 mt-2 rounded-2xl border border-gray-100 bg-white shadow-2xl z-50 flex flex-col overflow-hidden"
+          style={{ minWidth: 320, maxWidth: 380, maxHeight: 480 }}
+        >
+          {/* Header strip */}
+          <div className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-gray-50 to-white border-b border-gray-100">
             <div className="flex items-center gap-2">
-              <button onClick={() => { clearAll(selectedDevice); }} className="text-xs text-gray-500 hover:underline">Clear</button>
+              <Bell className="w-4 h-4 text-gray-600" />
+              <span className="font-semibold text-gray-800 text-sm">Notifications</span>
+              {unread > 0 && (
+                <span className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-red-100 text-red-700 text-[10px] font-bold leading-none">
+                  {unread} new
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-3">
+              {unread > 0 && (
+                <button
+                  onClick={() => markAllRead(selectedDevice)}
+                  className="text-xs font-medium text-blue-600 hover:text-blue-800 transition-colors"
+                >
+                  Mark all read
+                </button>
+              )}
+              <button
+                onClick={() => clearAll(selectedDevice)}
+                className="text-xs font-medium text-gray-400 hover:text-red-500 transition-colors"
+              >
+                Clear all
+              </button>
             </div>
           </div>
-          <ul className="divide-y">
-            {visible.length === 0 && (
-              <li className="p-3 text-sm text-gray-500">No notifications</li>
-            )}
-            {visible.map((n) => (
-              <li key={n.id} className={`p-3 text-sm ${n.read ? 'bg-white' : 'bg-gray-50'}`}>
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex-shrink-0 mt-0.5">{iconFor(n.type)}</div>
-                  <div className="truncate">
-                    <div className={`font-medium ${n.type === 'critical' ? 'text-red-700' : 'text-gray-800'}`}>{n.message}</div>
-                    <div className="text-xs text-gray-500 mt-1">{new Date(n.timestamp).toLocaleString()}</div>
-                  </div>
-                  <div className="ml-2">
-                    {!n.read && <button onClick={() => markRead(n.id)} className="text-xs text-blue-600">Mark</button>}
-                  </div>
+
+          {/* Notification list */}
+          <ul className="flex-1 overflow-y-auto divide-y divide-gray-100">
+            {visible.length === 0 ? (
+              <li className="flex flex-col items-center justify-center py-10 gap-2 text-center px-6">
+                <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mb-1">
+                  <Bell className="w-6 h-6 text-gray-400" />
                 </div>
+                <p className="text-sm font-semibold text-gray-700">All caught up!</p>
+                <p className="text-xs text-gray-400">No notifications for this device right now.</p>
               </li>
-            ))}
+            ) : (
+              visible.map((n) => {
+                const cfg = getTypeConfig(n.type);
+                const TypeIcon = cfg.Icon;
+                return (
+                  <li
+                    key={n.id}
+                    className={`flex items-start gap-3 px-4 py-3 border-l-4 transition-colors ${
+                      n.read ? 'bg-white border-l-gray-200' : `${cfg.bg} ${cfg.border}`
+                    }`}
+                  >
+                    {/* Type pill badge */}
+                    <span
+                      className={`inline-flex items-center gap-1 mt-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-semibold shrink-0 ${
+                        n.read ? 'bg-gray-100 text-gray-500' : cfg.pill
+                      }`}
+                    >
+                      <TypeIcon className="w-3 h-3" />
+                      {cfg.label}
+                    </span>
+
+                    {/* Message + timestamp */}
+                    <div className="flex-1 min-w-0">
+                      <p
+                        title={n.message}
+                        className={`text-sm leading-snug break-words ${
+                          n.read ? 'text-gray-500 font-normal' : 'text-gray-900 font-medium'
+                        }`}
+                      >
+                        {n.message}
+                      </p>
+
+                      {/* Sensor value / threshold chips */}
+                      {n.meta?.sensor && n.meta?.value != null && (() => {
+                        const sm = SENSOR_META_MAP[n.meta.sensor];
+                        if (!sm) return null;
+                        const reading = `${Number(n.meta.value).toFixed(1)}${sm.unit}`;
+                        const thresholdStr = n.meta.threshold != null
+                          ? `${n.meta.direction === 'low' ? 'min' : n.meta.direction === 'high' ? 'max' : 'limit'}: ${n.meta.threshold}${sm.unit}`
+                          : null;
+                        return (
+                          <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-gray-100 text-[11px] font-mono text-gray-700 border border-gray-200">
+                              <span className="text-gray-400 text-[10px] font-sans">{sm.label}</span>
+                              <span className="font-semibold">{reading}</span>
+                            </span>
+                            {thresholdStr && (
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-mono border ${
+                                n.meta.direction === 'low'
+                                  ? 'bg-red-50 text-red-600 border-red-200'
+                                  : n.meta.direction === 'high'
+                                  ? 'bg-amber-50 text-amber-700 border-amber-200'
+                                  : 'bg-blue-50 text-blue-600 border-blue-200'
+                              }`}>
+                                {thresholdStr}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })()}
+
+                      <p className="text-[11px] text-gray-400 mt-1">{relativeTime(n.timestamp)}</p>
+                    </div>
+
+                    {/* Mark-as-read checkmark button */}
+                    {!n.read && (
+                      <button
+                        onClick={() => markRead(n.id)}
+                        title="Mark as read"
+                        className="shrink-0 w-6 h-6 flex items-center justify-center rounded-full border border-gray-200 text-gray-400 hover:border-blue-400 hover:text-blue-500 hover:bg-blue-50 transition-all"
+                      >
+                        <svg
+                          className="w-3.5 h-3.5"
+                          viewBox="0 0 14 14"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <polyline points="2 7 6 11 12 3" />
+                        </svg>
+                      </button>
+                    )}
+                  </li>
+                );
+              })
+            )}
           </ul>
+
+          {/* Footer */}
+          <div className="px-4 py-2.5 bg-gray-50 border-t border-gray-100 flex items-center justify-between">
+            <span className="text-[11px] text-gray-500">
+              {visible.length} notification{visible.length !== 1 ? 's' : ''}
+            </span>
+            {unread > 0 ? (
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-red-100 text-red-700 text-[11px] font-semibold">
+                <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                {unread} unread
+              </span>
+            ) : (
+              <span className="text-[11px] text-green-600 font-medium">All read ✓</span>
+            )}
+          </div>
         </div>
       )}
     </div>

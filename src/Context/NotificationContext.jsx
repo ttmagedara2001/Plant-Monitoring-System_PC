@@ -47,6 +47,17 @@ export const NotificationProvider = ({ children }) => {
     setNotifications((s) => s.map(n => (n.id === id ? { ...n, read: true } : n)));
   }, []);
 
+  const markAllRead = useCallback((deviceId) => {
+    setNotifications((s) =>
+      s.map((n) => {
+        if (n.read) return n;
+        const did = n.meta && n.meta.deviceId ? n.meta.deviceId : null;
+        if (!deviceId || did === null || did === deviceId) return { ...n, read: true };
+        return n;
+      })
+    );
+  }, []);
+
   // clear notifications for a specific deviceId (optional) or all if no arg
   const clearAll = useCallback((deviceId) => {
     if (!deviceId) {
@@ -57,7 +68,7 @@ export const NotificationProvider = ({ children }) => {
   }, []);
 
   return (
-    <NotificationContext.Provider value={{ notifications, addNotification, markRead, clearAll }}>
+    <NotificationContext.Provider value={{ notifications, addNotification, markRead, markAllRead, clearAll }}>
       {children}
     </NotificationContext.Provider>
   );

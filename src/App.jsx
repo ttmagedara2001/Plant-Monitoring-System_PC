@@ -9,6 +9,38 @@ import { webSocketClient } from './Service/webSocketClient';
 import { updatePumpStatus, updateDeviceMode } from './Service/deviceService';
 import { useNotifications } from './Context/NotificationContext';
 
+// ─── Sensor notification helpers ─────────────────────────────────────────────
+const SENSOR_META_MAP = {
+  moisture:    { label: 'Moisture',    unit: '%',    direction_low: 'dry',  direction_high: 'saturated' },
+  temperature: { label: 'Temperature', unit: '°C',   direction_low: 'cold', direction_high: 'hot'       },
+  humidity:    { label: 'Humidity',    unit: '%',    direction_low: 'dry',  direction_high: 'humid'     },
+  light:       { label: 'Light',       unit: ' lux', direction_low: 'dark', direction_high: 'bright'    },
+  battery:     { label: 'Battery',     unit: '%',    direction_low: 'low',  direction_high: 'overcharged' },
+};
+
+const buildCriticalMessage = (key, value, persisted) => {
+  const meta = SENSOR_META_MAP[key] || { label: key, unit: '' };
+  const num = Number(value);
+  const group = persisted?.[key];
+  const min = group?.min != null ? Number(group.min) : undefined;
+  const max = group?.max != null ? Number(group.max) : undefined;
+  if (min != null && !Number.isNaN(min) && num < min) {
+    return {
+      message: `${meta.label} critically low — reading ${num}${meta.unit}, minimum is ${min}${meta.unit}`,
+      direction: 'low',
+      threshold: min,
+    };
+  }
+  if (max != null && !Number.isNaN(max) && num > max) {
+    return {
+      message: `${meta.label} critically high — reading ${num}${meta.unit}, maximum is ${max}${meta.unit}`,
+      direction: 'high',
+      threshold: max,
+    };
+  }
+  return { message: `${meta.label} alert: ${num}${meta.unit}`, direction: null, threshold: null };
+};
+
 function App() {
   const { isAuthenticated, isLoading } = useAuth();
   const { addNotification } = useNotifications();
@@ -21,8 +53,11 @@ function App() {
   const [selectedDevice, setSelectedDevice] = useState(() => localStorage.getItem('selectedDevice') || defaultDevice);
 
   // --- Live sensor data + connection state ---
+  // Sensor values start as undefined so notification guards (raw == null, isCritical)
+  // stay silent until the first real WebSocket message arrives.
   const [liveData, setLiveData] = useState({
-    moisture: 0, temperature: 0, humidity: 0, light: 0, battery: 0,
+    moisture: undefined, temperature: undefined, humidity: undefined,
+    light: undefined, battery: undefined,
     pumpStatus: 'OFF',
     pumpMode: undefined,
   });
@@ -54,8 +89,13 @@ function App() {
     } catch (_) { /* ignored */ }
   }, [liveData]);
 
-  // Notify on critical sensor transitions (value enters critical range)
-  const _prevLive = React.useRef(null);
+  // Notify on critical sensor transitions (value enters critical range).
+  // Initialise _prevLive to the undefined-filled shape so the first real WS
+  // update is always compared against "no data", never against stale zeros.
+  const _prevLive = React.useRef({
+    moisture: undefined, temperature: undefined, humidity: undefined,
+    light: undefined, battery: undefined,
+  });
   React.useEffect(() => {
     try {
       const prev = _prevLive.current || {};
@@ -80,13 +120,17 @@ function App() {
       };
 
       ['moisture', 'temperature', 'humidity', 'light', 'battery'].forEach((s) => {
-        if (!isCritical(s, prev[s]) && isCritical(s, curr[s]) && _prevLive.current !== null) {
+        // Only fire when crossing INTO critical territory (not on initial undefined → value)
+        // isCritical(undefined/null) returns false, so the first WS reading that is already
+        // critical WILL trigger a notification — which is the desired behaviour.
+        if (!isCritical(s, prev[s]) && isCritical(s, curr[s])) {
           try {
+            const { message, direction, threshold } = buildCriticalMessage(s, curr[s], persisted);
             addNotification({
               type: 'critical',
-              message: `⚠️ Critical: ${s.charAt(0).toUpperCase() + s.slice(1)} = ${curr[s]}`,
+              message,
               timestamp: new Date().toISOString(),
-              meta: { deviceId: selectedDevice, sensor: s, value: curr[s] },
+              meta: { deviceId: selectedDevice, sensor: s, value: curr[s], direction, threshold },
             });
           } catch (_) { /* ignored */ }
         }
@@ -158,9 +202,9 @@ function App() {
       _lastManualNotify.current = now;
       addNotification({
         type: 'warning',
-        message: `💧 Moisture is low (${val}%). Please turn on the pump manually.`,
+        message: `Moisture is low — ${val.toFixed(1)}% (minimum: ${min}%). Pump is off; consider turning it on manually.`,
         timestamp: new Date().toISOString(),
-        meta: { deviceId: selectedDevice, sensor: 'moisture', value: val, threshold: min },
+        meta: { deviceId: selectedDevice, sensor: 'moisture', value: val, threshold: min, direction: 'low' },
       });
     }
   }, [isAuthenticated, settings?.autoMode, settings?.moistureMin, liveData?.moisture, selectedDevice, liveData?.pumpStatus, addNotification]);
