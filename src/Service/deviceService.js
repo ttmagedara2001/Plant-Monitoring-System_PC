@@ -96,10 +96,10 @@ export const getAllStreamData = async (
 
   try {
     const results = await Promise.allSettled(
-      // Use 500 per topic so a 24 h window at ~1-min resolution (≈1440 pts) is
-      // well-covered.  Adjust upward if the API allows larger pages.
+      // Use 1000 per topic to cover a 24-h window at ~1-min resolution (1440 pts)
+      // comfortably.  Each topic is fetched in parallel so latency stays low.
       topicVariants.map((t) =>
-        getStreamDataByTopic(deviceId, t.name, startTime, endTime, 0, 500),
+        getStreamDataByTopic(deviceId, t.name, startTime, endTime, 0, 1000),
       ),
     );
 

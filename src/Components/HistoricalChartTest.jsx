@@ -1,6 +1,6 @@
 // Use this to display historical data charts with toggles for different metrics
-import React, { useState, useMemo } from 'react';
-import { Download, Loader2, Eye, EyeOff, Database, Wifi, AlertCircle, Clock } from 'lucide-react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { Download, Loader2, Eye, EyeOff, Database, Wifi, AlertCircle, Clock, RefreshCw } from 'lucide-react';
 import SensorToggleToolbar from './SensorToggleToolbar';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
@@ -17,7 +17,9 @@ const HistoricalChart = ({
   onDataIntervalChange,
   allData = [],
   onFilteredDataChange,
-  hideTitle = false
+  hideTitle = false,
+  isRefreshing = false,   // true while a background (silent) re-fetch is in progress
+  lastRefreshed = null,   // Date object of the last successful fetch; used to reset countdown
 }) => {
   // Local state to manage which lines are visible for all sensors/ if not needed for the default add 'false'
   const [visibleSeries, setVisibleSeries] = useState({
@@ -38,6 +40,21 @@ const HistoricalChart = ({
   const [exportTimeRange, setExportTimeRange] = useState(timeRange);
   const [exportDataInterval, setExportDataInterval] = useState(dataInterval);
   const [exportSensorSelection, setExportSensorSelection] = useState('all'); // 'all' or 'selected': which sensors to export
+
+  // ── Auto-refresh countdown ──────────────────────────────────────────────────
+  // Counts down from 30 to 0 in the badge. Resets each time new data arrives
+  // (i.e. whenever lastRefreshed changes). This is purely cosmetic — the actual
+  // 30 s interval lives in Dashboard's useEffect.
+  const REFRESH_INTERVAL_S = 30;
+  const [countdown, setCountdown] = useState(REFRESH_INTERVAL_S);
+
+  useEffect(() => {
+    setCountdown(REFRESH_INTERVAL_S);
+    const timer = setInterval(() => {
+      setCountdown(prev => (prev <= 1 ? REFRESH_INTERVAL_S : prev - 1));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [lastRefreshed]); // restart whenever a fresh batch of data lands
 
   // Handle custom range application
   const applyCustomRange = () => {
@@ -325,6 +342,20 @@ const HistoricalChart = ({
                 {dataSource}
               </span>
             )}
+
+            {/* Auto-refresh countdown badge — orange when imminent, blue while fetching */}
+            <span className={`text-xs px-2.5 py-1 rounded-full flex items-center gap-1.5 font-medium border transition-colors duration-300 ${
+              isRefreshing
+                ? 'bg-blue-100 text-blue-700 border-blue-200'
+                : countdown <= 5
+                ? 'bg-orange-100 text-orange-700 border-orange-200'
+                : 'bg-gray-100 text-gray-500 border-gray-200'
+            }`}>
+              {isRefreshing
+                ? <><Loader2 className="w-3 h-3 animate-spin" />Refreshing…</>
+                : <><RefreshCw className="w-3 h-3" />{countdown}s</>
+              }
+            </span>
           </div>
         </div>
 
@@ -612,18 +643,19 @@ const HistoricalChart = ({
                 tick={{ fontSize: 10, fill: '#9ca3af' }}
                 tickLine={false}
                 axisLine={{ stroke: '#e5e7eb' }}
-                minTickGap={20}
+                minTickGap={30}
                 interval="preserveStartEnd"
+                padding={{ left: 10, right: 10 }}
               />
 
-              {/* Left Axis for most metrics */}
+              {/* Left Axis for most metrics — 'auto' min allows negative temperatures */}
               <YAxis
                 yAxisId="left"
                 tick={{ fontSize: 10, fill: '#9ca3af' }}
                 tickLine={false}
                 axisLine={false}
-                domain={[0, 'auto']}
-                width={35}
+                domain={['auto', 'auto']}
+                width={40}
               />
 
               {/* Right Axis specifically for Light (high values; eg 800/900 lux) */}
@@ -633,29 +665,75 @@ const HistoricalChart = ({
                 tick={{ fontSize: 10, fill: '#eab308' }}
                 tickLine={false}
                 axisLine={false}
-                hide={!visibleSeries.light} // Hide axis if light is hidden
-                width={35}
+                hide={!visibleSeries.light}
+                domain={['auto', 'auto']}
+                width={40}
               />
 
               <Tooltip
-                contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', fontSize: '11px' }}
+                contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb', boxShadow: '0 4px 12px -2px rgba(0,0,0,0.12)', fontSize: '11px', padding: '8px 10px' }}
                 itemStyle={{ fontSize: '11px', fontWeight: 600 }}
+                labelStyle={{ fontSize: '11px', color: '#6b7280', marginBottom: '4px', fontWeight: 500 }}
+                labelFormatter={(label) => `🕒 ${label}`}
+                formatter={(value, name) => {
+                  if (value == null || value === undefined) return ['—', name];
+                  const v = Number(value);
+                  if (name === 'Light (lux)') return [`${Math.round(v).toLocaleString()} lux`, name];
+                  if (name === 'Temp (°C)') return [`${v.toFixed(1)} °C`, name];
+                  if (name === 'Battery (%)') return [`${v.toFixed(0)} %`, name];
+                  return [`${v.toFixed(1)} %`, name];
+                }}
+              />
+              <Legend
+                wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }}
+                iconType="line"
+                iconSize={16}
               />
 
               {visibleSeries.moisture && (
-                <Line yAxisId="left" type="monotone" dataKey="moisture" name="Moisture (%)" stroke="#06b6d4" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+                <Line
+                  yAxisId="left" type="monotone" dataKey="moisture" name="Moisture (%)"
+                  stroke="#06b6d4" strokeWidth={2}
+                  dot={false} activeDot={{ r: 4 }}
+                  connectNulls={true}
+                  isAnimationActive={false}
+                />
               )}
               {visibleSeries.temperature && (
-                <Line yAxisId="left" type="monotone" dataKey="temperature" name="Temp (°C)" stroke="#22c55e" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+                <Line
+                  yAxisId="left" type="monotone" dataKey="temperature" name="Temp (°C)"
+                  stroke="#22c55e" strokeWidth={2}
+                  dot={false} activeDot={{ r: 4 }}
+                  connectNulls={true}
+                  isAnimationActive={false}
+                />
               )}
               {visibleSeries.humidity && (
-                <Line yAxisId="left" type="monotone" dataKey="humidity" name="Humidity (%)" stroke="#3b82f6" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+                <Line
+                  yAxisId="left" type="monotone" dataKey="humidity" name="Humidity (%)"
+                  stroke="#3b82f6" strokeWidth={2}
+                  dot={false} activeDot={{ r: 4 }}
+                  connectNulls={true}
+                  isAnimationActive={false}
+                />
               )}
               {visibleSeries.battery && (
-                <Line yAxisId="left" type="step" dataKey="battery" name="Battery (%)" stroke="#a855f7" strokeWidth={3} dot={false} />
+                <Line
+                  yAxisId="left" type="monotone" dataKey="battery" name="Battery (%)"
+                  stroke="#a855f7" strokeWidth={2}
+                  dot={false} activeDot={{ r: 4 }}
+                  connectNulls={true}
+                  isAnimationActive={false}
+                />
               )}
               {visibleSeries.light && (
-                <Line yAxisId="right" type="monotone" dataKey="light" name="Light (lux)" stroke="#eab308" strokeWidth={3} dot={false} activeDot={{ r: 6 }} />
+                <Line
+                  yAxisId="right" type="monotone" dataKey="light" name="Light (lux)"
+                  stroke="#eab308" strokeWidth={2}
+                  dot={false} activeDot={{ r: 4 }}
+                  connectNulls={true}
+                  isAnimationActive={false}
+                />
               )}
 
             </LineChart>

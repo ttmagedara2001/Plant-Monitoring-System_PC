@@ -33,6 +33,8 @@ const Dashboard = ({ deviceId: propDeviceId, liveData: propLiveData, settings: p
   const [isLoadingChart, setIsLoadingChart] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [dataFetchError, setDataFetchError] = useState(null);
+  const [lastRefreshed, setLastRefreshed] = useState(null);   // timestamp of last successful fetch
+  const [isRefreshing, setIsRefreshing] = useState(false);    // silent background refresh in progress
 
   // Time frame selection for historical chart: default to 24 hours
   const [timeRange, setTimeRange] = useState(() => {
@@ -204,19 +206,31 @@ const Dashboard = ({ deviceId: propDeviceId, liveData: propLiveData, settings: p
 
   // Fetch historical data from HTTP API when device changes
   useEffect(() => {
+    // Distinguish the blocking initial load from silent background refreshes.
+    // isInitialLoad lives in the effect closure: first call is true, the interval
+    // flips it false so subsequent fetches never blank the chart.
+    let isInitialLoad = true;
+
     const fetchHistoricalData = async () => {
       if (!deviceId || !jwtToken) {
         console.warn("⚠️ Cannot fetch historical data: missing deviceId or token");
         return;
       }
 
-      setIsLoadingChart(true);
+      if (isInitialLoad) {
+        // First load: show full-chart spinner while we wait for data
+        setIsLoadingChart(true);
+      } else {
+        // Subsequent auto-refreshes: silent indicator, chart stays visible
+        setIsRefreshing(true);
+      }
       setDataFetchError(null);
 
       try {
         console.log(`📊 [HTTP API] Fetching historical data for device: ${deviceId}`);
         const data = await getAllStreamData(deviceId);
         setHistoricalData(data);
+        setLastRefreshed(new Date());
         console.log(`✅ [HTTP API] Historical data loaded: ${data.length} records`);
       } catch (error) {
         console.error("❌ [HTTP API] Failed to fetch historical data:", error);
@@ -229,9 +243,15 @@ const Dashboard = ({ deviceId: propDeviceId, liveData: propLiveData, settings: p
         } else {
           setDataFetchError("Failed to load historical data. Real-time WebSocket data will still work.");
         }
-        setHistoricalData([]);
+        // Only wipe data on the very first failed load; keep stale data on retries
+        if (isInitialLoad) setHistoricalData([]);
       } finally {
-        setIsLoadingChart(false);
+        if (isInitialLoad) {
+          setIsLoadingChart(false);
+          isInitialLoad = false;  // all subsequent calls in this effect use setIsRefreshing
+        } else {
+          setIsRefreshing(false);
+        }
       }
     };
 
@@ -754,6 +774,8 @@ const Dashboard = ({ deviceId: propDeviceId, liveData: propLiveData, settings: p
             allData={historicalData}
             onFilteredDataChange={setFilteredData}
             hideTitle={true}
+            isRefreshing={isRefreshing}
+            lastRefreshed={lastRefreshed}
           />
         </div>
       </div>
