@@ -3,7 +3,7 @@ name: Build and Deploy to GitHub Pages
 on:
   push:
     branches:
-      - main # also deploy from your current working branch
+      - main
 
 # Grant the GITHUB_TOKEN permission to push to gh-pages
 permissions:
@@ -27,7 +27,7 @@ jobs:
 
       # ── 3. Install dependencies ──────────────────────────────────────────────
       - name: Install dependencies
-        run: npm ci
+        run: npm install
 
       # ── 4. Build – Vite reads VITE_* variables from the environment ─────────
       #   Each secret is mapped from GitHub Secrets → VITE_* env var so that
@@ -41,12 +41,9 @@ jobs:
           VITE_USER_SECRET: ${{ secrets.VITE_USER_SECRET }}
           VITE_DEVICE_ID: ${{ secrets.VITE_DEVICE_ID }}
 
-     # ── 5. Deploy to Vercel ─────────────────────────────────────────────
-      - name: Deploy to Vercel
-        uses: amondnet/vercel-action@v20
+      # ── 5. Deploy to GitHub Pages ──────────────────────────────────────────
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
         with:
-          vercel-token: ${{ secrets.VERCEL_TOKEN }} # Required
-          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }} # Required
-          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }} # Required
-          vercel-args: '--prod' # This makes the deployment live (Production)
-          working-directory: ./
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist
