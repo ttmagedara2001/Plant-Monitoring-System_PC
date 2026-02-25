@@ -4,9 +4,6 @@ on:
   push:
     branches:
       - main # also deploy from your current working branch
-pull_request:
-    branches:
-      - main
 
   # Allow manually triggering the workflow from the Actions tab
 workflow_dispatch:
