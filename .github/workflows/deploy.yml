@@ -1,58 +1,51 @@
-name: Build & Deploy
+name: Build and Deploy to GitHub Pages
 
 on:
   push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+    branches:
+      - main
+      - Maintest # also deploy from your current working branch
 
-# Allow the workflow to write to GitHub Pages
+  # Allow manually triggering the workflow from the Actions tab
+  workflow_dispatch:
+
+# Grant the GITHUB_TOKEN permission to push to gh-pages
 permissions:
-  contents: read
-  pages: write
-  id-token: write
-
-# Only one deployment at a time; cancel in-progress runs on new pushes
-concurrency:
-  group: pages
-  cancel-in-progress: true
+  contents: write
 
 jobs:
-  build:
-    name: Build
+  build-and-deploy:
     runs-on: ubuntu-latest
 
     steps:
+      # ── 1. Checkout source ──────────────────────────────────────────────────
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # ── 2. Set up Node.js (match your local version) ────────────────────────
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
-          cache: npm
+          node-version: "20"
+          cache: "npm"
 
+      # ── 3. Install dependencies ──────────────────────────────────────────────
       - name: Install dependencies
         run: npm ci
 
-      # ── Map GitHub Secrets → Vite environment variables ──────────────────
-      # All Vite env vars are baked into the bundle at build time, so they
-      # MUST be present here (not at runtime). Each secret is set below as an
-      # env var that Vite will pick up automatically during `vite build`.
-      - name: Build (production)
+      # ── 4. Build – Vite reads VITE_* variables from the environment ─────────
+      #   Each secret is mapped from GitHub Secrets → VITE_* env var so that
+      #   import.meta.env.VITE_* works correctly in the compiled bundle.
+      - name: Build Vite app
+        run: npm run build
         env:
           VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
           VITE_WS_URL: ${{ secrets.VITE_WS_URL }}
           VITE_USER_EMAIL: ${{ secrets.VITE_USER_EMAIL }}
-          VITE_USER_PASSWORD: ${{ secrets.VITE_USER_SECRET }}
-        run: npm run build
+          VITE_USER_SECRET: ${{ secrets.VITE_USER_SECRET }}
+          VITE_DEVICE_ID: ${{ secrets.VITE_DEVICE_ID }}
 
-      # ── Upload the compiled dist/ folder as a Pages artifact ─────────────
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: dist
-# ── . Deploy to Vercel ─────────────────────────────────────────────
+     # ── 5. Deploy to Vercel ─────────────────────────────────────────────
       - name: Deploy to Vercel
         uses: amondnet/vercel-action@v20
         with:
