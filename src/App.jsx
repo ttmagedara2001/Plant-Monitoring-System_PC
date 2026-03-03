@@ -8,6 +8,7 @@ import { useAuth } from './Context/AuthContext';
 import { webSocketClient } from './Service/webSocketClient';
 import { updatePumpStatus, updateDeviceMode } from './Service/deviceService';
 import { useNotifications } from './Context/NotificationContext';
+import ToastNotifications from './Components/ToastNotifications';
 
 function App() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -54,6 +55,9 @@ function App() {
     } catch (_) { /* ignored */ }
   }, [liveData]);
 
+  // Track whether any real data has been received yet on the current device
+  const hasReceivedData = useRef(false);
+
   // Notify on critical sensor transitions (value enters critical range)
   const _prevLive = React.useRef(null);
   React.useEffect(() => {
@@ -61,32 +65,51 @@ function App() {
       const prev = _prevLive.current || {};
       const curr = liveData || {};
 
-      let persisted = null;
-      try {
-        const raw = localStorage.getItem(`settings_${selectedDevice}`);
-        if (raw) persisted = JSON.parse(raw).thresholds || null;
-      } catch (_) { /* ignored */ }
+      // Load settings from state (flat keys: moistureMin/Max, tempMin/Max, etc.)
+      const s = settings || {};
+
+      const thresholdMap = {
+        moisture: { min: parseFloat(s.moistureMin), max: parseFloat(s.moistureMax) },
+        temperature: { min: parseFloat(s.tempMin), max: parseFloat(s.tempMax) },
+        humidity: { min: parseFloat(s.humidityMin), max: parseFloat(s.humidityMax) },
+        light: { min: parseFloat(s.lightMin), max: parseFloat(s.lightMax) },
+        battery: { min: parseFloat(s.batteryMin), max: NaN },
+      };
 
       const isCritical = (key, value) => {
         if (value == null || String(value) === 'unknown') return false;
         const num = Number(value);
         if (Number.isNaN(num)) return false;
-        const group = persisted?.[key];
-        const min = group?.min != null ? Number(group.min) : undefined;
-        const max = group?.max != null ? Number(group.max) : undefined;
-        if (min != null && !Number.isNaN(min) && num < min) return true;
-        if (max != null && !Number.isNaN(max) && num > max) return true;
+        const bounds = thresholdMap[key];
+        if (!bounds) return false;
+        if (!Number.isNaN(bounds.min) && num < bounds.min) return true;
+        if (!Number.isNaN(bounds.max) && num > bounds.max) return true;
         return false;
       };
 
-      ['moisture', 'temperature', 'humidity', 'light', 'battery'].forEach((s) => {
-        if (!isCritical(s, prev[s]) && isCritical(s, curr[s]) && _prevLive.current !== null) {
+      // Fire a one-time notification when the first real data packet arrives
+      const sensorKeys = ['moisture', 'temperature', 'humidity', 'light', 'battery'];
+      const hasRealData = sensorKeys.some((k) => curr[k] != null && isFinite(Number(curr[k])));
+      if (hasRealData && !hasReceivedData.current) {
+        hasReceivedData.current = true;
+        try {
+          addNotification({
+            type: 'info',
+            message: `📡 Live data stream connected for device "${selectedDevice}".`,
+            timestamp: new Date().toISOString(),
+            meta: { deviceId: selectedDevice },
+          });
+        } catch (_) { /* ignored */ }
+      }
+
+      sensorKeys.forEach((key) => {
+        if (!isCritical(key, prev[key]) && isCritical(key, curr[key]) && _prevLive.current !== null) {
           try {
             addNotification({
               type: 'critical',
-              message: `⚠️ Critical: ${s.charAt(0).toUpperCase() + s.slice(1)} = ${curr[s]}`,
+              message: `⚠️ Critical: ${key.charAt(0).toUpperCase() + key.slice(1)} = ${curr[key]}`,
               timestamp: new Date().toISOString(),
-              meta: { deviceId: selectedDevice, sensor: s, value: curr[s] },
+              meta: { deviceId: selectedDevice, sensor: key, value: curr[key] },
             });
           } catch (_) { /* ignored */ }
         }
@@ -143,7 +166,7 @@ function App() {
       if (_lastAuto.current.cmd === desired && now - _lastAuto.current.ts < 5000) return;
       if ((liveData?.pumpStatus || '').toUpperCase() === desired) return;
 
-      updateDeviceMode(selectedDevice, 'auto').catch(() => {});
+      updateDeviceMode(selectedDevice, 'auto').catch(() => { });
       updatePumpStatus(selectedDevice, desired, 'pmc/pump', 'auto', val)
         .then(() => { _lastAuto.current = { cmd: desired, ts: Date.now() }; })
         .catch((err) => console.error('[App] Auto pump command failed', err));
@@ -213,7 +236,8 @@ function App() {
   useEffect(() => {
     if (!selectedDevice || !isConnected || !handleDataRef.current) return;
 
-    // Reset live data for the new device
+    // Reset live data and the "first data" flag whenever the device changes
+    hasReceivedData.current = false;
     setLiveData({
       moisture: undefined, temperature: undefined, humidity: undefined,
       light: undefined, battery: undefined, pumpStatus: 'OFF', pumpMode: undefined,
@@ -224,7 +248,9 @@ function App() {
     } catch (e) {
       console.warn('[App] Subscription failed', e);
     }
-  }, [selectedDevice, isConnected, handleData]);
+    // handleDataRef is a ref — its .current is always up-to-date; no need to list it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDevice, isConnected]);
 
   // --- Loading spinner ---
   if (isLoading) {
@@ -241,6 +267,9 @@ function App() {
   return (
     <ErrorBoundary>
       <div className="App">
+        {/* Global toast pop-ups for real-time notifications */}
+        <ToastNotifications />
+
         <Header
           activeTab={activeTab}
           setActiveTab={setActiveTab}

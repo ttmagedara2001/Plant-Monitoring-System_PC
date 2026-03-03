@@ -96,8 +96,6 @@ const Dashboard = ({ deviceId: propDeviceId, liveData: propLiveData, settings: p
         light: compute('light'),
         battery: compute('battery'),
       };
-      // Debug: show computed states
-      console.debug('[Dashboard] computed alertStates ->', { rawLive: propLiveData, settings, states });
       setAlertStates(states);
     } catch (e) {
       console.warn('[Dashboard] alertStates compute failed', e);
@@ -187,7 +185,7 @@ const Dashboard = ({ deviceId: propDeviceId, liveData: propLiveData, settings: p
 
     // Update time format based on interval - show seconds for granular intervals
     const shouldShowSeconds = (interval.startsWith('custom_interval_') &&
-        parseInt(interval.replace('custom_interval_', '')) < 60000);
+      parseInt(interval.replace('custom_interval_', '')) < 60000);
 
     // Format time field for display
     filtered = filtered.map(record => ({
@@ -214,20 +212,16 @@ const Dashboard = ({ deviceId: propDeviceId, liveData: propLiveData, settings: p
       setDataFetchError(null);
 
       try {
-        console.log(`📊 [HTTP API] Fetching historical data for device: ${deviceId}`);
         const data = await getAllStreamData(deviceId);
         setHistoricalData(data);
-        console.log(`✅ [HTTP API] Historical data loaded: ${data.length} records`);
       } catch (error) {
-        console.error("❌ [HTTP API] Failed to fetch historical data:", error);
-
-        // Check if it's a device ownership error
-        if (error.response?.data?.data === "Device does not belong to the user") {
+        console.error('[HTTP API] Failed to fetch historical data:', error);
+        if (error.response?.data?.data === 'Device does not belong to the user') {
           setDataFetchError(
-            `⚠️ Device "${deviceId}" not found in your account. Please update the device ID in Dashboard.jsx or add this device to your ProtoNest account. Real-time data will still work.`
+            `Device "${deviceId}" not found in your account. Real-time data will still work.`
           );
         } else {
-          setDataFetchError("Failed to load historical data. Real-time WebSocket data will still work.");
+          setDataFetchError('Failed to load historical data. Real-time WebSocket data will still work.');
         }
         setHistoricalData([]);
       } finally {
@@ -245,14 +239,13 @@ const Dashboard = ({ deviceId: propDeviceId, liveData: propLiveData, settings: p
     }, 30000); // 30s
 
     return () => clearInterval(refreshInterval);
-  // NOTE: timeRange intentionally omitted — getAllStreamData always fetches the
-  // full 24 h window; filterDataByTimeframe handles the client-side slicing.
-  // Including timeRange here would fire a redundant API call on every slider change.
+    // NOTE: timeRange intentionally omitted — getAllStreamData always fetches the
+    // full 24 h window; filterDataByTimeframe handles the client-side slicing.
+    // Including timeRange here would fire a redundant API call on every slider change.
   }, [deviceId, jwtToken]);
 
   // Reset view-specific data when device changes (keep liveData/settings handled by App)
   useEffect(() => {
-    console.log(`[Dashboard] 🔄 Device changed to: ${deviceId} - Resetting view state`);
     setHistoricalData([]);
     setFilteredData([]);
     setDataFetchError(null);
@@ -264,8 +257,6 @@ const Dashboard = ({ deviceId: propDeviceId, liveData: propLiveData, settings: p
     const savedInterval = localStorage.getItem(`dataInterval_${deviceId}`);
     setTimeRange(savedTimeRange || '24h');
     setDataInterval(savedInterval || 'auto');
-
-    console.log(`[Dashboard] ✅ View reset complete for device: ${deviceId}`);
   }, [deviceId]);
 
   // (Settings and liveData persistence handled by App)
@@ -353,26 +344,12 @@ const Dashboard = ({ deviceId: propDeviceId, liveData: propLiveData, settings: p
     setCommandInProgress('settings');
     setCommandStatus(null);
     try {
-      // Save settings to localStorage (frontend only)
       localStorage.setItem(`settings_${deviceId}`, JSON.stringify(settings));
-      console.log('💾 Settings saved to localStorage:', settings);
 
-      // Send mode change to backend
       try {
         await updateDeviceMode(deviceId, settings.autoMode ? 'auto' : 'manual');
-        console.log(`✅ [API] Mode sent: ${settings.autoMode ? 'auto' : 'manual'}`);
       } catch (modeError) {
-        console.error('❌ [API] Failed to send mode change:', modeError);
-      }
-
-      // Log auto mode status
-      if (settings.autoMode) {
-        console.log('🤖 AUTO MODE ENABLED - System will automatically control pump based on moisture levels');
-        console.log(`📊 Moisture thresholds: Min=${settings.moistureMin}%, Max=${settings.moistureMax}%`);
-        console.log('💧 Pump will turn ON when moisture < minimum threshold');
-        console.log('✅ Pump will turn OFF when moisture >= minimum threshold');
-      } else {
-        console.log('👤 MANUAL MODE - User has full control of pump');
+        console.error('[API] Failed to send mode change:', modeError);
       }
 
       setCommandStatus({
@@ -392,7 +369,6 @@ const Dashboard = ({ deviceId: propDeviceId, liveData: propLiveData, settings: p
 
   // Handle time range change
   const handleTimeRangeChange = (newRange) => {
-    console.log(`📊 Changing time range to: ${newRange}`);
     setTimeRange(newRange);
     localStorage.setItem(`timeRange_${deviceId}`, newRange);
 
@@ -422,7 +398,6 @@ const Dashboard = ({ deviceId: propDeviceId, liveData: propLiveData, settings: p
   };
 
   const handleDataIntervalChange = (newInterval) => {
-    console.log(`📊 Changing data interval to: ${newInterval}`);
     setDataInterval(newInterval);
     localStorage.setItem(`dataInterval_${deviceId}`, newInterval);
   };
@@ -433,23 +408,11 @@ const Dashboard = ({ deviceId: propDeviceId, liveData: propLiveData, settings: p
     const newStatus = currentStatus ? 'OFF' : 'ON';
     const currentMoisture = liveData?.moisture;
 
-    console.log(`🔄 [HTTP API] Toggling pump from ${liveData?.pumpStatus} to ${newStatus}`);
-    console.log(`   📊 Current moisture: ${currentMoisture}`);
-
     try {
-      // Use HTTP API to send pump command with current moisture value
-      // API: POST /update-state-details
-      // Payload: { deviceId, topic: "pmc/pump", payload: { moisture: <value>, pump: "on"|"off" } }
       await updatePumpStatus(deviceId, newStatus, 'pmc/pump', 'manual', currentMoisture);
-
-      console.log(`✅ [HTTP API] Pump command sent: ${newStatus}`);
-      console.log(`📡 Waiting for backend to publish to MQTT and device confirmation...`);
       setCommandStatus({ type: 'success', message: `Pump command sent: ${newStatus}` });
-
-      // Device will respond with actual pump status via WebSocket
-      // The status will update automatically when we receive the confirmation
     } catch (error) {
-      console.error("❌ [HTTP API] Pump control failed:", error);
+      console.error('[HTTP API] Pump control failed:', error);
       setCommandStatus({ type: 'error', message: 'Failed to send pump command. Check API connection.' });
     } finally {
       setCommandInProgress(null);
@@ -470,8 +433,6 @@ const Dashboard = ({ deviceId: propDeviceId, liveData: propLiveData, settings: p
 
   const getBorderColor = (key, min, max) => {
     const raw = liveData?.[key];
-    // Debug: show incoming value and provided bounds
-    console.debug(`[Dashboard][getBorderColor] key=${key} raw=${raw} min=${min} max=${max}`);
     if (raw === undefined || raw === null || raw === '') {
       return (function () {
         switch (key) {
@@ -497,9 +458,6 @@ const Dashboard = ({ deviceId: propDeviceId, liveData: propLiveData, settings: p
         default: return 'border-green-500';
       }
     }
-
-    // Debug: log value and bounds
-    console.debug(`[Dashboard][getBorderColor] ${key} value=${val} min=${min} max=${max}`);
 
     // Check if value is critical (outside bounds)
     const isCritical = (!isNaN(min) && val < min) || (!isNaN(max) && val > max);
@@ -527,12 +485,10 @@ const Dashboard = ({ deviceId: propDeviceId, liveData: propLiveData, settings: p
     if (!isFinite(val)) return null;
 
     try {
-      console.debug(`[Dashboard][getSensorAlert] checking ${key} val=${val} settings=`, settings);
       switch (key) {
         case 'moisture': {
           const min = parseFloat(settings.moistureMin);
           const max = parseFloat(settings.moistureMax);
-          console.debug(`[Dashboard][getSensorAlert][moisture] val=${val} min=${min} max=${max}`);
           if (!isNaN(min) && val < min) return `CRITICAL: ${val.toFixed(1)}% < ${min}%`;
           if (!isNaN(max) && val > max) return `WARNING: ${val.toFixed(1)}% > ${max}%`;
           return null;
@@ -540,7 +496,6 @@ const Dashboard = ({ deviceId: propDeviceId, liveData: propLiveData, settings: p
         case 'temperature': {
           const min = parseFloat(settings.tempMin);
           const max = parseFloat(settings.tempMax);
-          console.debug(`[Dashboard][getSensorAlert][temperature] val=${val} min=${min} max=${max}`);
           if (!isNaN(min) && val < min) return `CRITICAL: ${val.toFixed(1)}°C < ${min}°C`;
           if (!isNaN(max) && val > max) return `WARNING: ${val.toFixed(1)}°C > ${max}°C`;
           return null;
@@ -548,7 +503,6 @@ const Dashboard = ({ deviceId: propDeviceId, liveData: propLiveData, settings: p
         case 'humidity': {
           const min = parseFloat(settings.humidityMin);
           const max = parseFloat(settings.humidityMax);
-          console.debug(`[Dashboard][getSensorAlert][humidity] val=${val} min=${min} max=${max}`);
           if (!isNaN(min) && val < min) return `CRITICAL: ${val.toFixed(1)}% < ${min}%`;
           if (!isNaN(max) && val > max) return `WARNING: ${val.toFixed(1)}% > ${max}%`;
           return null;
@@ -556,14 +510,12 @@ const Dashboard = ({ deviceId: propDeviceId, liveData: propLiveData, settings: p
         case 'light': {
           const min = parseFloat(settings.lightMin);
           const max = parseFloat(settings.lightMax);
-          console.debug(`[Dashboard][getSensorAlert][light] val=${val} min=${min} max=${max}`);
           if (!isNaN(min) && val < min) return `CRITICAL: ${Math.round(val)} lux < ${min} lux`;
           if (!isNaN(max) && val > max) return `WARNING: ${Math.round(val)} lux > ${max} lux`;
           return null;
         }
         case 'battery': {
           const min = parseFloat(settings.batteryMin);
-          console.debug(`[Dashboard][getSensorAlert][battery] val=${val} min=${min}`);
           if (!isNaN(min) && val < min) return `Warning: below ${min}%`;
           return null;
         }
