@@ -281,12 +281,16 @@ function App() {
         <StatusBar activeTab={activeTab} setActiveTab={setActiveTab} />
 
         {/* Main content — padding accounts for fixed Header + Nav */}
+        {/* Both panels stay mounted at all times; only visibility changes.
+            This preserves local state (autoMode, pumpOn, thresholds, etc.)
+            across tab switches without needing to re-read from localStorage. */}
         <main className="w-full pt-[100px] landscape:pt-[104px] sm:pt-[116px] md:pt-[128px]">
-          {activeTab === 'dashboard' ? (
+          <div style={{ display: activeTab === 'dashboard' ? 'block' : 'none' }}>
             <Dashboard deviceId={selectedDevice} liveData={liveData} settings={settings} isConnected={isConnected} />
-          ) : (
+          </div>
+          <div style={{ display: activeTab === 'settings' ? 'block' : 'none' }}>
             <DeviceSettingsPage deviceId={selectedDevice} />
-          )}
+          </div>
         </main>
       </div>
     </ErrorBoundary>
