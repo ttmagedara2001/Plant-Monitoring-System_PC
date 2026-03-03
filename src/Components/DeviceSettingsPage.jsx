@@ -6,6 +6,7 @@ import AutoModeToggle from './AutoModeToggle';
 import PageHeader from './PageHeader';
 import ValidationModal from './ValidationModal';
 import { updatePumpStatus, updateDeviceMode } from '../Service/deviceService';
+import { webSocketClient } from '../Service/webSocketClient';
 
 const DEFAULT_THRESHOLDS = {
   moisture: { min: 20, max: 60 },
@@ -90,16 +91,21 @@ const DeviceSettingsPage = ({ deviceId: propDeviceId }) => {
   const handleAutoModeToggle = async () => {
     const newMode = !autoMode;
     setAutoMode(newMode);
+    const modeStr = newMode ? 'auto' : 'manual';
 
-    // Send mode change to backend via HTTP API
+    // 1. Send mode change to backend via HTTP API (persists state server-side)
     try {
-      await updateDeviceMode(deviceId, newMode ? 'auto' : 'manual');
-      console.log(`✅ [API] Mode changed to: ${newMode ? 'auto' : 'manual'}`);
+      await updateDeviceMode(deviceId, modeStr);
     } catch (error) {
       console.error('❌ [API] Failed to send mode change:', error);
       // Revert on failure
       setAutoMode(!newMode);
+      return;
     }
+
+    // 2. Also publish mode command via WebSocket so the IoT device receives it
+    //    over MQTT (topic: pmc/mode) immediately without waiting for HTTP round-trip
+    webSocketClient.sendModeCommand(deviceId, modeStr);
   };
 
   const handlePumpToggle = async () => {

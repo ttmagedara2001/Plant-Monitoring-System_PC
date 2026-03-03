@@ -198,6 +198,12 @@ class WebSocketClient {
         path: `/topic/state/${deviceId}`,
         handler: "_processStateMessage",
       },
+      {
+        // Dedicated topic for mode changes published by the IoT device
+        key: `mode-${deviceId}`,
+        path: `/topic/stream/${deviceId}/pmc/mode`,
+        handler: "_processModeMessage",
+      },
     ];
 
     for (const { key, path, handler } of topics) {
@@ -327,12 +333,36 @@ class WebSocketClient {
   }
 
   /**
+   * Route incoming pmc/mode messages from the IoT device to the callback.
+   * Called when the device publishes to its dedicated pmc/mode topic.
+   * @private
+   */
+  _processModeMessage(data) {
+    if (!this.dataCallback) return;
+
+    const payload = data.payload || data;
+    // Accept: { mode: "auto" }, { pumpMode: "manual" }, or plain string
+    const raw =
+      payload.mode ??
+      payload.pumpMode ??
+      (typeof payload === "string" ? payload : undefined);
+
+    if (raw !== undefined) {
+      this.dataCallback({
+        sensorType: "pumpMode",
+        value: String(raw).toLowerCase(),
+        timestamp: data.timestamp || new Date().toISOString(),
+      });
+    }
+  }
+
+  /**
    * Unsubscribe from a device's stream and state topics.
    * @param {string} deviceId
    * @private
    */
   _unsubscribeFromDeviceTopics(deviceId) {
-    for (const prefix of ["stream", "state"]) {
+    for (const prefix of ["stream", "state", "mode"]) {
       const key = `${prefix}-${deviceId}`;
       if (this.subscriptions.has(key)) {
         try {
@@ -500,6 +530,33 @@ class WebSocketClient {
       return true;
     } catch (error) {
       console.error("[WS] Failed to send pump command:", error);
+      return false;
+    }
+  }
+
+  /**
+   * Publish a mode change command to the IoT device via the pmc/mode topic.
+   * The device will receive this over MQTT and update its operating mode.
+   *
+   * @param {string} deviceIdParam - Target device
+   * @param {string} mode          - "auto" or "manual"
+   * @returns {boolean} true if sent successfully
+   */
+  sendModeCommand(deviceIdParam, mode) {
+    if (!this.isConnected) {
+      console.warn("[WS] Cannot send mode command — not connected");
+      return false;
+    }
+
+    const destination = `protonest/${deviceIdParam}/state/pmc/mode`;
+    const payload = { mode: mode.toLowerCase() };
+
+    try {
+      this.client.publish({ destination, body: JSON.stringify(payload) });
+      console.log(`[WS] Mode command sent: ${mode} → ${destination}`);
+      return true;
+    } catch (error) {
+      console.error("[WS] Failed to send mode command:", error);
       return false;
     }
   }
