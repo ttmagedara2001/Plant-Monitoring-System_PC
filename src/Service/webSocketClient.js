@@ -300,29 +300,39 @@ class WebSocketClient {
     }
   }
 
-  /** Route incoming state data (pump status / mode) to the callback. @private */
+  /**
+   * Route incoming device state confirmations to the callback.
+   *
+   * The device publishes to /topic/<deviceId>/state after executing a command.
+   * Canonical payload shapes:
+   *   Mode:  { timestamp: 1772528528.11, payload: { mode: "auto" } }
+   *   Pump:  { timestamp: 1772528555.34, payload: { pump: "on" } }
+   *
+   * @private
+   */
   _processStateMessage(data) {
     if (!this.dataCallback) return;
 
-    const payload = data.payload || data;
+    // data.payload is the nested object; fall back to data itself for flat payloads
+    const payload = data.payload ?? data;
 
+    // --- Pump status ---
     const powerValue =
-      payload.power || payload.status || payload.pumpStatus || payload.pump;
+      payload.pump ?? payload.power ?? payload.status ?? payload.pumpStatus;
     if (powerValue !== undefined) {
-      const normalizedPower = String(powerValue).toUpperCase();
       this.dataCallback({
         sensorType: "pumpStatus",
-        value: normalizedPower,
+        value: String(powerValue).toUpperCase(),
         timestamp: data.timestamp || new Date().toISOString(),
       });
     }
 
-    const modeValue = payload.mode || payload.pumpMode;
+    // --- Operating mode (auto / manual) ---
+    const modeValue = payload.mode ?? payload.pumpMode;
     if (modeValue !== undefined) {
-      const normalizedMode = String(modeValue).toLowerCase();
       this.dataCallback({
         sensorType: "pumpMode",
-        value: normalizedMode,
+        value: String(modeValue).toLowerCase(),
         timestamp: data.timestamp || new Date().toISOString(),
       });
     }

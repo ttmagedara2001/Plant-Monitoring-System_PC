@@ -90,21 +90,28 @@ const DeviceSettingsPage = ({ deviceId: propDeviceId }) => {
 
   const handleAutoModeToggle = async () => {
     const newMode = !autoMode;
-    setAutoMode(newMode);
     const modeStr = newMode ? 'auto' : 'manual';
 
-    // 1. Send mode change to backend via HTTP API (persists state server-side)
+    // Optimistic update — matches pump control pattern:
+    // update UI + persist immediately, revert both if the command fails
+    setAutoMode(newMode);
+    persistSettings({ autoMode: newMode });
+
+    // 1. Persist state server-side via HTTP API
     try {
       await updateDeviceMode(deviceId, modeStr);
     } catch (error) {
       console.error('❌ [API] Failed to send mode change:', error);
-      // Revert on failure
+      // Revert UI + localStorage on failure
       setAutoMode(!newMode);
+      persistSettings({ autoMode: !newMode });
       return;
     }
 
     // 2. Also publish mode command via WebSocket so the IoT device receives it
-    //    over MQTT (topic: pmc/mode) immediately without waiting for HTTP round-trip
+    //    over MQTT (pmc/mode topic) immediately. The device will confirm by
+    //    publishing its new state to /topic/<deviceId>/state, which the
+    //    live:update handler will pick up and apply as the authoritative value.
     webSocketClient.sendModeCommand(deviceId, modeStr);
   };
 
