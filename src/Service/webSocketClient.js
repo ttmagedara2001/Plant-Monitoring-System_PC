@@ -194,15 +194,11 @@ class WebSocketClient {
         handler: "_processStreamMessage",
       },
       {
+        // Device publishes all state updates (pump, mode, etc.) to
+        // /topic/<deviceId>/state after executing a command.
         key: `state-${deviceId}`,
-        path: `/topic/state/${deviceId}`,
+        path: `/topic/${deviceId}/state`,
         handler: "_processStateMessage",
-      },
-      {
-        // Dedicated topic for mode changes published by the IoT device
-        key: `mode-${deviceId}`,
-        path: `/topic/stream/${deviceId}/pmc/mode`,
-        handler: "_processModeMessage",
       },
     ];
 
@@ -333,36 +329,12 @@ class WebSocketClient {
   }
 
   /**
-   * Route incoming pmc/mode messages from the IoT device to the callback.
-   * Called when the device publishes to its dedicated pmc/mode topic.
-   * @private
-   */
-  _processModeMessage(data) {
-    if (!this.dataCallback) return;
-
-    const payload = data.payload || data;
-    // Accept: { mode: "auto" }, { pumpMode: "manual" }, or plain string
-    const raw =
-      payload.mode ??
-      payload.pumpMode ??
-      (typeof payload === "string" ? payload : undefined);
-
-    if (raw !== undefined) {
-      this.dataCallback({
-        sensorType: "pumpMode",
-        value: String(raw).toLowerCase(),
-        timestamp: data.timestamp || new Date().toISOString(),
-      });
-    }
-  }
-
-  /**
    * Unsubscribe from a device's stream and state topics.
    * @param {string} deviceId
    * @private
    */
   _unsubscribeFromDeviceTopics(deviceId) {
-    for (const prefix of ["stream", "state", "mode"]) {
+    for (const prefix of ["stream", "state"]) {
       const key = `${prefix}-${deviceId}`;
       if (this.subscriptions.has(key)) {
         try {
